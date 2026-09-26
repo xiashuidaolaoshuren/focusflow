@@ -8,6 +8,8 @@ import java.util.List;
 
 public final class WorkPlacementPlanner {
 
+	private static final String CADENCE_BREAK_LABEL = "Cadence break";
+
 	private WorkPlacementPlanner() {}
 
 	public static PlacementResult place(
@@ -26,7 +28,9 @@ public final class WorkPlacementPlanner {
 				continue;
 			}
 			TaskPlacement placement =
-					placeTaskCadenceOff(stage1.freeIntervals(), cursor, task, estimate);
+					policy.cadenceEnabled()
+							? placeTaskCadenceOn(stage1.freeIntervals(), cursor, task, estimate, policy)
+							: placeTaskCadenceOff(stage1.freeIntervals(), cursor, task, estimate, policy);
 			blocks.addAll(placement.blocks());
 			if (placement.remainingMinutes() > 0) {
 				unplacedWork.add(
@@ -42,8 +46,103 @@ public final class WorkPlacementPlanner {
 		return new PlacementResult(blocks, unplacedWork);
 	}
 
+	private static TaskPlacement placeTaskCadenceOn(
+			List<FreeInterval> intervals,
+			PlacementCursor cursor,
+			RankedTask task,
+			int remaining,
+			PlacementPolicy policy) {
+		List<ScheduledBlock> placed = new ArrayList<>();
+		while (remaining > 0 && cursor.hasRemaining(intervals)) {
+			FreeInterval interval = intervals.get(cursor.intervalIndex());
+			int available = minutesBetween(cursor.position(), interval.end());
+			if (available <= 0) {
+				cursor.advanceToNextInterval(intervals);
+				continue;
+			}
+			int budget = Math.max(policy.targetFocusMinutes() - cursor.focusClock(), 0);
+			if (budget < policy.minSessionMinutes()) {
+				if (available >= policy.breakMinutes()) {
+					LocalTime breakStart = cursor.position();
+					LocalTime breakEnd = breakStart.plusMinutes(policy.breakMinutes());
+					placed.add(
+							new ScheduledBlock(
+									BlockKind.CADENCE_BREAK,
+									breakStart,
+									breakEnd,
+									null,
+									CADENCE_BREAK_LABEL,
+									0,
+									0));
+					cursor.moveTo(breakEnd, intervals);
+					cursor.resetFocus();
+				} else {
+					cursor.advanceToNextInterval(intervals);
+				}
+				continue;
+			}
+			int capped = Math.min(remaining, Math.min(available, budget));
+			int sessionLength = capped;
+			if (remaining > capped
+					&& remaining - capped < policy.minSessionMinutes()
+					&& remaining <= available) {
+				sessionLength = remaining;
+			}
+			if (sessionLength <= 0) {
+				cursor.advanceToNextInterval(intervals);
+				continue;
+			}
+			int indexBefore = cursor.intervalIndex();
+			LocalTime blockStart = cursor.position();
+			LocalTime blockEnd = blockStart.plusMinutes(sessionLength);
+			placed.add(
+					new ScheduledBlock(
+							BlockKind.WORK,
+							blockStart,
+							blockEnd,
+							task.sourceTaskId(),
+							null,
+							0,
+							0));
+			cursor.addFocus(sessionLength);
+			cursor.moveTo(blockEnd, intervals);
+			remaining -= sessionLength;
+
+			if (cursor.intervalIndex() != indexBefore) {
+				continue;
+			}
+
+			if (remaining > 0 && cursor.hasRemaining(intervals)) {
+				FreeInterval current = intervals.get(cursor.intervalIndex());
+				int room = minutesBetween(cursor.position(), current.end());
+				if (room >= policy.breakMinutes()) {
+					LocalTime breakStart = cursor.position();
+					LocalTime breakEnd = breakStart.plusMinutes(policy.breakMinutes());
+					placed.add(
+							new ScheduledBlock(
+									BlockKind.CADENCE_BREAK,
+									breakStart,
+									breakEnd,
+									null,
+									CADENCE_BREAK_LABEL,
+									0,
+									0));
+					cursor.moveTo(breakEnd, intervals);
+					cursor.resetFocus();
+				} else {
+					cursor.advanceToNextInterval(intervals);
+				}
+			}
+		}
+		return new TaskPlacement(numberSessions(placed), remaining);
+	}
+
 	private static TaskPlacement placeTaskCadenceOff(
-			List<FreeInterval> intervals, PlacementCursor cursor, RankedTask task, int remaining) {
+			List<FreeInterval> intervals,
+			PlacementCursor cursor,
+			RankedTask task,
+			int remaining,
+			PlacementPolicy policy) {
 		List<ScheduledBlock> workBlocks = new ArrayList<>();
 		while (remaining > 0 && cursor.hasRemaining(intervals)) {
 			FreeInterval interval = intervals.get(cursor.intervalIndex());
@@ -54,6 +153,10 @@ public final class WorkPlacementPlanner {
 				continue;
 			}
 			int placed = Math.min(remaining, available);
+			if (placed < policy.minSessionMinutes() && remaining > placed) {
+				cursor.advanceToNextInterval(intervals);
+				continue;
+			}
 			LocalTime blockStart = cursor.position();
 			LocalTime blockEnd = blockStart.plusMinutes(placed);
 			workBlocks.add(
@@ -63,29 +166,40 @@ public final class WorkPlacementPlanner {
 							blockEnd,
 							task.sourceTaskId(),
 							null,
-							workBlocks.size() + 1,
+							0,
 							0));
 			cursor.moveTo(blockEnd, intervals);
 			remaining -= placed;
 		}
-		int sessionCount = workBlocks.size();
-		if (sessionCount == 0) {
-			return new TaskPlacement(List.of(), remaining);
+		return new TaskPlacement(numberSessions(workBlocks), remaining);
+	}
+
+	private static List<ScheduledBlock> numberSessions(List<ScheduledBlock> placed) {
+		int sessionCount = 0;
+		for (ScheduledBlock block : placed) {
+			if (block.kind() == BlockKind.WORK) {
+				sessionCount++;
+			}
 		}
 		List<ScheduledBlock> numbered = new ArrayList<>();
-		for (int i = 0; i < workBlocks.size(); i++) {
-			ScheduledBlock block = workBlocks.get(i);
-			numbered.add(
-					new ScheduledBlock(
-							block.kind(),
-							block.start(),
-							block.end(),
-							block.sourceTaskId(),
-							block.label(),
-							i + 1,
-							sessionCount));
+		int sessionIndex = 0;
+		for (ScheduledBlock block : placed) {
+			if (block.kind() == BlockKind.WORK) {
+				sessionIndex++;
+				numbered.add(
+						new ScheduledBlock(
+								block.kind(),
+								block.start(),
+								block.end(),
+								block.sourceTaskId(),
+								block.label(),
+								sessionIndex,
+								sessionCount));
+			} else {
+				numbered.add(block);
+			}
 		}
-		return new TaskPlacement(numbered, remaining);
+		return numbered;
 	}
 
 	private record TaskPlacement(List<ScheduledBlock> blocks, int remainingMinutes) {}
@@ -121,6 +235,7 @@ public final class WorkPlacementPlanner {
 	private static final class PlacementCursor {
 		private int intervalIndex;
 		private LocalTime position;
+		private int focusClock;
 
 		private PlacementCursor(List<FreeInterval> intervals) {
 			if (intervals.isEmpty()) {
@@ -140,6 +255,18 @@ public final class WorkPlacementPlanner {
 			return position;
 		}
 
+		private int focusClock() {
+			return focusClock;
+		}
+
+		private void addFocus(int minutes) {
+			focusClock += minutes;
+		}
+
+		private void resetFocus() {
+			focusClock = 0;
+		}
+
 		private boolean hasRemaining(List<FreeInterval> intervals) {
 			return intervalIndex < intervals.size();
 		}
@@ -153,6 +280,10 @@ public final class WorkPlacementPlanner {
 		}
 
 		private void advanceToNextInterval(List<FreeInterval> intervals) {
+			if (intervalIndex < intervals.size()
+					&& intervals.get(intervalIndex).restorativeAfterEnd()) {
+				focusClock = 0;
+			}
 			intervalIndex++;
 			if (intervalIndex < intervals.size()) {
 				position = intervals.get(intervalIndex).start();
