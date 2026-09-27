@@ -42,7 +42,7 @@ class DailyPlanPromptBuilderTest {
 	}
 
 	@Test
-	void build_includesAvailableMinutesAndTaskCoreFields() {
+	void build_includesTaskCoreFieldsWithoutAvailableMinutes() {
 		AiDailyPlanRequest request =
 				new AiDailyPlanRequest(
 						List.of(
@@ -59,9 +59,10 @@ class DailyPlanPromptBuilderTest {
 
 		String prompt = promptBuilder.build(request);
 
-		assertThat(prompt).contains("120");
 		assertThat(prompt).contains("Write tests");
 		assertThat(prompt).contains("HIGH");
+		assertThat(prompt).doesNotContain("Available focus minutes");
+		assertThat(prompt).doesNotContain("leftover");
 	}
 
 	@Test
@@ -180,8 +181,33 @@ class DailyPlanPromptBuilderTest {
 		assertThat(prompt).contains("Prefer HIGH over MEDIUM over LOW");
 		assertThat(prompt).contains("must-continue");
 		assertThat(prompt).contains("due-or-overdue");
-		assertThat(prompt).contains("optional work must fit");
-		assertThat(prompt).contains("leftover");
-		assertThat(prompt).contains("estimates");
+		assertThat(prompt).contains("every");
+		assertThat(prompt).contains("exactly once");
+		assertThat(prompt).contains("block order");
+		assertThat(prompt).doesNotContain("Available focus minutes");
+		assertThat(prompt).doesNotContain("leftover");
+		assertThat(prompt).doesNotContain("optional work must fit");
+	}
+
+	@Test
+	void build_truncatesLongDescriptionsToFiveHundredCharacters() {
+		String description = "x".repeat(500) + "Z";
+		AiPlanTask task =
+				new AiPlanTask(
+						1L,
+						"Write tests",
+						description,
+						TaskPriority.HIGH,
+						null,
+						null,
+						TaskStatus.OPEN);
+		AiDailyPlanRequest request =
+				new AiDailyPlanRequest(List.of(task), 120, LocalDate.of(2026, 6, 1));
+
+		String prompt = promptBuilder.build(request);
+
+		assertThat(task.description()).hasSize(501);
+		assertThat(prompt).contains("x".repeat(500));
+		assertThat(prompt).doesNotContain("Z");
 	}
 }
