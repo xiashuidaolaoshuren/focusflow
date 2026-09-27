@@ -1,0 +1,12 @@
+package com.focusflow.schedule;
+
+public enum SchedulePostconditionViolation {
+	NOT_MINUTE_ALIGNED,
+	NON_POSITIVE_DURATION,
+	OUT_OF_ORDER,
+	OVERLAP,
+	OUT_OF_WINDOW,
+	STAGE1_MISMATCH,
+	ESTIMATE_CONSERVATION,
+	TASK_IDENTITY
+}
