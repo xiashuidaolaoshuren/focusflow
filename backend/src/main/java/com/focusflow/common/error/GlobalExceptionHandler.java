@@ -55,7 +55,8 @@ public class GlobalExceptionHandler {
 						HttpStatus.BAD_REQUEST.getReasonPhrase(),
 						ex.getMessage(),
 						request.getRequestURI(),
-						currentRequestId());
+						currentRequestId(),
+						ex.getCode());
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
 	}
 
@@ -79,7 +80,8 @@ public class GlobalExceptionHandler {
 						HttpStatus.CONFLICT.getReasonPhrase(),
 						ex.getMessage(),
 						request.getRequestURI(),
-						currentRequestId());
+						currentRequestId(),
+						ex.getCode());
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
 	}
 
