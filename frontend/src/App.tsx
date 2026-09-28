@@ -8,6 +8,7 @@ import { LoginPage } from '@/routes/LoginPage'
 import { PlanDetailPage } from '@/routes/PlanDetailPage'
 import { PlanHistoryPage } from '@/routes/PlanHistoryPage'
 import { RegisterPage } from '@/routes/RegisterPage'
+import { SettingsPage } from '@/routes/SettingsPage'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/plans" element={<PlanHistoryPage />} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
     </Routes>

@@ -64,6 +64,45 @@ export type GeneratePlanRequest = {
   planDate?: string | null
 }
 
+/** Mirrors `com.focusflow.preferences.dto.FixedBreakResponse` */
+export type FixedBreakResponse = {
+  label: string
+  startTime: string
+  endTime: string
+}
+
+/** Mirrors `com.focusflow.preferences.dto.FixedBreakRequest` */
+export type FixedBreakRequest = FixedBreakResponse
+
+/** Mirrors `com.focusflow.preferences.dto.SchedulingPreferencesResponse` */
+export type SchedulingPreferencesResponse = {
+  workDayStart: string
+  workDayEnd: string
+  cadenceEnabled: boolean
+  targetFocusMinutes: number
+  breakMinutes: number
+  minSessionMinutes: number
+  bufferMinutes: number
+  peakStart: string | null
+  peakEnd: string | null
+  fixedBreaks: FixedBreakResponse[]
+  persisted: boolean
+}
+
+/** Mirrors `com.focusflow.preferences.dto.SchedulingPreferencesRequest` */
+export type SchedulingPreferencesRequest = {
+  workDayStart: string
+  workDayEnd: string
+  cadenceEnabled: boolean
+  targetFocusMinutes: number
+  breakMinutes: number
+  minSessionMinutes: number
+  bufferMinutes: number
+  peakStart: string | null
+  peakEnd: string | null
+  fixedBreaks: FixedBreakRequest[]
+}
+
 /** Mirrors `com.focusflow.common.web.PageResponse` */
 export type PageResponse<T> = {
   content: T[]
