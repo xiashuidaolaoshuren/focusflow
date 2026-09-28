@@ -5,6 +5,7 @@ import com.focusflow.ai.AiDailyPlanResponse;
 import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
@@ -58,9 +59,16 @@ public class DailyPlanService {
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
 		Long ownerId = currentUser.getCurrentUser().id();
 		LocalDate planDate = request.planDate();
+		Optional<DailyPlan> latestPlan =
+				dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						ownerId, planDate);
+		validateReplacePrecondition(latestPlan, request.replacePlanId());
 		List<Task> activeTasks = taskQueryService.findPlannableTasksByOwnerId(ownerId);
 		if (activeTasks.isEmpty()) {
 			throw new BadRequestException("no plannable tasks available for planning");
+		}
+		if (activeTasks.size() > 100) {
+			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
 		}
 		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
 		AiDailyPlanResponse aiResponse =
@@ -110,6 +118,19 @@ public class DailyPlanService {
 	@Transactional
 	public void deleteForCurrentUser(Long planId) {
 		dailyPlanRepository.delete(loadPlanForCurrentUser(planId));
+	}
+
+	private void validateReplacePrecondition(Optional<DailyPlan> latestPlan, Long replacePlanId) {
+		if (latestPlan.isPresent()) {
+			if (replacePlanId == null) {
+				throw new ConflictException("PLAN_EXISTS", "plan already exists");
+			}
+			if (!latestPlan.get().getId().equals(replacePlanId)) {
+				throw new ConflictException("PLAN_CHANGED", "plan has changed");
+			}
+		} else if (replacePlanId != null) {
+			throw new ConflictException("PLAN_CHANGED", "plan has changed");
+		}
 	}
 
 	private DailyPlan loadPlanForCurrentUser(Long planId) {

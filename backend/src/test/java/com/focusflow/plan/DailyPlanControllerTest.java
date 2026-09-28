@@ -1,5 +1,6 @@
 package com.focusflow.plan;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -32,6 +33,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -110,6 +112,38 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.details.planDate").isArray());
 
 		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void generate_passesReplacePlanIdToService() throws Exception {
+		when(dailyPlanService.generate(any(GeneratePlanRequest.class)))
+				.thenReturn(
+						new DailyPlanResponse(
+								1L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								List.of(),
+								120,
+								null));
+
+		mockMvc.perform(
+						post("/api/daily-plans/generate")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "availableMinutes": 120,
+										  "planDate": "2026-06-01",
+										  "replacePlanId": 5
+										}
+										"""))
+				.andExpect(status().isCreated());
+
+		ArgumentCaptor<GeneratePlanRequest> captor = ArgumentCaptor.forClass(GeneratePlanRequest.class);
+		verify(dailyPlanService).generate(captor.capture());
+		assertThat(captor.getValue().replacePlanId()).isEqualTo(5L);
 	}
 
 	@Test
