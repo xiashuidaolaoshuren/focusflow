@@ -15,7 +15,7 @@ import com.focusflow.plan.dto.GeneratePlanRequest;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
-import com.focusflow.task.TaskStatus;
+import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.UserRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -37,6 +37,7 @@ public class DailyPlanService {
 	private final DailyPlanPersister persister;
 	private final DailyPlanResponseMapper responseMapper;
 	private final DailyPlanRankingValidator rankingValidator;
+	private final OwnerSchedulingLock ownerSchedulingLock;
 
 	public DailyPlanService(
 			DailyPlanAiClient aiClient,
@@ -46,7 +47,8 @@ public class DailyPlanService {
 			DailyPlanRepository dailyPlanRepository,
 			DailyPlanPersister persister,
 			DailyPlanResponseMapper responseMapper,
-			DailyPlanRankingValidator rankingValidator) {
+			DailyPlanRankingValidator rankingValidator,
+			OwnerSchedulingLock ownerSchedulingLock) {
 		this.aiClient = aiClient;
 		this.taskQueryService = taskQueryService;
 		this.userRepository = userRepository;
@@ -55,6 +57,7 @@ public class DailyPlanService {
 		this.persister = persister;
 		this.responseMapper = responseMapper;
 		this.rankingValidator = rankingValidator;
+		this.ownerSchedulingLock = ownerSchedulingLock;
 	}
 
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
@@ -75,10 +78,7 @@ public class DailyPlanService {
 		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
 		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
 		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
-		DailyPlanWarningSnapshot warning =
-				computeWarning(activeTasks, planDate, request.availableMinutes());
-		return persister.persistPlan(
-				ownerId, planDate, aiItems, request.availableMinutes(), warning);
+		return persister.persistPlan(ownerId, planDate, aiItems, request.availableMinutes());
 	}
 
 	private List<AiPlanItem> toPositionedPlanItems(List<Long> orderedTaskIds) {
@@ -109,7 +109,7 @@ public class DailyPlanService {
 				summaries.getTotalPages());
 	}
 
-	public Optional<DailyPlanResponse> latestForCurrentUser(LocalDate planDate) {
+	public Optional<DailyPlanResponse> byDateForCurrentUser(LocalDate planDate) {
 		if (planDate == null) {
 			throw new BadRequestException("planDate is required");
 		}
@@ -125,6 +125,7 @@ public class DailyPlanService {
 
 	@Transactional
 	public void deleteForCurrentUser(Long planId) {
+		ownerSchedulingLock.lockCurrentOwner();
 		dailyPlanRepository.delete(loadPlanForCurrentUser(planId));
 	}
 
@@ -153,50 +154,11 @@ public class DailyPlanService {
 				projection.getId(),
 				projection.getPlanDate(),
 				projection.getCreatedAt(),
-				projection.getItemCount() != null ? projection.getItemCount() : 0,
-				Boolean.TRUE.equals(projection.getHasWarning()),
-				projection.getAvailableMinutes());
-	}
-
-	private DailyPlanWarningSnapshot computeWarning(
-			List<Task> candidates, LocalDate planDate, int availableMinutes) {
-		List<DailyPlanWarningSnapshot.EstimatedTask> estimatedTasks = new ArrayList<>();
-		List<DailyPlanWarningSnapshot.UnestimatedTask> unestimatedTasks = new ArrayList<>();
-		int minimumAvailableMinutes = 0;
-
-		for (Task candidate : candidates) {
-			if (!isMustInclude(candidate, planDate)) {
-				continue;
-			}
-			long taskId = candidate.getId() != null ? candidate.getId() : 0L;
-			Integer estimate = candidate.getEstimatedMinutes();
-			if (estimate != null) {
-				minimumAvailableMinutes += estimate;
-				estimatedTasks.add(
-						new DailyPlanWarningSnapshot.EstimatedTask(
-								taskId, candidate.getTitle(), estimate));
-			} else {
-				unestimatedTasks.add(
-						new DailyPlanWarningSnapshot.UnestimatedTask(taskId, candidate.getTitle()));
-			}
-		}
-
-		if (unestimatedTasks.isEmpty() && availableMinutes >= minimumAvailableMinutes) {
-			return null;
-		}
-		return new DailyPlanWarningSnapshot(
-				minimumAvailableMinutes, estimatedTasks, unestimatedTasks);
-	}
-
-	private boolean isMustInclude(Task task, LocalDate planDate) {
-		if (task.getStatus() == TaskStatus.IN_PROGRESS) {
-			return true;
-		}
-		if (task.getStatus() == TaskStatus.OPEN) {
-			LocalDate dueDate = task.getDueDate();
-			return dueDate != null && !dueDate.isAfter(planDate);
-		}
-		return false;
+				projection.getScheduledWorkMinutes() != null ? projection.getScheduledWorkMinutes() : 0,
+				projection.getWorkSessionCount() != null ? projection.getWorkSessionCount() : 0,
+				projection.getScheduledTaskCount() != null ? projection.getScheduledTaskCount() : 0,
+				projection.getUnplacedWorkCount() != null ? projection.getUnplacedWorkCount() : 0,
+				Boolean.TRUE.equals(projection.getHasWarning()));
 	}
 
 	private AiPlanTask toAiPlanTask(Task task) {

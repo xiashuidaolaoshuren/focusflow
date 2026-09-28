@@ -37,15 +37,15 @@ public class DailyPlanController {
 		return dailyPlanService.listForCurrentUser(page, size);
 	}
 
-	@GetMapping("/latest")
+	@GetMapping("/by-date")
 	@ApiResponses({
-		@ApiResponse(responseCode = "200", description = "Latest plan found"),
+		@ApiResponse(responseCode = "200", description = "Plan found for the requested date"),
 		@ApiResponse(responseCode = "204", description = "No plan for the requested date")
 	})
-	public ResponseEntity<DailyPlanResponse> latest(
+	public ResponseEntity<DailyPlanResponse> byDate(
 			@RequestParam(required = false) LocalDate planDate) {
 		return dailyPlanService
-				.latestForCurrentUser(planDate)
+				.byDateForCurrentUser(planDate)
 				.map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.noContent().build());
 	}

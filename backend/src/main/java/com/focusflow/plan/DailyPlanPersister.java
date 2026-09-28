@@ -6,10 +6,12 @@ import com.focusflow.common.error.NotFoundException;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
+import com.focusflow.task.TaskStatus;
 import com.focusflow.user.User;
 import com.focusflow.user.UserRepository;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -41,8 +43,7 @@ public class DailyPlanPersister {
 			Long ownerId,
 			LocalDate planDate,
 			List<AiPlanItem> aiItems,
-			int availableMinutes,
-			DailyPlanWarningSnapshot warning) {
+			int availableMinutes) {
 		User owner =
 				userRepository
 						.findById(ownerId)
@@ -61,8 +62,7 @@ public class DailyPlanPersister {
 				throw new ConflictException("a selected task is no longer available");
 			}
 		}
-		DailyPlan plan =
-				buildPlan(owner, planDate, aiItems, taskById, availableMinutes, warning);
+		DailyPlan plan = buildPlan(owner, planDate, aiItems, taskById, availableMinutes);
 		return responseMapper.toResponse(dailyPlanRepository.save(plan));
 	}
 
@@ -71,21 +71,43 @@ public class DailyPlanPersister {
 			LocalDate planDate,
 			List<AiPlanItem> aiItems,
 			Map<Long, Task> taskById,
-			int availableMinutes,
-			DailyPlanWarningSnapshot warning) {
+			int availableMinutes) {
 		DailyPlan plan = new DailyPlan();
 		plan.setOwner(owner);
 		plan.setPlanDate(planDate);
 		plan.setCreatedAt(Instant.now());
-		plan.setAvailableMinutes(availableMinutes);
-		plan.setWarning(warning);
+		plan.setWindowStart(LocalTime.of(9, 0));
+		plan.setWindowEnd(LocalTime.of(18, 0));
+		plan.setFreeMinutes(availableMinutes);
+		plan.setScheduledWorkMinutes(0);
+		plan.setRequiredMinutes(0L);
+		plan.setRequestedBufferMinutes(0);
+		plan.setRealizedBufferMinutes(0);
 		for (AiPlanItem aiItem : aiItems) {
 			Task task = taskById.get(aiItem.taskId());
-			DailyPlanItem item = new DailyPlanItem();
-			item.setTask(task);
-			item.setPosition(aiItem.position());
-			plan.addItem(item);
+			DailyPlanTask planTask = new DailyPlanTask();
+			planTask.setRank(aiItem.position());
+			planTask.setSourceTaskId(task.getId() != null ? task.getId() : 0L);
+			planTask.setTaskReference(task);
+			planTask.setTaskTitle(task.getTitle());
+			planTask.setTaskPriority(task.getPriority());
+			planTask.setTaskStatus(task.getStatus());
+			planTask.setTaskDueDate(task.getDueDate());
+			planTask.setTaskEstimatedMinutes(task.getEstimatedMinutes());
+			planTask.setMustInclude(isMustInclude(task, planDate));
+			plan.addTask(planTask);
 		}
 		return plan;
+	}
+
+	private boolean isMustInclude(Task task, LocalDate planDate) {
+		if (task.getStatus() == TaskStatus.IN_PROGRESS) {
+			return true;
+		}
+		if (task.getStatus() == TaskStatus.OPEN) {
+			LocalDate dueDate = task.getDueDate();
+			return dueDate != null && !dueDate.isAfter(planDate);
+		}
+		return false;
 	}
 }

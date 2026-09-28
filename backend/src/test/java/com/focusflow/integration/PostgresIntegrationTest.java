@@ -7,10 +7,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.focusflow.plan.DailyPlan;
-import com.focusflow.plan.DailyPlanItem;
+import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
 import com.focusflow.plan.DailyPlanSummaryProjection;
-import com.focusflow.plan.DailyPlanWarningSnapshot;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskPriority;
 import com.focusflow.task.TaskRepository;
@@ -376,8 +375,8 @@ class PostgresIntegrationTest {
 						dailyPlanRepository,
 						DailyPlanTestBuilder.plan(ownerA, LocalDate.of(2026, 9, 20))
 								.withCreatedAt(Instant.parse("2026-09-20T11:00:00Z"))
-								.addItem(savedSecond, 0)
-								.addItem(savedFirst, 1));
+								.addTask(savedSecond, 1, false, null, null)
+								.addTask(savedFirst, 2, false, null, null));
 		dailyPlanRepository.flush();
 
 		assertThat(dailyPlanRepository.findByOwner_IdAndId(ownerB.getId(), plan.getId())).isEmpty();
@@ -387,14 +386,14 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getItems())
-									.extracting(DailyPlanItem::getPosition)
-									.containsExactly(0, 1);
-							assertThat(p.getItems())
-									.extracting(i -> i.getTask().getId())
+							assertThat(p.getTasks())
+									.extracting(DailyPlanTask::getRank)
+									.containsExactly(1, 2);
+							assertThat(p.getTasks())
+									.extracting(DailyPlanTask::getSourceTaskId)
 									.containsExactly(savedSecond.getId(), savedFirst.getId());
-							assertThat(p.getItems())
-									.extracting(i -> i.getTask().getTitle())
+							assertThat(p.getTasks())
+									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
 	}
@@ -433,8 +432,9 @@ class PostgresIntegrationTest {
 						dailyPlanRepository,
 						DailyPlanTestBuilder.plan(owner, planDate)
 								.withCreatedAt(Instant.parse("2026-09-21T10:00:00Z"))
-								.addItem(savedSecond, 0)
-								.addItem(savedFirst, 1));
+								.withMetrics(480, 120, 90L, 0, 0)
+								.addTask(savedSecond, 1, false, null, null)
+								.addTask(savedFirst, 2, false, null, null));
 		dailyPlanRepository.flush();
 
 		List<DailyPlanSummaryProjection> summaries =
@@ -447,7 +447,7 @@ class PostgresIntegrationTest {
 				.satisfies(
 						summary -> {
 							assertThat(summary.getId()).isEqualTo(plan.getId());
-							assertThat(summary.getItemCount()).isEqualTo(2);
+							assertThat(summary.getScheduledTaskCount()).isEqualTo(2);
 							assertThat(summary.getHasWarning()).isFalse();
 						});
 
@@ -456,11 +456,11 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getItems())
-									.extracting(DailyPlanItem::getPosition)
-									.containsExactly(0, 1);
-							assertThat(p.getItems())
-									.extracting(i -> i.getTask().getTitle())
+							assertThat(p.getTasks())
+									.extracting(DailyPlanTask::getRank)
+									.containsExactly(1, 2);
+							assertThat(p.getTasks())
+									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
 	}
@@ -498,8 +498,8 @@ class PostgresIntegrationTest {
 						dailyPlanRepository,
 						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 9, 22))
 								.withCreatedAt(Instant.parse("2026-09-22T10:00:00Z"))
-								.addItem(savedFirst, 1)
-								.addItem(savedSecond, 2));
+								.addTask(savedFirst, 1, false, null, null)
+								.addTask(savedSecond, 2, false, null, null));
 		Long planId = plan.getId();
 		dailyPlanRepository.flush();
 
@@ -518,73 +518,35 @@ class PostgresIntegrationTest {
 	}
 
 	@Test
-	void persistedDailyPlan_roundTripsAvailableMinutesAndWarning() {
+	void persistedDailyPlan_roundTripsScheduleMetrics() {
 		String suffix = UUID.randomUUID().toString().substring(0, 8);
 		User owner =
 				savedUser(
 						userRepository,
 						UserTestBuilder.user()
 								.withUnique(suffix)
-								.withAccountPrefix("warning-plan-owner")
+								.withAccountPrefix("metrics-plan-owner")
 								.withPasswordHash(
 										"$2a$10$5555555555555555555555555555555555555555555555555555555"));
 
-		DailyPlanWarningSnapshot warning =
-				new DailyPlanWarningSnapshot(
-						90,
-						List.of(new DailyPlanWarningSnapshot.EstimatedTask(1L, "Continue work", 90)),
-						List.of(new DailyPlanWarningSnapshot.UnestimatedTask(2L, "Due today")));
-
-		DailyPlan savedWithWarning =
+		DailyPlan savedWithMetrics =
 				savedPlan(
 						dailyPlanRepository,
 						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 1))
 								.withCreatedAt(Instant.parse("2026-10-01T10:00:00Z"))
-								.withAvailableMinutes(30)
-								.withWarning(warning));
+								.withMetrics(420, 180, 240L, 15, 10));
 		dailyPlanRepository.flush();
 
-		assertThat(dailyPlanRepository.findByOwner_IdAndId(owner.getId(), savedWithWarning.getId()))
+		assertThat(dailyPlanRepository.findByOwner_IdAndId(owner.getId(), savedWithMetrics.getId()))
 				.isPresent()
 				.get()
 				.satisfies(
 						reloaded -> {
-							assertThat(reloaded.getAvailableMinutes()).isEqualTo(30);
-							assertThat(reloaded.getWarning()).isNotNull();
-							assertThat(reloaded.getWarning().minimumAvailableMinutes()).isEqualTo(90);
-							assertThat(reloaded.getWarning().estimatedTasks())
-									.singleElement()
-									.satisfies(
-											task -> {
-												assertThat(task.taskId()).isEqualTo(1L);
-												assertThat(task.title()).isEqualTo("Continue work");
-												assertThat(task.estimatedMinutes()).isEqualTo(90);
-											});
-							assertThat(reloaded.getWarning().unestimatedTasks())
-									.singleElement()
-									.satisfies(
-											task -> {
-												assertThat(task.taskId()).isEqualTo(2L);
-												assertThat(task.title()).isEqualTo("Due today");
-											});
-						});
-
-		DailyPlan savedWithoutWarning =
-				savedPlan(
-						dailyPlanRepository,
-						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 2))
-								.withCreatedAt(Instant.parse("2026-10-02T10:00:00Z")));
-		dailyPlanRepository.flush();
-
-		assertThat(
-						dailyPlanRepository.findByOwner_IdAndId(
-								owner.getId(), savedWithoutWarning.getId()))
-				.isPresent()
-				.get()
-				.satisfies(
-						reloaded -> {
-							assertThat(reloaded.getAvailableMinutes()).isNull();
-							assertThat(reloaded.getWarning()).isNull();
+							assertThat(reloaded.getFreeMinutes()).isEqualTo(420);
+							assertThat(reloaded.getScheduledWorkMinutes()).isEqualTo(180);
+							assertThat(reloaded.getRequiredMinutes()).isEqualTo(240L);
+							assertThat(reloaded.getRequestedBufferMinutes()).isEqualTo(15);
+							assertThat(reloaded.getRealizedBufferMinutes()).isEqualTo(10);
 						});
 	}
 }

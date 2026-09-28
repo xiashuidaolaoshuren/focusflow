@@ -1,33 +1,16 @@
 package com.focusflow.plan.dto;
 
-import com.focusflow.plan.DailyPlanWarningSnapshot;
+import com.focusflow.schedule.UnplacedReason;
 import java.util.List;
 
 public record DailyPlanWarning(
-		int minimumAvailableMinutes,
-		List<EstimatedTask> estimatedTasks,
+		long requiredMinutes,
+		int freeMinutes,
+		int scheduledWorkMinutes,
+		List<OutOfTimeTask> outOfTimeTasks,
 		List<UnestimatedTask> unestimatedTasks) {
 
-	public record EstimatedTask(long taskId, String title, int estimatedMinutes) {}
+	public record OutOfTimeTask(long sourceTaskId, String title, int unplacedMinutes) {}
 
-	public record UnestimatedTask(long taskId, String title) {}
-
-	public static DailyPlanWarning from(DailyPlanWarningSnapshot snapshot) {
-		if (snapshot == null) {
-			return null;
-		}
-		return new DailyPlanWarning(
-				snapshot.minimumAvailableMinutes(),
-				snapshot.estimatedTasks().stream()
-						.map(
-								task ->
-										new EstimatedTask(
-												task.taskId(),
-												task.title(),
-												task.estimatedMinutes()))
-						.toList(),
-				snapshot.unestimatedTasks().stream()
-						.map(task -> new UnestimatedTask(task.taskId(), task.title()))
-						.toList());
-	}
+	public record UnestimatedTask(long sourceTaskId, String title) {}
 }

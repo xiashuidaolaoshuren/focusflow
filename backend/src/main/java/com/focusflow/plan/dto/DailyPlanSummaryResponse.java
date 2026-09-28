@@ -7,6 +7,8 @@ public record DailyPlanSummaryResponse(
 		Long id,
 		LocalDate planDate,
 		Instant createdAt,
-		int itemCount,
-		boolean hasWarning,
-		Integer availableMinutes) {}
+		int scheduledWorkMinutes,
+		int workSessionCount,
+		int scheduledTaskCount,
+		int unplacedWorkCount,
+		boolean hasWarning) {}
