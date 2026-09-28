@@ -33,7 +33,6 @@ class DailyPlanPromptBuilderTest {
 										null,
 										null,
 										TaskStatus.IN_PROGRESS)),
-						90,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -54,7 +53,6 @@ class DailyPlanPromptBuilderTest {
 										LocalDate.of(2026, 6, 1),
 										45,
 										TaskStatus.OPEN)),
-						120,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -72,7 +70,6 @@ class DailyPlanPromptBuilderTest {
 						List.of(
 								new AiPlanTask(
 										2L, "Minimal task", null, TaskPriority.MEDIUM, null, null, TaskStatus.OPEN)),
-						60,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -95,7 +92,6 @@ class DailyPlanPromptBuilderTest {
 										LocalDate.of(2026, 6, 1),
 										45,
 										TaskStatus.OPEN)),
-						120,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -126,7 +122,6 @@ class DailyPlanPromptBuilderTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						90,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -149,7 +144,6 @@ class DailyPlanPromptBuilderTest {
 										LocalDate.of(2026, 6, 1),
 										45,
 										TaskStatus.OPEN)),
-						120,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -173,7 +167,6 @@ class DailyPlanPromptBuilderTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						120,
 						LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
@@ -202,7 +195,7 @@ class DailyPlanPromptBuilderTest {
 						null,
 						TaskStatus.OPEN);
 		AiDailyPlanRequest request =
-				new AiDailyPlanRequest(List.of(task), 120, LocalDate.of(2026, 6, 1));
+				new AiDailyPlanRequest(List.of(task), LocalDate.of(2026, 6, 1));
 
 		String prompt = promptBuilder.build(request);
 

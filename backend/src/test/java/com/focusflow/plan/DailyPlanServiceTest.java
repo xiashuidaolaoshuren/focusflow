@@ -168,7 +168,7 @@ class DailyPlanServiceTest {
 
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		stubPersisterReturn(120, null);
@@ -186,12 +186,13 @@ class DailyPlanServiceTest {
 				.thenReturn(new UserContext(42L, "user@example.com", "user"));
 
 		Task task = new Task();
+		ReflectionTestUtils.setField(task, "id", 1L);
 		task.setTitle("Write tests");
 		task.setPriority(TaskPriority.HIGH);
 		task.setStatus(TaskStatus.OPEN);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of()));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		stubPersisterReturn(120, null);
 
@@ -200,7 +201,6 @@ class DailyPlanServiceTest {
 		ArgumentCaptor<AiDailyPlanRequest> captor = ArgumentCaptor.forClass(AiDailyPlanRequest.class);
 		verify(aiClient).generate(captor.capture());
 		assertThat(captor.getValue().tasks()).hasSize(1);
-		assertThat(captor.getValue().availableMinutes()).isEqualTo(120);
 		assertThat(captor.getValue().planDate()).isEqualTo(LocalDate.of(2026, 6, 1));
 	}
 
@@ -277,7 +277,7 @@ class DailyPlanServiceTest {
 		task.setEstimatedMinutes(30);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		stubPersisterReturn(120, null);
 
@@ -364,15 +364,14 @@ class DailyPlanServiceTest {
 
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		stubPersisterReturn(120, null);
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		dailyPlanService.generate(new GeneratePlanRequest(120, planDate, null));
 
-		verify(rankingValidator)
-				.validate(List.of(task), planDate, 120, List.of(new AiPlanItem(1L, 1)));
+		verify(rankingValidator).validateOrder(List.of(task), planDate, List.of(1L));
 	}
 
 	@Test
@@ -387,7 +386,7 @@ class DailyPlanServiceTest {
 		task.setStatus(TaskStatus.IN_PROGRESS);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		stubPersisterReturn(120, null);
 
@@ -406,12 +405,13 @@ class DailyPlanServiceTest {
 				.thenReturn(new UserContext(42L, "user@example.com", "user"));
 
 		Task task = new Task();
+		ReflectionTestUtils.setField(task, "id", 1L);
 		task.setTitle("Task 1");
 		task.setPriority(TaskPriority.HIGH);
 		task.setStatus(TaskStatus.OPEN);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of()));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		stubPersisterReturn(120, null);
 
@@ -456,7 +456,7 @@ class DailyPlanServiceTest {
 		task.setEstimatedMinutes(30);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		DailyPlanResponse stubbed = stubPersisterReturn(60, null);
@@ -487,7 +487,7 @@ class DailyPlanServiceTest {
 		task.setEstimatedMinutes(60);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		DailyPlanWarning warning =
@@ -533,7 +533,7 @@ class DailyPlanServiceTest {
 		task.setStatus(TaskStatus.IN_PROGRESS);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(1L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		DailyPlanWarning warning =
@@ -575,9 +575,8 @@ class DailyPlanServiceTest {
 		task.setStatus(TaskStatus.OPEN);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 
-		AiPlanItem aiItem = new AiPlanItem(1L, 1);
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(aiItem)));
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
 
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		DailyPlanResponse stubbed = stubPersisterReturn(120, null);
@@ -586,7 +585,8 @@ class DailyPlanServiceTest {
 				dailyPlanService.generate(new GeneratePlanRequest(120, planDate, null));
 
 		verify(persister)
-				.persistPlan(eq(42L), eq(planDate), eq(List.of(aiItem)), eq(120), eq(null));
+				.persistPlan(
+						eq(42L), eq(planDate), eq(List.of(new AiPlanItem(1L, 1))), eq(120), eq(null));
 		assertThat(response).isSameAs(stubbed);
 	}
 
@@ -624,7 +624,7 @@ class DailyPlanServiceTest {
 		task.setStatus(TaskStatus.OPEN);
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
-				.thenReturn(new AiDailyPlanResponse(List.of(new AiPlanItem(999L, 1))));
+				.thenReturn(new AiDailyPlanResponse(List.of(999L)));
 
 		assertThatThrownBy(
 						() ->

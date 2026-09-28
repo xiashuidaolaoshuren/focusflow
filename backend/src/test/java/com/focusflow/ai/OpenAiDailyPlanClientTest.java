@@ -86,7 +86,6 @@ class OpenAiDailyPlanClientTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						60,
 						LocalDate.of(2026, 6, 1));
 
 		mockServer
@@ -108,7 +107,7 @@ class OpenAiDailyPlanClientTest {
 								  "choices": [
 								    {
 								      "message": {
-								        "content": "{\\"items\\":[]}"
+								        "content": "{\\"taskIds\\":[]}"
 								      }
 								    }
 								  ]
@@ -118,7 +117,7 @@ class OpenAiDailyPlanClientTest {
 
 		AiDailyPlanResponse response = client.generate(request);
 
-		assertThat(response.items()).isEmpty();
+		assertThat(response.taskIds()).isEmpty();
 		mockServer.verify();
 	}
 
@@ -150,7 +149,7 @@ class OpenAiDailyPlanClientTest {
 
 		AiDailyPlanResponse response = client.generate(request);
 
-		assertThat(response.items()).isEmpty();
+		assertThat(response.taskIds()).isEmpty();
 		mockServer.verify();
 	}
 
@@ -199,7 +198,6 @@ class OpenAiDailyPlanClientTest {
 								null,
 								null,
 								TaskStatus.OPEN)),
-				60,
 				LocalDate.of(2026, 6, 1));
 	}
 
@@ -214,7 +212,7 @@ class OpenAiDailyPlanClientTest {
 								  "choices": [
 								    {
 								      "message": {
-								        "content": "{\\"items\\":[]}"
+								        "content": "{\\"taskIds\\":[]}"
 								      }
 								    }
 								  ]
@@ -261,7 +259,7 @@ class OpenAiDailyPlanClientTest {
 
 		AiDailyPlanResponse response = client.generate(request);
 
-		assertThat(response.items()).isEmpty();
+		assertThat(response.taskIds()).isEmpty();
 		mockServer.verify();
 	}
 
@@ -481,7 +479,6 @@ class OpenAiDailyPlanClientTest {
 										LocalDate.of(2026, 6, 1),
 										45,
 										TaskStatus.OPEN)),
-						120,
 						LocalDate.of(2026, 6, 1));
 		String expectedPrompt = promptBuilder.build(request) + OpenAiDailyPlanClient.STRUCTURED_OUTPUT_SUFFIX;
 
@@ -512,7 +509,7 @@ class OpenAiDailyPlanClientTest {
 								  "choices": [
 								    {
 								      "message": {
-								        "content": "{\\"items\\":[]}"
+								        "content": "{\\"taskIds\\":[]}"
 								      }
 								    }
 								  ]
@@ -522,7 +519,7 @@ class OpenAiDailyPlanClientTest {
 
 		AiDailyPlanResponse response = client.generate(request);
 
-		assertThat(response.items()).isEmpty();
+		assertThat(response.taskIds()).isEmpty();
 		mockServer.verify();
 	}
 
@@ -547,7 +544,6 @@ class OpenAiDailyPlanClientTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						90,
 						LocalDate.of(2026, 6, 1));
 
 		mockServer
@@ -560,7 +556,7 @@ class OpenAiDailyPlanClientTest {
 								  "choices": [
 								    {
 								      "message": {
-								        "content": "{\\"items\\":[{\\"taskId\\":20,\\"position\\":1},{\\"taskId\\":10,\\"position\\":2}]}"
+								        "content": "{\\"taskIds\\":[20,10]}"
 								      }
 								    }
 								  ]
@@ -570,8 +566,7 @@ class OpenAiDailyPlanClientTest {
 
 		AiDailyPlanResponse response = client.generate(request);
 
-		assertThat(response.items())
-				.containsExactly(new AiPlanItem(20L, 1), new AiPlanItem(10L, 2));
+		assertThat(response.taskIds()).containsExactly(20L, 10L);
 		mockServer.verify();
 	}
 
@@ -588,7 +583,6 @@ class OpenAiDailyPlanClientTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						60,
 						LocalDate.of(2026, 6, 1));
 
 		mockServer
@@ -605,22 +599,15 @@ class OpenAiDailyPlanClientTest {
 	}
 
 	@Test
-	void generate_whenStructuredOutputMissingItems_throwsAiProviderException() {
-		expectChatCompletionResponse("{\"summary\":\"no items here\"}");
+	void generate_whenStructuredOutputMissingTaskIds_throwsAiProviderException() {
+		expectChatCompletionResponse("{\"summary\":\"no taskIds here\"}");
 
 		assertMalformedOutputFailure();
 	}
 
 	@Test
 	void generate_whenStructuredOutputHasNonPositiveTaskId_throwsAiProviderException() {
-		expectChatCompletionResponse("{\"items\":[{\"taskId\":0,\"position\":1}]}");
-
-		assertMalformedOutputFailure();
-	}
-
-	@Test
-	void generate_whenStructuredOutputHasNonPositivePosition_throwsAiProviderException() {
-		expectChatCompletionResponse("{\"items\":[{\"taskId\":1,\"position\":0}]}");
+		expectChatCompletionResponse("{\"taskIds\":[0]}");
 
 		assertMalformedOutputFailure();
 	}
@@ -667,7 +654,6 @@ class OpenAiDailyPlanClientTest {
 										null,
 										null,
 										TaskStatus.OPEN)),
-						60,
 						LocalDate.of(2026, 6, 1));
 
 		assertThatThrownBy(() -> client.generate(request))

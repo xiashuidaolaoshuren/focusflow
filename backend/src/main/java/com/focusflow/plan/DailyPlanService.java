@@ -2,6 +2,7 @@ package com.focusflow.plan;
 
 import com.focusflow.ai.AiDailyPlanRequest;
 import com.focusflow.ai.AiDailyPlanResponse;
+import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
 import com.focusflow.common.error.BadRequestException;
@@ -71,14 +72,21 @@ public class DailyPlanService {
 			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
 		}
 		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
-		AiDailyPlanResponse aiResponse =
-				aiClient.generate(new AiDailyPlanRequest(aiTasks, request.availableMinutes(), planDate));
-		rankingValidator.validate(
-				activeTasks, planDate, request.availableMinutes(), aiResponse.items());
+		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
+		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
+		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
 		DailyPlanWarningSnapshot warning =
 				computeWarning(activeTasks, planDate, request.availableMinutes());
 		return persister.persistPlan(
-				ownerId, planDate, aiResponse.items(), request.availableMinutes(), warning);
+				ownerId, planDate, aiItems, request.availableMinutes(), warning);
+	}
+
+	private List<AiPlanItem> toPositionedPlanItems(List<Long> orderedTaskIds) {
+		List<AiPlanItem> items = new ArrayList<>(orderedTaskIds.size());
+		for (int index = 0; index < orderedTaskIds.size(); index++) {
+			items.add(new AiPlanItem(orderedTaskIds.get(index), index + 1));
+		}
+		return items;
 	}
 
 	public PageResponse<DailyPlanSummaryResponse> listForCurrentUser(int page, int size) {

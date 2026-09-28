@@ -23,8 +23,8 @@ public class OpenAiDailyPlanClient implements DailyPlanAiClient {
 	static final String STRUCTURED_OUTPUT_SUFFIX =
 			"""
 
-			Return JSON only with this exact shape: {"items":[{"taskId":<id>,"position":<order>}]}
-			Use only the listed task ids and positive position values starting at 1.""";
+			Return JSON only with this exact shape: {"taskIds":[<id>, ...]}
+			List every listed task id exactly once, in ranking order.""";
 
 	private final RestClient restClient;
 	private final DailyPlanPromptBuilder promptBuilder;
@@ -185,28 +185,23 @@ public class OpenAiDailyPlanClient implements DailyPlanAiClient {
 			String content = completionResponse.choices().getFirst().message().content();
 			StructuredPlanResponse structuredPlanResponse =
 					objectMapper.readValue(content, StructuredPlanResponse.class);
-			if (structuredPlanResponse.items() == null) {
-				throw new AiProviderException("AI provider response missing items");
+			if (structuredPlanResponse.taskIds() == null) {
+				throw new AiProviderException("AI provider response missing taskIds");
 			}
 
-			List<AiPlanItem> items =
-					structuredPlanResponse.items().stream()
-							.map(this::toValidatedPlanItem)
-							.toList();
-			return new AiDailyPlanResponse(items);
+			List<Long> taskIds =
+					structuredPlanResponse.taskIds().stream().map(this::requirePositiveTaskId).toList();
+			return new AiDailyPlanResponse(taskIds);
 		} catch (JsonProcessingException ex) {
 			throw new AiProviderException("AI provider returned invalid JSON", ex);
 		}
 	}
 
-	private AiPlanItem toValidatedPlanItem(StructuredPlanItem item) {
-		if (item.taskId() <= 0) {
+	private Long requirePositiveTaskId(Long taskId) {
+		if (taskId == null || taskId <= 0) {
 			throw new AiProviderException("AI provider response has invalid taskId");
 		}
-		if (item.position() <= 0) {
-			throw new AiProviderException("AI provider response has invalid position");
-		}
-		return new AiPlanItem(item.taskId(), item.position());
+		return taskId;
 	}
 
 	private record ChatCompletionResponse(List<ChatCompletionChoice> choices) {}
@@ -215,7 +210,5 @@ public class OpenAiDailyPlanClient implements DailyPlanAiClient {
 
 	private record ChatCompletionMessage(String content) {}
 
-	private record StructuredPlanResponse(List<StructuredPlanItem> items) {}
-
-	private record StructuredPlanItem(long taskId, int position) {}
+	private record StructuredPlanResponse(List<Long> taskIds) {}
 }
