@@ -10,8 +10,8 @@ import { ApiError } from '@/lib/api'
 import {
   deletePlan,
   generateDailyPlan,
+  getPlanByDate,
   getPlanById,
-  getTodayPlan,
   listPlans,
 } from '@/features/plans/api'
 
@@ -45,9 +45,6 @@ describe('generateDailyPlan', () => {
   })
 
   it('generates a plan on success (201)', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
-
     const generated: DailyPlanResponse = {
       id: 1,
       planDate: '2026-06-15',
@@ -77,9 +74,9 @@ describe('generateDailyPlan', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(
-      generateDailyPlan({ availableMinutes: 120 }),
-    ).resolves.toEqual(generated)
+    await expect(generateDailyPlan({ planDate: '2026-06-15' })).resolves.toEqual(
+      generated,
+    )
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/api/daily-plans/generate'),
       expect.objectContaining({
@@ -87,16 +84,12 @@ describe('generateDailyPlan', () => {
         credentials: 'include',
         body: JSON.stringify({
           planDate: '2026-06-15',
-          availableMinutes: 120,
         }),
       }),
     )
   })
 
-  it('uses an explicit planDate when provided', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
-
+  it('includes replacePlanId when replacing an existing plan', async () => {
     const generated: DailyPlanResponse = {
       id: 2,
       planDate: '2026-06-16',
@@ -115,8 +108,8 @@ describe('generateDailyPlan', () => {
 
     await expect(
       generateDailyPlan({
-        availableMinutes: 90,
         planDate: '2026-06-16',
+        replacePlanId: 7,
       }),
     ).resolves.toEqual(generated)
     expect(fetchMock).toHaveBeenCalledWith(
@@ -126,50 +119,46 @@ describe('generateDailyPlan', () => {
         credentials: 'include',
         body: JSON.stringify({
           planDate: '2026-06-16',
-          availableMinutes: 90,
+          replacePlanId: 7,
         }),
       }),
     )
   })
 })
 
-describe('getTodayPlan', () => {
+describe('getPlanByDate', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
 
-  it('returns the latest plan for today when one exists', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
-
-    const todayPlan: DailyPlanResponse = {
+  it('returns the plan for the requested date when one exists', async () => {
+    const plan: DailyPlanResponse = {
       id: 1,
-      planDate: '2026-06-15',
-      createdAt: '2026-06-15T09:00:00Z',
+      planDate: '2026-06-16',
+      createdAt: '2026-06-16T09:00:00Z',
       availableMinutes: null,
       warning: null,
       items: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(todayPlan), {
+      new Response(JSON.stringify(plan), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(getTodayPlan()).resolves.toEqual(todayPlan)
+    await expect(getPlanByDate('2026-06-16')).resolves.toEqual(plan)
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/\/api\/daily-plans\/latest\?planDate=2026-06-15/),
+      expect.stringMatching(
+        /\/api\/daily-plans\/by-date\?planDate=2026-06-16/,
+      ),
       expect.objectContaining({ credentials: 'include' }),
     )
   })
 
-  it('returns null when no plan exists for today', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
-
+  it('returns null when no plan exists for the requested date', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
@@ -179,7 +168,7 @@ describe('getTodayPlan', () => {
       ),
     )
 
-    await expect(getTodayPlan()).resolves.toBeNull()
+    await expect(getPlanByDate('2026-06-16')).resolves.toBeNull()
   })
 })
 

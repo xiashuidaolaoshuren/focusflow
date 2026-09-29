@@ -1,10 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { deletePlan, generateDailyPlan, getPlanById, getTodayPlan, listPlans } from '@/features/plans/api'
+import {
+  deletePlan,
+  generateDailyPlan,
+  getPlanByDate,
+  getPlanById,
+  listPlans,
+} from '@/features/plans/api'
 import type { GeneratePlanRequest } from '@/types/api'
 
-export const todayPlanQueryKey = ['plans', 'today'] as const
+export const plansByDateQueryPrefix = ['plans', 'by-date'] as const
 export const plansListQueryPrefix = ['plans', 'list'] as const
+
+export function planByDateQueryKey(planDate: string) {
+  return [...plansByDateQueryPrefix, planDate] as const
+}
 
 export function plansQueryKey(page: number, size: number) {
   return [...plansListQueryPrefix, page, size] as const
@@ -18,10 +28,10 @@ function isValidPlanId(id: number): boolean {
   return Number.isInteger(id) && id > 0
 }
 
-export function useTodayPlan() {
+export function usePlanByDate(planDate: string) {
   const query = useQuery({
-    queryKey: todayPlanQueryKey,
-    queryFn: getTodayPlan,
+    queryKey: planByDateQueryKey(planDate),
+    queryFn: () => getPlanByDate(planDate),
   })
 
   return {
@@ -64,9 +74,11 @@ export function useGeneratePlan() {
   return useMutation({
     mutationFn: (request: GeneratePlanRequest) => generateDailyPlan(request),
     onSuccess: async (plan) => {
-      queryClient.setQueryData(todayPlanQueryKey, plan)
+      queryClient.setQueryData(planByDateQueryKey(plan.planDate), plan)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: todayPlanQueryKey }),
+        queryClient.invalidateQueries({
+          queryKey: planByDateQueryKey(plan.planDate),
+        }),
         queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
       ])
     },
@@ -80,7 +92,7 @@ export function useDeletePlan() {
     mutationFn: (id: number) => deletePlan(id),
     onSuccess: async (_data, id) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: todayPlanQueryKey }),
+        queryClient.invalidateQueries({ queryKey: plansByDateQueryPrefix }),
         queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
         queryClient.invalidateQueries({ queryKey: planDetailQueryKey(id) }),
       ])

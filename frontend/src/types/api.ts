@@ -6,6 +6,7 @@ export type ApiErrorResponse = {
   status: number
   error?: string
   message: string
+  code?: string | null
   path?: string
   details?: Record<string, string[]>
   requestId?: string
@@ -60,8 +61,25 @@ export type UpdateTaskRequest = {
 }
 
 export type GeneratePlanRequest = {
-  availableMinutes: number
-  planDate?: string | null
+  planDate: string
+  replacePlanId?: number | null
+}
+
+/** Mirrors `com.focusflow.commitment.dto.CommitmentResponse` */
+export type CommitmentResponse = {
+  id: number
+  title: string
+  commitmentDate: string
+  startTime: string
+  endTime: string
+}
+
+/** Mirrors `com.focusflow.commitment.dto.CommitmentRequest` */
+export type CommitmentRequest = {
+  title: string
+  commitmentDate: string
+  startTime: string
+  endTime: string
 }
 
 /** Mirrors `com.focusflow.preferences.dto.FixedBreakResponse` */

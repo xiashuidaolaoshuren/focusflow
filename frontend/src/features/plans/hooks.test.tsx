@@ -6,37 +6,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DailyPlanResponse, DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
 import {
+  planByDateQueryKey,
   planDetailQueryKey,
   plansQueryKey,
-  todayPlanQueryKey,
   useDeletePlan,
   useGeneratePlan,
   usePlan,
+  usePlanByDate,
   usePlans,
-  useTodayPlan,
 } from '@/features/plans/hooks'
 
 vi.mock('@/features/plans/api', () => ({
   deletePlan: vi.fn(),
   generateDailyPlan: vi.fn(),
+  getPlanByDate: vi.fn(),
   getPlanById: vi.fn(),
-  getTodayPlan: vi.fn(),
   listPlans: vi.fn(),
 }))
 
 import {
   deletePlan,
   generateDailyPlan,
+  getPlanByDate,
   getPlanById,
-  getTodayPlan,
   listPlans,
 } from '@/features/plans/api'
 
 const mockedDeletePlan = vi.mocked(deletePlan)
-
 const mockedGenerateDailyPlan = vi.mocked(generateDailyPlan)
+const mockedGetPlanByDate = vi.mocked(getPlanByDate)
 const mockedGetPlanById = vi.mocked(getPlanById)
-const mockedGetTodayPlan = vi.mocked(getTodayPlan)
 const mockedListPlans = vi.mocked(listPlans)
 
 function createWrapper(queryClient?: QueryClient) {
@@ -100,7 +99,7 @@ describe('useGeneratePlan', () => {
     vi.clearAllMocks()
   })
 
-  it('calls generateDailyPlan and refreshes today-plan query on success', async () => {
+  it('calls generateDailyPlan and refreshes plan-by-date query on success', async () => {
     mockedGenerateDailyPlan.mockResolvedValue(samplePlan)
 
     const queryClient = new QueryClient({
@@ -116,19 +115,19 @@ describe('useGeneratePlan', () => {
       wrapper: createWrapper(queryClient),
     })
 
-    result.current.mutate({ availableMinutes: 120 })
+    result.current.mutate({ planDate: '2026-06-15' })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(mockedGenerateDailyPlan).toHaveBeenCalledWith({
-      availableMinutes: 120,
+      planDate: '2026-06-15',
     })
     expect(setQueryDataSpy).toHaveBeenCalledWith(
-      todayPlanQueryKey,
+      planByDateQueryKey('2026-06-15'),
       samplePlan,
     )
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: todayPlanQueryKey,
+      queryKey: planByDateQueryKey('2026-06-15'),
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],
@@ -136,33 +135,37 @@ describe('useGeneratePlan', () => {
   })
 })
 
-describe('useTodayPlan', () => {
+describe('usePlanByDate', () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('uses a stable query key for today plan', () => {
-    expect(todayPlanQueryKey).toEqual(['plans', 'today'])
+  it('uses a date-scoped query key', () => {
+    expect(planByDateQueryKey('2026-06-16')).toEqual([
+      'plans',
+      'by-date',
+      '2026-06-16',
+    ])
   })
 
-  it('returns today plan when the query succeeds', async () => {
-    mockedGetTodayPlan.mockResolvedValue(samplePlan)
+  it('returns the plan when the query succeeds', async () => {
+    mockedGetPlanByDate.mockResolvedValue(samplePlan)
 
-    const { result } = renderHook(() => useTodayPlan(), {
+    const { result } = renderHook(() => usePlanByDate('2026-06-15'), {
       wrapper: createWrapper(),
     })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(mockedGetTodayPlan).toHaveBeenCalled()
+    expect(mockedGetPlanByDate).toHaveBeenCalledWith('2026-06-15')
     expect(result.current.plan).toEqual(samplePlan)
     expect(result.current.hasPlan).toBe(true)
   })
 
-  it('returns null plan state when no plan exists for today', async () => {
-    mockedGetTodayPlan.mockResolvedValue(null)
+  it('returns null plan state when no plan exists for the date', async () => {
+    mockedGetPlanByDate.mockResolvedValue(null)
 
-    const { result } = renderHook(() => useTodayPlan(), {
+    const { result } = renderHook(() => usePlanByDate('2026-06-15'), {
       wrapper: createWrapper(),
     })
 
@@ -270,7 +273,7 @@ describe('useDeletePlan', () => {
 
     expect(mockedDeletePlan).toHaveBeenCalledWith(1)
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: todayPlanQueryKey,
+      queryKey: ['plans', 'by-date'],
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],

@@ -6,14 +6,6 @@ import type {
   PageResponse,
 } from '@/types/api'
 
-function getTodayDateString(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 export async function listPlans(
   page: number,
   size: number,
@@ -31,10 +23,11 @@ export async function getPlanById(id: number): Promise<DailyPlanResponse> {
   return apiRequest<DailyPlanResponse>(`/api/daily-plans/${id}`)
 }
 
-export async function getTodayPlan(): Promise<DailyPlanResponse | null> {
-  const planDate = getTodayDateString()
+export async function getPlanByDate(
+  planDate: string,
+): Promise<DailyPlanResponse | null> {
   const plan = await apiRequest<DailyPlanResponse | undefined>(
-    `/api/daily-plans/latest?planDate=${encodeURIComponent(planDate)}`,
+    `/api/daily-plans/by-date?planDate=${encodeURIComponent(planDate)}`,
   )
   return plan ?? null
 }
@@ -44,7 +37,7 @@ export async function generateDailyPlan(
 ): Promise<DailyPlanResponse> {
   return apiRequest<DailyPlanResponse>('/api/daily-plans/generate', {
     method: 'POST',
-    body: { planDate: getTodayDateString(), ...request },
+    body: request,
   })
 }
 

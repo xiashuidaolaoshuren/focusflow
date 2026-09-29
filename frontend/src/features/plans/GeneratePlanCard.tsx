@@ -1,6 +1,16 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -10,60 +20,127 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { getPlanByDate } from '@/features/plans/api'
 import { useGeneratePlan } from '@/features/plans/hooks'
+import { ApiError } from '@/lib/api'
+import type { DailyPlanResponse } from '@/types/api'
 
-export function GeneratePlanCard() {
-  const [availableMinutes, setAvailableMinutes] = useState('60')
-  const { mutate, isPending, isError, error } = useGeneratePlan()
+type GeneratePlanCardProps = {
+  planDate: string
+}
 
-  const showGenerateError = isError && error instanceof Error
+type ConflictState = {
+  existingPlan: DailyPlanResponse | null
+}
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+function isPlanConflictError(error: Error): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status === 409 &&
+    (error.code === 'PLAN_EXISTS' || error.code === 'PLAN_CHANGED')
+  )
+}
+
+export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
+  const { mutate, isPending, isError, error, reset } = useGeneratePlan()
+  const [conflict, setConflict] = useState<ConflictState | null>(null)
+
+  const showGenerateError =
+    isError && error instanceof Error && !isPlanConflictError(error)
+
+  function handleSuccess() {
+    toast.success(`Plan generated for ${planDate}`)
+    setConflict(null)
+    reset()
+  }
+
+  function submitGenerate(replacePlanId?: number) {
     mutate(
-      { availableMinutes: Number.parseInt(availableMinutes, 10) },
+      replacePlanId != null
+        ? { planDate, replacePlanId }
+        : { planDate },
       {
-        onSuccess: () => {
-          toast.success("Today's plan generated")
+        onSuccess: handleSuccess,
+        onError: async (mutationError) => {
+          if (!isPlanConflictError(mutationError)) {
+            return
+          }
+
+          const existingPlan = await getPlanByDate(planDate)
+          setConflict({ existingPlan })
         },
       },
     )
   }
 
+  function handleGenerateClick() {
+    setConflict(null)
+    reset()
+    submitGenerate()
+  }
+
+  function handleConfirmConflict() {
+    if (conflict?.existingPlan) {
+      submitGenerate(conflict.existingPlan.id)
+      return
+    }
+
+    submitGenerate()
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Generate Today&apos;s Plan</CardTitle>
-        <CardDescription>
-          Enter how many minutes you have available for focused work today.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          {showGenerateError && (
-            <Alert variant="destructive">
-              <AlertTitle>Could not generate plan</AlertTitle>
-              <AlertDescription>{error.message}</AlertDescription>
-            </Alert>
-          )}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="available-minutes">Available focus time (minutes)</Label>
-            <Input
-              id="available-minutes"
-              type="number"
-              min={1}
-              required
-              value={availableMinutes}
-              onChange={(event) => setAvailableMinutes(event.target.value)}
-            />
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Generate plan</CardTitle>
+          <CardDescription>
+            Create a scheduled plan for {planDate}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col gap-4">
+            {showGenerateError && (
+              <Alert variant="destructive">
+                <AlertTitle>Could not generate plan</AlertTitle>
+                <AlertDescription>{error.message}</AlertDescription>
+              </Alert>
+            )}
+            <Button type="button" disabled={isPending} onClick={handleGenerateClick}>
+              {isPending ? 'Generating…' : `Generate plan for ${planDate}`}
+            </Button>
           </div>
-          <Button type="submit" disabled={isPending}>
-            {isPending ? 'Generating...' : "Generate today's plan"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <AlertDialog
+        open={conflict != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConflict(null)
+          }
+        }}
+      >
+        <AlertDialogContent aria-label="Replace existing plan">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {conflict?.existingPlan
+                ? 'Replace existing plan?'
+                : 'Create a fresh plan?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {conflict?.existingPlan
+                ? `A plan already exists for ${planDate}. Regenerating will replace it.`
+                : `No plan remains for ${planDate}. You can create a fresh plan.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmConflict}>
+              {conflict?.existingPlan ? 'Replace plan' : 'Create plan'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

@@ -5,6 +5,7 @@ import {
   getSchedulingPreferences,
   updateSchedulingPreferences,
 } from '@/features/preferences/api'
+import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import type { SchedulingPreferencesRequest } from '@/types/api'
 
 export const schedulingPreferencesQueryKey = [
@@ -30,6 +31,7 @@ export function useUpdateSchedulingPreferences() {
     mutationFn: (request: SchedulingPreferencesRequest) =>
       updateSchedulingPreferences(request),
     onSuccess: async () => {
+      markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({
         queryKey: schedulingPreferencesQueryKey,
       })
