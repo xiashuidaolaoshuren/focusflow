@@ -417,8 +417,8 @@ describe('DashboardPage', () => {
 
     renderDashboard()
 
-    expect(screen.getByText('Write tests')).toBeInTheDocument()
-    expect(screen.getByText('45 min')).toBeInTheDocument()
+    expect(screen.getByText(/Write tests/)).toBeInTheDocument()
+    expect(screen.getByText(/45 min scheduled/)).toBeInTheDocument()
   })
 
   it('shows plan skeleton while today plan is loading', () => {

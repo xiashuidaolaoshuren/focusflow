@@ -8,6 +8,7 @@ import com.focusflow.testsupport.PostgresTestcontainerConfig;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
@@ -137,13 +138,14 @@ class LegacySchemaAdoptionPreflightTest {
 					.isInstanceOf(IllegalStateException.class);
 		}
 
-		private static void applyV1WithoutFlywayHistory() throws Exception {
-			Flyway.configure()
-					.dataSource(
-							postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-					.locations("classpath:db/migration")
-					.load()
-					.migrate();
+	private static void applyV1WithoutFlywayHistory() throws Exception {
+		Flyway.configure()
+				.dataSource(
+						postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+				.locations("classpath:db/migration")
+				.target(MigrationVersion.fromVersion("1"))
+				.load()
+				.migrate();
 
 			try (Connection connection = openConnection();
 					var statement = connection.createStatement()) {
@@ -165,6 +167,7 @@ class LegacySchemaAdoptionPreflightTest {
 		Flyway.configure()
 				.dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
 				.locations("classpath:db/migration")
+				.target(MigrationVersion.fromVersion("1"))
 				.load()
 				.migrate();
 	}

@@ -17,7 +17,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "daily_plans")
@@ -76,7 +78,7 @@ public class DailyPlan {
 			cascade = CascadeType.ALL,
 			orphanRemoval = true)
 	@OrderBy("position ASC")
-	private final List<DailyPlanBlock> blocks = new ArrayList<>();
+	private final Set<DailyPlanBlock> blocks = new LinkedHashSet<>();
 
 	public Long getId() {
 		return id;
@@ -182,7 +184,7 @@ public class DailyPlan {
 		return tasks;
 	}
 
-	public List<DailyPlanBlock> getBlocks() {
+	public Set<DailyPlanBlock> getBlocks() {
 		return blocks;
 	}
 

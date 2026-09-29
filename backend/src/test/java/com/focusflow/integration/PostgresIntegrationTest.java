@@ -288,7 +288,7 @@ class PostgresIntegrationTest {
 	}
 
 	@Test
-	void persistsMultipleDailyPlans_sameOwnerAndDate_orderedByCreatedAtDesc() {
+	void dailyPlans_uniquePerOwnerAndDate_summaryOrdersByCreatedAtDesc() {
 		String suffix = UUID.randomUUID().toString().substring(0, 8);
 		User owner =
 				savedUser(
@@ -308,10 +308,20 @@ class PostgresIntegrationTest {
 
 		DailyPlan savedLater =
 				dailyPlanRepository.save(
-						DailyPlanTestBuilder.plan(owner, planDate)
+						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 8, 16))
 								.withCreatedAt(Instant.parse("2026-08-15T14:00:00Z"))
 								.build());
 		dailyPlanRepository.flush();
+
+		assertThatThrownBy(
+						() -> {
+							dailyPlanRepository.save(
+									DailyPlanTestBuilder.plan(owner, planDate)
+											.withCreatedAt(Instant.parse("2026-08-15T20:00:00Z"))
+											.build());
+							dailyPlanRepository.flush();
+						})
+				.isInstanceOf(DataIntegrityViolationException.class);
 
 		assertThat(
 						dailyPlanRepository
@@ -326,7 +336,7 @@ class PostgresIntegrationTest {
 				.isPresent()
 				.get()
 				.extracting(DailyPlan::getId)
-				.isEqualTo(savedLater.getId());
+				.isEqualTo(savedEarlier.getId());
 
 		assertThat(dailyPlanRepository.findByOwner_IdAndId(owner.getId(), savedEarlier.getId()))
 				.isPresent()
