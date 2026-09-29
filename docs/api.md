@@ -41,7 +41,7 @@ This applies to public register/login as well as authenticated mutations.
 
 Every response includes `X-Request-Id`. Clients may send the same header on the request; if absent or invalid, the server generates a UUID. The value appears in server logs and, for application errors that use `ApiErrorResponse`, in the JSON `requestId` field.
 
-Unauthenticated **401** and CSRF **403** responses include the header but keep their existing minimal bodies (no JSON redesign in 1.1.0).
+Unauthenticated **401** and CSRF **403** responses include the header but keep their existing minimal bodies.
 
 ### Health probes (orchestration)
 
@@ -76,13 +76,15 @@ Most application errors return:
 ```json
 {
   "timestamp": "2026-06-01T12:00:00Z",
-  "status": 400,
-  "error": "Bad Request",
-  "message": "no plannable tasks available for planning",
+  "status": 409,
+  "error": "Conflict",
+  "message": "plan already exists",
+  "code": "PLAN_EXISTS",
   "path": "/api/daily-plans/generate",
   "details": {
     "title": ["must not be blank"]
-  }
+  },
+  "requestId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 }
 ```
 
@@ -92,11 +94,25 @@ Most application errors return:
 | `status` | integer | HTTP status |
 | `error` | string | Reason phrase (e.g. `Bad Request`) |
 | `message` | string | Human-readable message |
+| `code` | string \| null | Optional stable machine-readable code; omitted when null |
 | `path` | string | Request path |
 | `details` | object → string[] | Optional; field validation errors only |
 | `requestId` | string | Optional; correlation id when present in MDC |
 
 Omitted null fields are excluded from JSON (`@JsonInclude(NON_NULL)`).
+
+### Stable error codes
+
+Clients should branch on `code`, not `message` copy.
+
+| Code | Typical status | When |
+|------|----------------|------|
+| `PLAN_EXISTS` | **409** | A plan already exists for `planDate` and `replacePlanId` was omitted |
+| `PLAN_CHANGED` | **409** | `replacePlanId` is stale (another plan is now latest for that date, or no plan exists) |
+| `TASK_MISSING_DURING_GENERATION` | **409** | A ranked task disappeared between the AI call and the transactional save |
+| `PLAN_CANDIDATE_LIMIT` | **400** | More than 100 plannable tasks (`OPEN` + `IN_PROGRESS`) |
+
+Invalid AI ranking returns **502** with `code` null. The server records bounded rejection reasons (`UNKNOWN_TASK`, `DUPLICATE_TASK`, `BLOCK_ORDER`, `MISSING_BLOCK_1`, `MISSING_BLOCK_2`, `MISSING_OPTIONAL`) in Micrometer only.
 
 ## Shared schemas
 
@@ -110,25 +126,14 @@ Omitted null fields are excluded from JSON (`@JsonInclude(NON_NULL)`).
 | `totalElements` | integer | yes | Total matching rows |
 | `totalPages` | integer | yes | Total pages |
 
-### `DailyPlanSummaryResponse`
-
-List/history rows only — no nested tasks or items.
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `id` | integer | yes | |
-| `planDate` | string (date) | yes | `YYYY-MM-DD` |
-| `createdAt` | string (instant) | yes | ISO-8601 |
-| `itemCount` | integer | yes | Number of ranked items |
-| `hasWarning` | boolean | yes | Shortfall snapshot was present at generate time |
-| `availableMinutes` | integer \| null | yes | `null` on plans saved before 1.0.2 |
-
 ### Enums
 
 | Name | Values |
 |------|--------|
 | `TaskPriority` | `LOW`, `MEDIUM`, `HIGH` |
 | `TaskStatus` | `OPEN`, `IN_PROGRESS`, `DONE`, `CANCELLED` |
+| `BlockKind` | `WORK`, `CADENCE_BREAK`, `FIXED_BREAK`, `COMMITMENT`, `BUFFER` |
+| `UnplacedReason` | `NO_ESTIMATE`, `OUT_OF_TIME` |
 
 ### `UserResponse`
 
@@ -148,39 +153,142 @@ List/history rows only — no nested tasks or items.
 | `priority` | `TaskPriority` | yes | |
 | `status` | `TaskStatus` | yes | |
 | `dueDate` | string (date) \| null | yes | `YYYY-MM-DD` |
+| `estimatedMinutes` | integer \| null | yes | Null or positive |
+
+### `TaskSnapshotResponse`
+
+Frozen task fields captured at plan generation. Work blocks reference this snapshot, not live task rows.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `sourceTaskId` | integer | yes | Original task id |
+| `taskReferenceId` | integer \| null | yes | Live task id when still linked |
+| `title` | string | yes | |
+| `priority` | `TaskPriority` | yes | |
+| `status` | `TaskStatus` | yes | Status at generate time |
+| `dueDate` | string (date) \| null | yes | |
 | `estimatedMinutes` | integer \| null | yes | |
+| `mustInclude` | boolean | yes | `IN_PROGRESS`, or `OPEN` with due date on/before plan date |
 
-### `DailyPlanItemResponse`
+### `ScheduledBlockResponse`
 
-| Field | Type | Required |
-|-------|------|----------|
-| `position` | integer | yes |
-| `task` | `TaskResponse` | yes |
+One minute-aligned interval on the day rail.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `kind` | `BlockKind` | yes | |
+| `startTime` | string (time) | yes | `HH:mm:ss` |
+| `endTime` | string (time) | yes | |
+| `sessionIndex` | integer \| null | yes | 1-based work session for this task; null for non-work blocks |
+| `sessionCount` | integer \| null | yes | Total work sessions for this task; null for non-work blocks |
+| `taskSnapshot` | `TaskSnapshotResponse` \| null | yes | Populated for `WORK` blocks |
+| `label` | string \| null | yes | Fixed-break or commitment label when applicable |
+
+### `UnplacedWorkResponse`
+
+Ranked task that could not be fully scheduled.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `reason` | `UnplacedReason` | yes | |
+| `unplacedMinutes` | integer \| null | yes | Minutes that did not fit when `OUT_OF_TIME` |
+| `taskSnapshot` | `TaskSnapshotResponse` | yes | |
 
 ### `DailyPlanWarning`
 
+Derived on read when must-include snapshots have unplaced work. Not persisted as a separate column.
+
 | Field | Type | Required |
 |-------|------|----------|
-| `minimumAvailableMinutes` | integer | yes |
-| `estimatedTasks` | array | yes |
+| `requiredMinutes` | integer | yes |
+| `freeMinutes` | integer | yes |
+| `scheduledWorkMinutes` | integer | yes |
+| `outOfTimeTasks` | array | yes |
 | `unestimatedTasks` | array | yes |
 
-`estimatedTasks[]`: `{ "taskId": number, "title": string, "estimatedMinutes": number }`
+`outOfTimeTasks[]`: `{ "sourceTaskId": number, "title": string, "unplacedMinutes": number }`
 
-`unestimatedTasks[]`: `{ "taskId": number, "title": string }`
+`unestimatedTasks[]`: `{ "sourceTaskId": number, "title": string }`
 
 ### `DailyPlanResponse`
+
+Full scheduled-day detail.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `id` | integer | yes | |
 | `planDate` | string (date) | yes | `YYYY-MM-DD` |
 | `createdAt` | string (instant) | yes | ISO-8601 |
-| `items` | `DailyPlanItemResponse[]` | yes | |
-| `availableMinutes` | integer \| null | yes | `null` on plans saved before 1.0.2 |
-| `warning` | `DailyPlanWarning` \| null | yes | Shortfall snapshot from generate time; `null` when no shortfall or pre-1.0.2 row |
+| `windowStart` | string (time) | yes | Effective work window start |
+| `windowEnd` | string (time) | yes | Effective work window end |
+| `peakStart` | string (time) \| null | yes | Visual peak band; null when unset |
+| `peakEnd` | string (time) \| null | yes | |
+| `freeMinutes` | integer | yes | Minutes still free after scheduling |
+| `scheduledWorkMinutes` | integer | yes | Work placed on the rail |
+| `requiredMinutes` | integer | yes | Sum of ranked estimates considered |
+| `requestedBufferMinutes` | integer | yes | Buffer requested from preferences |
+| `realizedBufferMinutes` | integer | yes | Buffer actually reserved at end of window |
+| `warning` | `DailyPlanWarning` \| null | yes | Derived shortfall; null when no must-include gap |
+| `blocks` | `ScheduledBlockResponse[]` | yes | Ordered day rail |
+| `unplacedWork` | `UnplacedWorkResponse[]` | yes | Companion list for unscheduled ranked tasks |
 
-List, get-by-id, generate, and latest return the same extended detail shape after refresh.
+List-by-id, generate, and by-date return this shape.
+
+### `DailyPlanSummaryResponse`
+
+History list rows only — no blocks or snapshots.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | integer | yes | |
+| `planDate` | string (date) | yes | `YYYY-MM-DD` |
+| `createdAt` | string (instant) | yes | ISO-8601 |
+| `scheduledWorkMinutes` | integer | yes | |
+| `workSessionCount` | integer | yes | |
+| `scheduledTaskCount` | integer | yes | |
+| `unplacedWorkCount` | integer | yes | |
+| `hasWarning` | boolean | yes | Derived must-include shortfall present |
+
+### `SchedulingPreferencesResponse`
+
+Effective scheduling settings for the current user.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `workDayStart` | string (time) | yes | |
+| `workDayEnd` | string (time) | yes | |
+| `cadenceEnabled` | boolean | yes | |
+| `targetFocusMinutes` | integer | yes | |
+| `breakMinutes` | integer | yes | |
+| `minSessionMinutes` | integer | yes | |
+| `bufferMinutes` | integer | yes | |
+| `peakStart` | string (time) \| null | yes | Optional visual band |
+| `peakEnd` | string (time) \| null | yes | |
+| `fixedBreaks` | array | yes | `{ label, startTime, endTime }` |
+| `persisted` | boolean | yes | `false` when serving in-code defaults only |
+
+### `SchedulingPreferencesRequest`
+
+Write model for `PUT /api/scheduling-preferences`. Same fields as the response except `persisted` (always written on save). All times minute-aligned.
+
+### `CommitmentResponse`
+
+| Field | Type | Required |
+|-------|------|----------|
+| `id` | integer | yes |
+| `title` | string | yes |
+| `commitmentDate` | string (date) | yes |
+| `startTime` | string (time) | yes |
+| `endTime` | string (time) | yes |
+
+### `CommitmentRequest`
+
+| Field | Type | Required | Validation |
+|-------|------|----------|------------|
+| `title` | string | yes | Not blank, max 255 |
+| `commitmentDate` | string (date) | yes | `YYYY-MM-DD` |
+| `startTime` | string (time) | yes | Minute-aligned; before `endTime` |
+| `endTime` | string (time) | yes | Minute-aligned |
 
 ---
 
@@ -202,16 +310,6 @@ Create account and start a session.
 | `email` | string | yes | Valid email, not blank |
 | `username` | string | yes | 3–30 characters, not blank |
 | `password` | string | yes | Min 8 characters, not blank |
-
-**Example**
-
-```json
-{
-  "email": "you@example.com",
-  "username": "youruser",
-  "password": "password123"
-}
-```
 
 **Responses**
 
@@ -238,15 +336,6 @@ Start a session.
 |-------|------|----------|
 | `username` | string | yes, not blank |
 | `password` | string | yes, not blank |
-
-**Example**
-
-```json
-{
-  "username": "youruser",
-  "password": "password123"
-}
-```
 
 **Responses**
 
@@ -311,19 +400,7 @@ Create task.
 | `description` | string | no | |
 | `priority` | `TaskPriority` | no | Default `MEDIUM` |
 | `dueDate` | string (date) | no | `YYYY-MM-DD` |
-| `estimatedMinutes` | integer | no | |
-
-**Example**
-
-```json
-{
-  "title": "Write tests",
-  "description": "TDD coverage",
-  "priority": "HIGH",
-  "dueDate": "2026-06-01",
-  "estimatedMinutes": 60
-}
-```
+| `estimatedMinutes` | integer | no | Null or positive |
 
 **Responses**
 
@@ -352,12 +429,6 @@ List current user's tasks (ordered by due date ascending).
 
 Get one task.
 
-**Path parameters**
-
-| Name | Type |
-|------|------|
-| `id` | integer |
-
 **Responses**
 
 | Status | Body |
@@ -372,12 +443,6 @@ Get one task.
 
 Update task.
 
-**Path parameters**
-
-| Name | Type |
-|------|------|
-| `id` | integer |
-
 **Request body — `UpdateTaskRequest`**
 
 | Field | Type | Required | Notes |
@@ -387,20 +452,7 @@ Update task.
 | `priority` | `TaskPriority` | no | Default `MEDIUM` if omitted |
 | `status` | `TaskStatus` | no | Default `OPEN` if omitted |
 | `dueDate` | string (date) | no | |
-| `estimatedMinutes` | integer | no | |
-
-**Example**
-
-```json
-{
-  "title": "Write tests",
-  "description": "TDD coverage",
-  "priority": "HIGH",
-  "status": "IN_PROGRESS",
-  "dueDate": "2026-06-01",
-  "estimatedMinutes": 60
-}
-```
+| `estimatedMinutes` | integer | no | Null or positive |
 
 **Responses**
 
@@ -417,12 +469,6 @@ Update task.
 
 Delete task.
 
-**Path parameters**
-
-| Name | Type |
-|------|------|
-| `id` | integer |
-
 **Responses**
 
 | Status | Body |
@@ -433,27 +479,128 @@ Delete task.
 
 ---
 
+## Scheduling preferences
+
+All routes require session. `PUT` requires CSRF.
+
+### `GET /api/scheduling-preferences`
+
+Return the **effective** aggregate for the current user: saved row when present, otherwise in-code defaults. `persisted: false` means the user has never saved.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `SchedulingPreferencesResponse` |
+| **401** | Not authenticated |
+
+---
+
+### `PUT /api/scheduling-preferences`
+
+Replace the saved preferences aggregate (including the full fixed-break list).
+
+**Request body — `SchedulingPreferencesRequest`**
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `SchedulingPreferencesResponse` with `persisted: true` |
+| **400** | Validation failed (work window, peak window, fixed breaks, cadence fields, minute alignment) |
+| **401** | Not authenticated |
+
+---
+
+## Commitments
+
+Dated unavailable windows. Not tasks. All routes require session; mutations require CSRF.
+
+### `GET /api/commitments?from=&to=`
+
+List commitments in an inclusive date range, ordered by date then start time.
+
+**Query parameters**
+
+| Name | Type | Required | Notes |
+|------|------|----------|-------|
+| `from` | string (date) | yes | `YYYY-MM-DD` |
+| `to` | string (date) | yes | `YYYY-MM-DD`; must not be before `from` |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `CommitmentResponse[]` |
+| **400** | Missing/invalid range |
+| **401** | Not authenticated |
+
+---
+
+### `POST /api/commitments`
+
+Create a commitment. Same-date overlaps are rejected.
+
+**Request body — `CommitmentRequest`**
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **201** | `CommitmentResponse` |
+| **400** | Validation failed (title, times, overlap, minute alignment) |
+| **401** | Not authenticated |
+
+---
+
+### `PUT /api/commitments/{id}`
+
+Update a commitment.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `CommitmentResponse` |
+| **400** | Validation failed |
+| **401** | Not authenticated |
+| **404** | `message`: `commitment not found` |
+
+---
+
+### `DELETE /api/commitments/{id}`
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **204** | Empty |
+| **401** | Not authenticated |
+| **404** | `message`: `commitment not found` |
+
+---
+
 ## Daily plans
 
 All daily-plan routes require session. Mutations require CSRF.
 
 ### `POST /api/daily-plans/generate`
 
-Generate a plan from plannable tasks (`OPEN` and `IN_PROGRESS`). Calls the AI provider, validates ranking, persists plan with `availableMinutes` and optional `warning` snapshot.
+Generate a scheduled day from plannable tasks (`OPEN` and `IN_PROGRESS`). The AI returns a total ordering; the Java scheduler places work into the effective window, reserves buffer, and snapshots each ranked task. Regenerating a date compare-and-replaces the latest plan for that owner and date when `replacePlanId` matches.
 
 **Request body — `GeneratePlanRequest`**
 
-| Field | Type | Required | Validation |
-|-------|------|----------|------------|
-| `availableMinutes` | integer | yes | Min 1 |
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
 | `planDate` | string (date) | yes | `YYYY-MM-DD`; explicit calendar date (no server-default “today”) |
+| `replacePlanId` | integer | no | Required when a plan already exists for `planDate`; must match the current latest plan id |
 
 **Example**
 
 ```json
 {
-  "availableMinutes": 120,
-  "planDate": "2026-06-01"
+  "planDate": "2026-06-01",
+  "replacePlanId": 42
 }
 ```
 
@@ -462,11 +609,12 @@ Generate a plan from plannable tasks (`OPEN` and `IN_PROGRESS`). Calls the AI pr
 | Status | Body |
 |--------|------|
 | **201** | `DailyPlanResponse` |
-| **400** | `message`: `no plannable tasks available for planning`, missing/invalid `planDate`, or validation failed |
+| **400** | `message`: `no plannable tasks available for planning`, missing/invalid `planDate`, or `code`: `PLAN_CANDIDATE_LIMIT` |
 | **401** | Not authenticated |
-| **502** | `ApiErrorResponse` — AI provider failure (`message` from provider or `AI provider request failed`) |
+| **409** | `code`: `PLAN_EXISTS`, `PLAN_CHANGED`, or `TASK_MISSING_DURING_GENERATION` |
+| **502** | `ApiErrorResponse` — AI provider or ranking failure (`code` null; nothing saved) |
 
-On **502**, nothing is saved.
+On **502** or **409** during persist, nothing is saved.
 
 **Example success (truncated)**
 
@@ -475,24 +623,65 @@ On **502**, nothing is saved.
   "id": 1,
   "planDate": "2026-06-01",
   "createdAt": "2026-06-01T10:00:00Z",
-  "availableMinutes": 120,
+  "windowStart": "09:00:00",
+  "windowEnd": "18:00:00",
+  "peakStart": "10:00:00",
+  "peakEnd": "12:00:00",
+  "freeMinutes": 45,
+  "scheduledWorkMinutes": 120,
+  "requiredMinutes": 180,
+  "requestedBufferMinutes": 30,
+  "realizedBufferMinutes": 30,
   "warning": null,
-  "items": [
+  "blocks": [
     {
-      "position": 1,
-      "task": {
-        "id": 5,
+      "kind": "WORK",
+      "startTime": "09:00:00",
+      "endTime": "10:00:00",
+      "sessionIndex": 1,
+      "sessionCount": 2,
+      "taskSnapshot": {
+        "sourceTaskId": 5,
+        "taskReferenceId": 5,
         "title": "Write tests",
-        "description": "TDD coverage",
         "priority": "HIGH",
         "status": "IN_PROGRESS",
         "dueDate": "2026-06-01",
-        "estimatedMinutes": 60
-      }
+        "estimatedMinutes": 60,
+        "mustInclude": true
+      },
+      "label": null
     }
-  ]
+  ],
+  "unplacedWork": []
 }
 ```
+
+---
+
+### `GET /api/daily-plans/by-date?planDate=`
+
+Latest saved plan **detail** for a calendar date (highest `createdAt`, then highest `id` when several plans share the same date).
+
+| | |
+|---|---|
+| **Auth** | Session |
+| **CSRF** | Not required |
+
+**Query parameters**
+
+| Name | Type | Required | Notes |
+|------|------|----------|-------|
+| `planDate` | string (date) | yes | `YYYY-MM-DD` |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `DailyPlanResponse` |
+| **204** | Empty — no plan for that date (ordinary empty state, not an error) |
+| **400** | Missing or invalid `planDate` |
+| **401** | Not authenticated |
 
 ---
 
@@ -523,9 +712,11 @@ Paged list of saved plan **summaries** for the current user (newest first by `cr
       "id": 1,
       "planDate": "2026-06-01",
       "createdAt": "2026-06-01T10:00:00Z",
-      "itemCount": 3,
-      "hasWarning": false,
-      "availableMinutes": 120
+      "scheduledWorkMinutes": 120,
+      "workSessionCount": 3,
+      "scheduledTaskCount": 2,
+      "unplacedWorkCount": 0,
+      "hasWarning": false
     }
   ],
   "page": 0,
@@ -537,41 +728,9 @@ Paged list of saved plan **summaries** for the current user (newest first by `cr
 
 ---
 
-### `GET /api/daily-plans/latest`
-
-Latest saved plan **detail** for a calendar date (highest `createdAt`, then highest `id` when several plans share the same date).
-
-| | |
-|---|---|
-| **Auth** | Session |
-| **CSRF** | Not required |
-
-**Query parameters**
-
-| Name | Type | Required | Notes |
-|------|------|----------|-------|
-| `planDate` | string (date) | yes | `YYYY-MM-DD` |
-
-**Responses**
-
-| Status | Body |
-|--------|------|
-| **200** | `DailyPlanResponse` |
-| **204** | Empty — no plan for that date (ordinary empty state, not an error) |
-| **400** | Missing or invalid `planDate` |
-| **401** | Not authenticated |
-
----
-
 ### `GET /api/daily-plans/{id}`
 
-Get one saved plan.
-
-**Path parameters**
-
-| Name | Type |
-|------|------|
-| `id` | integer |
+Get one saved plan by id.
 
 **Responses**
 
@@ -585,13 +744,7 @@ Get one saved plan.
 
 ### `DELETE /api/daily-plans/{id}`
 
-Owner-scoped hard delete. Removes the plan and its items; tasks remain.
-
-**Path parameters**
-
-| Name | Type |
-|------|------|
-| `id` | integer |
+Owner-scoped hard delete. Removes the plan, its task snapshots, and scheduled blocks; live tasks remain.
 
 **Responses**
 
@@ -613,6 +766,15 @@ sequenceDiagram
   Api-->>Client: 401 plus XSRF-TOKEN cookie
   Client->>Api: POST /api/auth/login with X-XSRF-TOKEN and JSON
   Api-->>Client: 200 UserResponse plus JSESSIONID
+  Client->>Api: GET /api/scheduling-preferences
+  Api-->>Client: 200 effective preferences
+  Client->>Api: GET /api/daily-plans/by-date?planDate=2026-06-01
+  Api-->>Client: 200 DailyPlanResponse or 204 empty
+  Client->>Api: POST /api/daily-plans/generate with planDate
+  alt plan exists without replacePlanId
+    Api-->>Client: 409 PLAN_EXISTS
+    Client->>Api: refetch by-date then retry with replacePlanId
+  end
   Client->>Api: later POST PUT DELETE with both cookies and X-XSRF-TOKEN
 ```
 
@@ -621,3 +783,4 @@ For curl/Postman:
 1. `GET /api/auth/me` through the Vite proxy (401 seeds `XSRF-TOKEN`).
 2. Read `XSRF-TOKEN` from the cookie jar.
 3. Send `POST`/`PUT`/`DELETE` with `X-XSRF-TOKEN: <token>` and the same cookie jar.
+4. Load a day with `GET /api/daily-plans/by-date?planDate=YYYY-MM-DD` (treat **204** as “no plan yet”).

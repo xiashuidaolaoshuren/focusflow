@@ -1,5 +1,42 @@
 components:
   schemas:
+    CommitmentRequest:
+      properties:
+        commitmentDate:
+          format: "date"
+          type: "string"
+        endTime:
+          example: "14:30:00"
+          type: "string"
+        startTime:
+          example: "14:30:00"
+          type: "string"
+        title:
+          maxLength: 255
+          minLength: 0
+          type: "string"
+      required:
+      - "commitmentDate"
+      - "endTime"
+      - "startTime"
+      type: "object"
+    CommitmentResponse:
+      properties:
+        commitmentDate:
+          format: "date"
+          type: "string"
+        endTime:
+          example: "14:30:00"
+          type: "string"
+        id:
+          format: "int64"
+          type: "integer"
+        startTime:
+          example: "14:30:00"
+          type: "string"
+        title:
+          type: "string"
+      type: "object"
     CreateTaskRequest:
       properties:
         description:
@@ -20,40 +57,57 @@ components:
           minLength: 1
           type: "string"
       type: "object"
-    DailyPlanItemResponse:
-      properties:
-        position:
-          format: "int32"
-          type: "integer"
-        task:
-          $ref: "#/components/schemas/TaskResponse"
-      type: "object"
     DailyPlanResponse:
       properties:
-        availableMinutes:
-          format: "int32"
-          type: "integer"
+        blocks:
+          items:
+            $ref: "#/components/schemas/ScheduledBlockResponse"
+          type: "array"
         createdAt:
           format: "date-time"
           type: "string"
+        freeMinutes:
+          format: "int32"
+          type: "integer"
         id:
           format: "int64"
           type: "integer"
-        items:
-          items:
-            $ref: "#/components/schemas/DailyPlanItemResponse"
-          type: "array"
+        peakEnd:
+          example: "14:30:00"
+          type: "string"
+        peakStart:
+          example: "14:30:00"
+          type: "string"
         planDate:
           format: "date"
           type: "string"
+        realizedBufferMinutes:
+          format: "int32"
+          type: "integer"
+        requestedBufferMinutes:
+          format: "int32"
+          type: "integer"
+        requiredMinutes:
+          format: "int64"
+          type: "integer"
+        scheduledWorkMinutes:
+          format: "int32"
+          type: "integer"
+        unplacedWork:
+          items:
+            $ref: "#/components/schemas/UnplacedWorkResponse"
+          type: "array"
         warning:
           $ref: "#/components/schemas/DailyPlanWarning"
+        windowEnd:
+          example: "14:30:00"
+          type: "string"
+        windowStart:
+          example: "14:30:00"
+          type: "string"
       type: "object"
     DailyPlanSummaryResponse:
       properties:
-        availableMinutes:
-          format: "int32"
-          type: "integer"
         createdAt:
           format: "date-time"
           type: "string"
@@ -62,20 +116,35 @@ components:
         id:
           format: "int64"
           type: "integer"
-        itemCount:
-          format: "int32"
-          type: "integer"
         planDate:
           format: "date"
           type: "string"
+        scheduledTaskCount:
+          format: "int32"
+          type: "integer"
+        scheduledWorkMinutes:
+          format: "int32"
+          type: "integer"
+        unplacedWorkCount:
+          format: "int32"
+          type: "integer"
+        workSessionCount:
+          format: "int32"
+          type: "integer"
       type: "object"
     DailyPlanWarning:
       properties:
-        estimatedTasks:
+        freeMinutes:
+          format: "int32"
+          type: "integer"
+        outOfTimeTasks:
           items:
-            $ref: "#/components/schemas/EstimatedTask"
+            $ref: "#/components/schemas/OutOfTimeTask"
           type: "array"
-        minimumAvailableMinutes:
+        requiredMinutes:
+          format: "int64"
+          type: "integer"
+        scheduledWorkMinutes:
           format: "int32"
           type: "integer"
         unestimatedTasks:
@@ -83,15 +152,31 @@ components:
             $ref: "#/components/schemas/UnestimatedTask"
           type: "array"
       type: "object"
-    EstimatedTask:
+    FixedBreakRequest:
       properties:
-        estimatedMinutes:
-          format: "int32"
-          type: "integer"
-        taskId:
-          format: "int64"
-          type: "integer"
-        title:
+        endTime:
+          example: "14:30:00"
+          type: "string"
+        label:
+          maxLength: 255
+          minLength: 0
+          type: "string"
+        startTime:
+          example: "14:30:00"
+          type: "string"
+      required:
+      - "endTime"
+      - "startTime"
+      type: "object"
+    FixedBreakResponse:
+      properties:
+        endTime:
+          example: "14:30:00"
+          type: "string"
+        label:
+          type: "string"
+        startTime:
+          example: "14:30:00"
           type: "string"
       type: "object"
     GeneratePlanRequest:
@@ -103,6 +188,9 @@ components:
         planDate:
           format: "date"
           type: "string"
+        replacePlanId:
+          format: "int64"
+          type: "integer"
       required:
       - "availableMinutes"
       - "planDate"
@@ -115,6 +203,17 @@ components:
         username:
           minLength: 1
           type: "string"
+      type: "object"
+    OutOfTimeTask:
+      properties:
+        sourceTaskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
+        unplacedMinutes:
+          format: "int32"
+          type: "integer"
       type: "object"
     PageResponseDailyPlanSummaryResponse:
       properties:
@@ -149,6 +248,113 @@ components:
           minLength: 3
           type: "string"
       type: "object"
+    ScheduledBlockResponse:
+      properties:
+        endTime:
+          example: "14:30:00"
+          type: "string"
+        kind:
+          enum:
+          - "WORK"
+          - "CADENCE_BREAK"
+          - "FIXED_BREAK"
+          - "COMMITMENT"
+          - "BUFFER"
+          type: "string"
+        label:
+          type: "string"
+        sessionCount:
+          format: "int32"
+          type: "integer"
+        sessionIndex:
+          format: "int32"
+          type: "integer"
+        startTime:
+          example: "14:30:00"
+          type: "string"
+        taskSnapshot:
+          $ref: "#/components/schemas/TaskSnapshotResponse"
+      type: "object"
+    SchedulingPreferencesRequest:
+      properties:
+        breakMinutes:
+          format: "int32"
+          minimum: 0
+          type: "integer"
+        bufferMinutes:
+          format: "int32"
+          minimum: 0
+          type: "integer"
+        cadenceEnabled:
+          type: "boolean"
+        fixedBreaks:
+          items:
+            $ref: "#/components/schemas/FixedBreakRequest"
+          type: "array"
+        minSessionMinutes:
+          format: "int32"
+          minimum: 1
+          type: "integer"
+        peakEnd:
+          example: "14:30:00"
+          type: "string"
+        peakStart:
+          example: "14:30:00"
+          type: "string"
+        targetFocusMinutes:
+          format: "int32"
+          minimum: 0
+          type: "integer"
+        workDayEnd:
+          example: "14:30:00"
+          type: "string"
+        workDayStart:
+          example: "14:30:00"
+          type: "string"
+      required:
+      - "breakMinutes"
+      - "bufferMinutes"
+      - "cadenceEnabled"
+      - "minSessionMinutes"
+      - "targetFocusMinutes"
+      - "workDayEnd"
+      - "workDayStart"
+      type: "object"
+    SchedulingPreferencesResponse:
+      properties:
+        breakMinutes:
+          format: "int32"
+          type: "integer"
+        bufferMinutes:
+          format: "int32"
+          type: "integer"
+        cadenceEnabled:
+          type: "boolean"
+        fixedBreaks:
+          items:
+            $ref: "#/components/schemas/FixedBreakResponse"
+          type: "array"
+        minSessionMinutes:
+          format: "int32"
+          type: "integer"
+        peakEnd:
+          example: "14:30:00"
+          type: "string"
+        peakStart:
+          example: "14:30:00"
+          type: "string"
+        persisted:
+          type: "boolean"
+        targetFocusMinutes:
+          format: "int32"
+          type: "integer"
+        workDayEnd:
+          example: "14:30:00"
+          type: "string"
+        workDayStart:
+          example: "14:30:00"
+          type: "string"
+      type: "object"
     TaskResponse:
       properties:
         description:
@@ -178,13 +384,58 @@ components:
         title:
           type: "string"
       type: "object"
-    UnestimatedTask:
+    TaskSnapshotResponse:
       properties:
-        taskId:
+        dueDate:
+          format: "date"
+          type: "string"
+        estimatedMinutes:
+          format: "int32"
+          type: "integer"
+        mustInclude:
+          type: "boolean"
+        priority:
+          enum:
+          - "LOW"
+          - "MEDIUM"
+          - "HIGH"
+          type: "string"
+        sourceTaskId:
+          format: "int64"
+          type: "integer"
+        status:
+          enum:
+          - "OPEN"
+          - "IN_PROGRESS"
+          - "DONE"
+          - "CANCELLED"
+          type: "string"
+        taskReferenceId:
           format: "int64"
           type: "integer"
         title:
           type: "string"
+      type: "object"
+    UnestimatedTask:
+      properties:
+        sourceTaskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
+      type: "object"
+    UnplacedWorkResponse:
+      properties:
+        reason:
+          enum:
+          - "NO_ESTIMATE"
+          - "OUT_OF_TIME"
+          type: "string"
+        taskSnapshot:
+          $ref: "#/components/schemas/TaskSnapshotResponse"
+        unplacedMinutes:
+          format: "int32"
+          type: "integer"
       type: "object"
     UpdateTaskRequest:
       properties:
@@ -237,6 +488,36 @@ paths:
   /__test/errors/ai-provider:
     get:
       operationId: "aiProvider"
+      responses:
+        "200":
+          description: "OK"
+      tags:
+      - "global-exception-handler-test-controller"
+  /__test/errors/bad-request:
+    get:
+      operationId: "badRequest"
+      parameters:
+      - in: "query"
+        name: "coded"
+        required: false
+        schema:
+          default: false
+          type: "boolean"
+      responses:
+        "200":
+          description: "OK"
+      tags:
+      - "global-exception-handler-test-controller"
+  /__test/errors/conflict:
+    get:
+      operationId: "conflict"
+      parameters:
+      - in: "query"
+        name: "coded"
+        required: false
+        schema:
+          default: false
+          type: "boolean"
       responses:
         "200":
           description: "OK"
@@ -328,9 +609,92 @@ paths:
           description: "Created"
       tags:
       - "auth-controller"
-  /api/daily-plans:
+  /api/commitments:
     get:
       operationId: "list_1"
+      parameters:
+      - in: "query"
+        name: "from"
+        required: false
+        schema:
+          format: "date"
+          type: "string"
+      - in: "query"
+        name: "to"
+        required: false
+        schema:
+          format: "date"
+          type: "string"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                items:
+                  $ref: "#/components/schemas/CommitmentResponse"
+                type: "array"
+          description: "OK"
+      tags:
+      - "commitment-controller"
+    post:
+      operationId: "create_1"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitmentRequest"
+        required: true
+      responses:
+        "201":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CommitmentResponse"
+          description: "Created"
+      tags:
+      - "commitment-controller"
+  /api/commitments/{id}:
+    delete:
+      operationId: "delete_1"
+      parameters:
+      - in: "path"
+        name: "id"
+        required: true
+        schema:
+          format: "int64"
+          type: "integer"
+      responses:
+        "204":
+          description: "No Content"
+      tags:
+      - "commitment-controller"
+    put:
+      operationId: "update_1"
+      parameters:
+      - in: "path"
+        name: "id"
+        required: true
+        schema:
+          format: "int64"
+          type: "integer"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitmentRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/CommitmentResponse"
+          description: "OK"
+      tags:
+      - "commitment-controller"
+  /api/daily-plans:
+    get:
+      operationId: "list_2"
       parameters:
       - in: "query"
         name: "page"
@@ -355,6 +719,31 @@ paths:
           description: "OK"
       tags:
       - "daily-plan-controller"
+  /api/daily-plans/by-date:
+    get:
+      operationId: "byDate"
+      parameters:
+      - in: "query"
+        name: "planDate"
+        required: false
+        schema:
+          format: "date"
+          type: "string"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DailyPlanResponse"
+          description: "Plan found for the requested date"
+        "204":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/DailyPlanResponse"
+          description: "No plan for the requested date"
+      tags:
+      - "daily-plan-controller"
   /api/daily-plans/generate:
     post:
       operationId: "generate"
@@ -373,34 +762,9 @@ paths:
           description: "Created"
       tags:
       - "daily-plan-controller"
-  /api/daily-plans/latest:
-    get:
-      operationId: "latest"
-      parameters:
-      - in: "query"
-        name: "planDate"
-        required: false
-        schema:
-          format: "date"
-          type: "string"
-      responses:
-        "200":
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/DailyPlanResponse"
-          description: "Latest plan found"
-        "204":
-          content:
-            '*/*':
-              schema:
-                $ref: "#/components/schemas/DailyPlanResponse"
-          description: "No plan for the requested date"
-      tags:
-      - "daily-plan-controller"
   /api/daily-plans/{id}:
     delete:
-      operationId: "delete_1"
+      operationId: "delete_2"
       parameters:
       - in: "path"
         name: "id"
@@ -431,6 +795,35 @@ paths:
           description: "OK"
       tags:
       - "daily-plan-controller"
+  /api/scheduling-preferences:
+    get:
+      operationId: "getEffective"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SchedulingPreferencesResponse"
+          description: "OK"
+      tags:
+      - "scheduling-preferences-controller"
+    put:
+      operationId: "put"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchedulingPreferencesRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/SchedulingPreferencesResponse"
+          description: "OK"
+      tags:
+      - "scheduling-preferences-controller"
   /api/tasks:
     get:
       operationId: "list"
