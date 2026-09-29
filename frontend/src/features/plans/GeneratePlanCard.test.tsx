@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ApiError } from '@/lib/api'
+import { samplePlan } from '@/features/plans/planFixtures'
 import { GeneratePlanCard } from '@/features/plans/GeneratePlanCard'
+import { ApiError } from '@/lib/api'
 
 vi.mock('@/features/plans/hooks', () => ({
   useGeneratePlan: vi.fn(),
@@ -131,12 +132,11 @@ describe('GeneratePlanCard', () => {
       reset,
     } as unknown as ReturnType<typeof useGeneratePlan>)
     mockedGetPlanByDate.mockResolvedValue({
+      ...samplePlan,
       id: 5,
       planDate: '2026-06-16',
       createdAt: '2026-06-16T09:00:00Z',
-      availableMinutes: null,
-      warning: null,
-      items: [],
+      blocks: [],
     })
 
     renderGeneratePlanCard('2026-06-16')

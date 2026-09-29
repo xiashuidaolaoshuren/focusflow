@@ -1,5 +1,3 @@
-import { CircleDotIcon, ClockIcon, FlagIcon } from 'lucide-react'
-
 import {
   Card,
   CardContent,
@@ -15,11 +13,9 @@ import {
   AlertTitle,
 } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import type { DailyPlanResponse } from '@/types/api'
+import { DayTimeline } from '@/features/plans/DayTimeline'
 import { PlanWarningAlert } from '@/features/plans/PlanWarningAlert'
-import { PriorityBadge } from '@/features/tasks/PriorityBadge'
-import { StatusBadge } from '@/features/tasks/StatusBadge'
-import { TaskMetaItem } from '@/features/tasks/TaskMetaItem'
+import type { DailyPlanResponse, UnplacedWorkResponse } from '@/types/api'
 
 type DailyPlanViewProps = {
   plan: DailyPlanResponse | null
@@ -56,6 +52,14 @@ function DailyPlanViewSkeleton({ title }: { title: string }) {
       </CardContent>
     </Card>
   )
+}
+
+function buildUnplacedCopy(entry: UnplacedWorkResponse): string {
+  if (entry.reason === 'NO_ESTIMATE') {
+    return `${entry.taskSnapshot.title}: no estimate — add one to put it on the clock`
+  }
+
+  return `${entry.taskSnapshot.title}: out of time — ${entry.unplacedMinutes ?? 0} min unplaced`
 }
 
 export function DailyPlanView({
@@ -97,44 +101,46 @@ export function DailyPlanView({
     )
   }
 
-  const sortedItems = [...plan.items].sort((a, b) => a.position - b.position)
+  const showReducedBufferNote =
+    plan.realizedBufferMinutes < plan.requestedBufferMinutes
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>
-          {sortedItems.length} block{sortedItems.length === 1 ? '' : 's'} scheduled
+          {plan.scheduledWorkMinutes} min scheduled across {plan.blocks.length}{' '}
+          block{plan.blocks.length === 1 ? '' : 's'}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {plan.warning != null && (
-          <PlanWarningAlert
-            warning={plan.warning}
-            availableMinutes={plan.availableMinutes}
-          />
-        )}
-        <ol className="flex flex-col gap-3">
-          {sortedItems.map((item) => (
-            <li
-              key={`${item.position}-${item.task.id}`}
-              className="flex flex-col gap-2 rounded-lg border border-border px-3 py-2"
-            >
-              <span className="min-w-0 font-medium">{item.task.title}</span>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <TaskMetaItem category="priority" icon={FlagIcon}>
-                  <PriorityBadge priority={item.task.priority} />
-                </TaskMetaItem>
-                <TaskMetaItem category="status" icon={CircleDotIcon}>
-                  <StatusBadge status={item.task.status} />
-                </TaskMetaItem>
-                <TaskMetaItem category="estimatedMinutes" icon={ClockIcon}>
-                  {item.task.estimatedMinutes ?? 0} min
-                </TaskMetaItem>
-              </div>
-            </li>
-          ))}
-        </ol>
+      <CardContent className="flex flex-col gap-4">
+        {plan.warning != null ? <PlanWarningAlert warning={plan.warning} /> : null}
+
+        {showReducedBufferNote ? (
+          <p className="text-sm text-muted-foreground">
+            Fixed breaks or commitments reduced contingency; only{' '}
+            {plan.realizedBufferMinutes} of {plan.requestedBufferMinutes} requested
+            buffer minutes were reserved.
+          </p>
+        ) : null}
+
+        <DayTimeline plan={plan} />
+
+        {plan.unplacedWork.length > 0 ? (
+          <section aria-label="Unplaced work">
+            <h3 className="mb-2 text-sm font-medium">Unplaced work</h3>
+            <ul className="flex flex-col gap-2">
+              {plan.unplacedWork.map((entry) => (
+                <li
+                  key={`${entry.reason}-${entry.taskSnapshot.sourceTaskId}`}
+                  className="rounded-md border border-dashed border-border px-3 py-2 text-sm"
+                >
+                  {buildUnplacedCopy(entry)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </CardContent>
     </Card>
   )

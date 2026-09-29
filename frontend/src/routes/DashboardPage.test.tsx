@@ -59,8 +59,8 @@ vi.mock('sonner', () => ({
 }))
 
 import { useCreateTask, useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
+import { samplePlan } from '@/features/plans/planFixtures'
 import { useGeneratePlan, usePlanByDate } from '@/features/plans/hooks'
-import type { DailyPlanResponse } from '@/types/api'
 
 const mockedUseTasks = vi.mocked(useTasks)
 const mockedUseCreateTask = vi.mocked(useCreateTask)
@@ -79,27 +79,7 @@ const sampleTask = {
   estimatedMinutes: 60,
 }
 
-const samplePlan: DailyPlanResponse = {
-  id: 1,
-  planDate: '2026-06-15',
-  createdAt: '2026-06-15T09:00:00Z',
-  availableMinutes: null,
-  warning: null,
-  items: [
-    {
-      position: 1,
-      task: {
-        id: 10,
-        title: 'Write tests',
-        description: null,
-        priority: 'HIGH',
-        status: 'OPEN',
-        dueDate: '2026-06-15',
-        estimatedMinutes: 45,
-      },
-    },
-  ],
-}
+const dashboardSamplePlan = samplePlan
 
 function renderDashboard(initialEntry = '/dashboard') {
   const queryClient = new QueryClient({
@@ -221,7 +201,7 @@ function mockExistingPlan() {
   mockedUsePlanByDate.mockReturnValue({
     isPending: false,
     isError: false,
-    plan: samplePlan,
+    plan: dashboardSamplePlan,
     hasPlan: true,
     refetch: vi.fn(),
   } as unknown as ReturnType<typeof usePlanByDate>)

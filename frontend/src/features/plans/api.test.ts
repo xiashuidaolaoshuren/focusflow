@@ -14,27 +14,19 @@ import {
   getPlanById,
   listPlans,
 } from '@/features/plans/api'
+import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
 
 describe('plan summary types', () => {
   it('supports PageResponse<DailyPlanSummaryResponse> for listPlans', () => {
     const envelope: PageResponse<DailyPlanSummaryResponse> = {
-      content: [
-        {
-          id: 1,
-          planDate: '2026-06-14',
-          createdAt: '2026-06-14T09:00:00Z',
-          itemCount: 2,
-          hasWarning: true,
-          availableMinutes: 30,
-        },
-      ],
+      content: [samplePlanSummary],
       page: 0,
       size: 20,
       totalElements: 1,
       totalPages: 1,
     }
 
-    expect(envelope.content[0]?.itemCount).toBe(2)
+    expect(envelope.content[0]?.scheduledWorkMinutes).toBe(120)
   })
 })
 
@@ -45,27 +37,7 @@ describe('generateDailyPlan', () => {
   })
 
   it('generates a plan on success (201)', async () => {
-    const generated: DailyPlanResponse = {
-      id: 1,
-      planDate: '2026-06-15',
-      createdAt: '2026-06-15T09:00:00Z',
-      availableMinutes: null,
-      warning: null,
-      items: [
-        {
-          position: 1,
-          task: {
-            id: 10,
-            title: 'Write tests',
-            description: null,
-            priority: 'HIGH',
-            status: 'OPEN',
-            dueDate: '2026-06-15',
-            estimatedMinutes: 45,
-          },
-        },
-      ],
-    }
+    const generated: DailyPlanResponse = samplePlan
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(generated), {
         status: 201,
@@ -91,12 +63,11 @@ describe('generateDailyPlan', () => {
 
   it('includes replacePlanId when replacing an existing plan', async () => {
     const generated: DailyPlanResponse = {
+      ...samplePlan,
       id: 2,
       planDate: '2026-06-16',
       createdAt: '2026-06-16T09:00:00Z',
-      availableMinutes: null,
-      warning: null,
-      items: [],
+      blocks: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(generated), {
@@ -134,12 +105,9 @@ describe('getPlanByDate', () => {
 
   it('returns the plan for the requested date when one exists', async () => {
     const plan: DailyPlanResponse = {
-      id: 1,
+      ...samplePlan,
       planDate: '2026-06-16',
       createdAt: '2026-06-16T09:00:00Z',
-      availableMinutes: null,
-      warning: null,
-      items: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(plan), {
@@ -180,21 +148,17 @@ describe('listPlans', () => {
   it('returns a paged envelope from GET /api/daily-plans', async () => {
     const envelope: PageResponse<DailyPlanSummaryResponse> = {
       content: [
+        samplePlanSummary,
         {
-          id: 1,
-          planDate: '2026-06-14',
-          createdAt: '2026-06-14T09:00:00Z',
-          itemCount: 1,
-          hasWarning: false,
-          availableMinutes: null,
-        },
-        {
+          ...samplePlanSummary,
           id: 2,
           planDate: '2026-06-15',
           createdAt: '2026-06-15T09:00:00Z',
-          itemCount: 0,
+          scheduledWorkMinutes: 0,
+          workSessionCount: 0,
+          scheduledTaskCount: 0,
+          unplacedWorkCount: 0,
           hasWarning: false,
-          availableMinutes: null,
         },
       ],
       page: 1,
@@ -225,25 +189,10 @@ describe('getPlanById', () => {
 
   it('returns a plan from GET /api/daily-plans/{id}', async () => {
     const plan: DailyPlanResponse = {
+      ...samplePlan,
       id: 42,
       planDate: '2026-06-14',
       createdAt: '2026-06-14T09:00:00Z',
-      availableMinutes: null,
-      warning: null,
-      items: [
-        {
-          position: 1,
-          task: {
-            id: 10,
-            title: 'Write tests',
-            description: null,
-            priority: 'HIGH',
-            status: 'OPEN',
-            dueDate: '2026-06-14',
-            estimatedMinutes: 45,
-          },
-        },
-      ],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(plan), {
