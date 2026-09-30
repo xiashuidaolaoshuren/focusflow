@@ -181,10 +181,6 @@ components:
       type: "object"
     GeneratePlanRequest:
       properties:
-        availableMinutes:
-          format: "int32"
-          minimum: 1
-          type: "integer"
         planDate:
           format: "date"
           type: "string"
@@ -192,7 +188,6 @@ components:
           format: "int64"
           type: "integer"
       required:
-      - "availableMinutes"
       - "planDate"
       type: "object"
     LoginRequest:

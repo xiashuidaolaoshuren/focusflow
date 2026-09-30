@@ -2,7 +2,6 @@ package com.focusflow.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,31 +65,10 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120
+										  "planDate": "2026-06-01"
 										}
 										"""))
 				.andExpect(status().isUnauthorized());
-
-		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
-	}
-
-	@Test
-	@WithMockUser
-	void generate_withInvalidAvailableMinutes_returns400WithDetails() throws Exception {
-		mockMvc.perform(
-						post("/api/daily-plans/generate")
-								.with(csrf())
-								.contentType(MediaType.APPLICATION_JSON)
-								.content(
-										"""
-										{
-										  "availableMinutes": 0
-										}
-										"""))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.status").value(400))
-				.andExpect(jsonPath("$.path").value("/api/daily-plans/generate"))
-				.andExpect(jsonPath("$.details.availableMinutes").isArray());
 
 		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
 	}
@@ -102,12 +80,7 @@ class DailyPlanControllerTest {
 						post("/api/daily-plans/generate")
 								.with(csrf())
 								.contentType(MediaType.APPLICATION_JSON)
-								.content(
-										"""
-										{
-										  "availableMinutes": 120
-										}
-										"""))
+								.content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value(400))
 				.andExpect(jsonPath("$.path").value("/api/daily-plans/generate"))
@@ -134,7 +107,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120,
 										  "planDate": "2026-06-01",
 										  "replacePlanId": 5
 										}
@@ -159,7 +131,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 60,
 										  "planDate": "2026-06-01"
 										}
 										"""))
@@ -204,7 +175,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120,
 										  "planDate": "2026-06-01"
 										}
 										"""))
@@ -229,7 +199,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120,
 										  "planDate": "2026-06-01"
 										}
 										"""))

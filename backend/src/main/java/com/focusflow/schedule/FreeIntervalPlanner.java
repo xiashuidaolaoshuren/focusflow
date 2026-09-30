@@ -45,9 +45,13 @@ public final class FreeIntervalPlanner {
 										span.end()));
 					});
 		}
+		List<Span> normalizedCommitmentSpans = normalizeCommitmentSpans(commitmentSpans);
 		for (FixedBreakWindow fixedBreak : fixedBreaks) {
 			clip(window, fixedBreak.start(), fixedBreak.end())
-					.ifPresent(span -> addFixedBreakPortions(segments, fixedBreak, commitmentSpans, span));
+					.ifPresent(
+							span ->
+									addFixedBreakPortions(
+											segments, fixedBreak, normalizedCommitmentSpans, span));
 		}
 		segments.sort(Comparator.comparing(UnavailableSegment::start));
 		return segments;
@@ -72,6 +76,29 @@ public final class FreeIntervalPlanner {
 		if (cursor.isBefore(breakSpan.end())) {
 			segments.add(fixedBreakSegment(fixedBreak, cursor, breakSpan.end()));
 		}
+	}
+
+	private static List<Span> normalizeCommitmentSpans(List<Span> commitmentSpans) {
+		if (commitmentSpans.isEmpty()) {
+			return List.of();
+		}
+		List<Span> sorted =
+				commitmentSpans.stream()
+						.sorted(Comparator.comparing(Span::start))
+						.toList();
+		List<Span> merged = new ArrayList<>();
+		Span current = sorted.get(0);
+		for (int index = 1; index < sorted.size(); index++) {
+			Span next = sorted.get(index);
+			if (!next.start().isAfter(current.end())) {
+				current = new Span(current.start(), later(current.end(), next.end()));
+			} else {
+				merged.add(current);
+				current = next;
+			}
+		}
+		merged.add(current);
+		return merged;
 	}
 
 	private static UnavailableSegment fixedBreakSegment(FixedBreakWindow fixedBreak, LocalTime start, LocalTime end) {

@@ -6,7 +6,6 @@ import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
 import com.focusflow.common.error.BadRequestException;
-import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
@@ -19,7 +18,9 @@ import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.UserRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,6 +38,7 @@ public class DailyPlanService {
 	private final DailyPlanPersister persister;
 	private final DailyPlanResponseMapper responseMapper;
 	private final DailyPlanRankingValidator rankingValidator;
+	private final DailyPlanScheduler scheduler;
 	private final OwnerSchedulingLock ownerSchedulingLock;
 
 	public DailyPlanService(
@@ -48,6 +50,7 @@ public class DailyPlanService {
 			DailyPlanPersister persister,
 			DailyPlanResponseMapper responseMapper,
 			DailyPlanRankingValidator rankingValidator,
+			DailyPlanScheduler scheduler,
 			OwnerSchedulingLock ownerSchedulingLock) {
 		this.aiClient = aiClient;
 		this.taskQueryService = taskQueryService;
@@ -57,6 +60,7 @@ public class DailyPlanService {
 		this.persister = persister;
 		this.responseMapper = responseMapper;
 		this.rankingValidator = rankingValidator;
+		this.scheduler = scheduler;
 		this.ownerSchedulingLock = ownerSchedulingLock;
 	}
 
@@ -66,7 +70,7 @@ public class DailyPlanService {
 		Optional<DailyPlan> latestPlan =
 				dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 						ownerId, planDate);
-		validateReplacePrecondition(latestPlan, request.replacePlanId());
+		PlanReplacePreconditions.validateReplacePrecondition(latestPlan, request.replacePlanId());
 		List<Task> activeTasks = taskQueryService.findPlannableTasksByOwnerId(ownerId);
 		if (activeTasks.isEmpty()) {
 			throw new BadRequestException("no plannable tasks available for planning");
@@ -77,8 +81,23 @@ public class DailyPlanService {
 		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
 		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
 		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
+		List<Task> rankedTasks = orderTasksByAiRanking(activeTasks, aiResponse.taskIds());
 		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
-		return persister.persistPlan(ownerId, planDate, aiItems, request.availableMinutes());
+		DailyPlanSchedule schedule = scheduler.compose(ownerId, planDate, rankedTasks);
+		return persister.persistPlan(
+				ownerId, planDate, request.replacePlanId(), aiItems, schedule);
+	}
+
+	private List<Task> orderTasksByAiRanking(List<Task> activeTasks, List<Long> orderedTaskIds) {
+		Map<Long, Task> taskById = new LinkedHashMap<>();
+		for (Task task : activeTasks) {
+			taskById.put(task.getId() != null ? task.getId() : 0L, task);
+		}
+		List<Task> rankedTasks = new ArrayList<>(orderedTaskIds.size());
+		for (Long taskId : orderedTaskIds) {
+			rankedTasks.add(taskById.get(taskId));
+		}
+		return rankedTasks;
 	}
 
 	private List<AiPlanItem> toPositionedPlanItems(List<Long> orderedTaskIds) {
@@ -127,19 +146,6 @@ public class DailyPlanService {
 	public void deleteForCurrentUser(Long planId) {
 		ownerSchedulingLock.lockCurrentOwner();
 		dailyPlanRepository.delete(loadPlanForCurrentUser(planId));
-	}
-
-	private void validateReplacePrecondition(Optional<DailyPlan> latestPlan, Long replacePlanId) {
-		if (latestPlan.isPresent()) {
-			if (replacePlanId == null) {
-				throw new ConflictException("PLAN_EXISTS", "plan already exists");
-			}
-			if (!latestPlan.get().getId().equals(replacePlanId)) {
-				throw new ConflictException("PLAN_CHANGED", "plan has changed");
-			}
-		} else if (replacePlanId != null) {
-			throw new ConflictException("PLAN_CHANGED", "plan has changed");
-		}
 	}
 
 	private DailyPlan loadPlanForCurrentUser(Long planId) {

@@ -88,6 +88,10 @@ public final class WorkPlacementPlanner {
 					&& remaining <= available) {
 				sessionLength = remaining;
 			}
+			if (sessionLength < policy.minSessionMinutes() && remaining > sessionLength) {
+				cursor.advanceToNextInterval(intervals);
+				continue;
+			}
 			if (sessionLength <= 0) {
 				cursor.advanceToNextInterval(intervals);
 				continue;

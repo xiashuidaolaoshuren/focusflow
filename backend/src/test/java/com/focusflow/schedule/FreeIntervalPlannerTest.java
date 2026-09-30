@@ -110,6 +110,51 @@ class FreeIntervalPlannerTest {
 	}
 
 	@Test
+	void plan_whenCommitmentsUnsorted_normalizesFixedBreakAgainstMergedCommitments() {
+		List<FixedBreakWindow> breaks =
+				List.of(new FixedBreakWindow("Lunch", LocalTime.of(9, 30), LocalTime.of(17, 30)));
+		List<CommitmentWindow> commitments =
+				List.of(
+						new CommitmentWindow("Lunch meeting", LocalTime.of(12, 0), LocalTime.of(13, 0)),
+						new CommitmentWindow("Morning standup", LocalTime.of(10, 0), LocalTime.of(11, 0)));
+
+		FreeIntervalPlan plan = FreeIntervalPlanner.plan(WINDOW, breaks, commitments, 0);
+
+		assertThat(plan.unavailableSegments())
+				.containsExactly(
+						new UnavailableSegment(
+								UnavailableSegmentKind.FIXED_BREAK,
+								"Lunch",
+								LocalTime.of(9, 30),
+								LocalTime.of(10, 0)),
+						new UnavailableSegment(
+								UnavailableSegmentKind.COMMITMENT,
+								"Morning standup",
+								LocalTime.of(10, 0),
+								LocalTime.of(11, 0)),
+						new UnavailableSegment(
+								UnavailableSegmentKind.FIXED_BREAK,
+								"Lunch",
+								LocalTime.of(11, 0),
+								LocalTime.of(12, 0)),
+						new UnavailableSegment(
+								UnavailableSegmentKind.COMMITMENT,
+								"Lunch meeting",
+								LocalTime.of(12, 0),
+								LocalTime.of(13, 0)),
+						new UnavailableSegment(
+								UnavailableSegmentKind.FIXED_BREAK,
+								"Lunch",
+								LocalTime.of(13, 0),
+								LocalTime.of(17, 30)));
+		assertThat(plan.freeIntervals())
+				.extracting(FreeInterval::start, FreeInterval::end)
+				.containsExactly(
+						tuple(LocalTime.of(9, 0), LocalTime.of(9, 30)),
+						tuple(LocalTime.of(17, 30), LocalTime.of(18, 0)));
+	}
+
+	@Test
 	void plan_whenCommitmentFullyCoversFixedBreak_breakEmitsNothing() {
 		List<FixedBreakWindow> breaks =
 				List.of(new FixedBreakWindow("Coffee", LocalTime.of(12, 30), LocalTime.of(13, 30)));

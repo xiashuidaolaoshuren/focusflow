@@ -307,6 +307,51 @@ class WorkPlacementPlannerTest {
 	}
 
 	@Test
+	void place_withCadenceOn_skipsIntervalShorterThanMinSession() {
+		FreeIntervalPlan stage1 =
+				new FreeIntervalPlan(
+						List.of(
+								new FreeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0), false, true),
+								new FreeInterval(LocalTime.of(11, 50), LocalTime.of(12, 0), true, false)),
+						List.of(
+								new UnavailableSegment(
+										UnavailableSegmentKind.FIXED_BREAK,
+										"Lunch",
+										LocalTime.of(10, 0),
+										LocalTime.of(11, 50))),
+						70,
+						0,
+						0);
+		List<RankedTask> ranking = List.of(new RankedTask(7L, 90));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_ON);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null, 1, 1),
+						new ScheduledBlock(
+								BlockKind.CADENCE_BREAK,
+								LocalTime.of(9, 50),
+								LocalTime.of(10, 0),
+								null,
+								"Cadence break",
+								0,
+								0),
+						new ScheduledBlock(
+								BlockKind.FIXED_BREAK,
+								LocalTime.of(10, 0),
+								LocalTime.of(11, 50),
+								null,
+								"Lunch",
+								0,
+								0));
+		assertThat(result.unplacedWork())
+				.containsExactly(new UnplacedWork(7L, UnplacedReason.OUT_OF_TIME, 40));
+	}
+
+	@Test
 	void place_withCadenceOn_absorbsShortFinalTailIntoCurrentSession() {
 		FreeIntervalPlan stage1 = wholeWindow();
 		List<RankedTask> ranking = List.of(new RankedTask(7L, 113));
