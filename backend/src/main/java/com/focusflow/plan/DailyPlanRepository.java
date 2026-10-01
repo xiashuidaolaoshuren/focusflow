@@ -22,7 +22,8 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 					       (SELECT COUNT(b) FROM DailyPlanBlock b
 					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
 					           AS workSessionCount,
-					       (SELECT COUNT(t) FROM DailyPlanTask t WHERE t.dailyPlan.id = p.id)
+					       (SELECT COUNT(DISTINCT b.dailyPlanTask.id) FROM DailyPlanBlock b
+					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
 					           AS scheduledTaskCount,
 					       (SELECT COUNT(t) FROM DailyPlanTask t
 					        WHERE t.dailyPlan.id = p.id AND t.unplacedReason IS NOT NULL)

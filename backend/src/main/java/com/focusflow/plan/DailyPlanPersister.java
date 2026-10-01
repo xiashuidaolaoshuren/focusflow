@@ -13,7 +13,6 @@ import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -47,13 +46,18 @@ public class DailyPlanPersister {
 			LocalDate planDate,
 			Long replacePlanId,
 			List<AiPlanItem> aiItems,
+			List<Task> capturedTasks,
 			DailyPlanSchedule schedule) {
 		User owner = ownerSchedulingLock.lockCurrentOwner();
 		Optional<DailyPlan> latestPlan =
 				dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 						ownerId, planDate);
 		PlanReplacePreconditions.validateReplacePrecondition(latestPlan, replacePlanId);
-		latestPlan.ifPresent(dailyPlanRepository::delete);
+		latestPlan.ifPresent(
+				existing -> {
+					dailyPlanRepository.delete(existing);
+					dailyPlanRepository.flush();
+				});
 
 		List<Long> selectedTaskIds = aiItems.stream().map(AiPlanItem::taskId).toList();
 		List<Task> reloadedTasks = taskQueryService.findOwnedTasksByIds(ownerId, selectedTaskIds);
@@ -72,14 +76,45 @@ public class DailyPlanPersister {
 			}
 		}
 
-		DailyPlan plan = buildPlan(owner, planDate, aiItems, taskById, schedule);
-		return responseMapper.toResponse(dailyPlanRepository.save(plan));
+		Map<Long, Task> capturedById =
+				capturedTasks.stream()
+						.collect(
+								Collectors.toMap(
+										task -> task.getId() != null ? task.getId() : 0L,
+										Function.identity(),
+										(first, second) -> first));
+		DailyPlan plan = buildPlan(owner, planDate, aiItems, capturedById, taskById, schedule);
+		dailyPlanRepository.save(plan);
+		dailyPlanRepository.flush();
+
+		Map<Long, DailyPlanTask> planTaskBySourceId =
+				plan.getTasks().stream()
+						.collect(
+								Collectors.toMap(
+										DailyPlanTask::getSourceTaskId,
+										Function.identity(),
+										(first, second) -> first));
+		int position = 1;
+		for (ScheduledBlock block : schedule.blocks()) {
+			DailyPlanBlock planBlock = new DailyPlanBlock();
+			planBlock.setKind(block.kind());
+			planBlock.setStartTime(block.start());
+			planBlock.setEndTime(block.end());
+			planBlock.setLabel(block.label());
+			planBlock.setPosition(position++);
+			if (block.kind() == BlockKind.WORK && block.sourceTaskId() != null) {
+				planBlock.setDailyPlanTask(planTaskBySourceId.get(block.sourceTaskId()));
+			}
+			plan.addBlock(planBlock);
+		}
+		return responseMapper.toResponse(dailyPlanRepository.saveAndFlush(plan));
 	}
 
 	private DailyPlan buildPlan(
 			User owner,
 			LocalDate planDate,
 			List<AiPlanItem> aiItems,
+			Map<Long, Task> capturedById,
 			Map<Long, Task> taskById,
 			DailyPlanSchedule schedule) {
 		DailyPlan plan = new DailyPlan();
@@ -96,7 +131,6 @@ public class DailyPlanPersister {
 		plan.setRequestedBufferMinutes(schedule.requestedBufferMinutes());
 		plan.setRealizedBufferMinutes(schedule.realizedBufferMinutes());
 
-		Map<Long, DailyPlanTask> planTaskBySourceId = new HashMap<>();
 		Map<Long, UnplacedWork> unplacedBySourceId =
 				schedule.unplacedWork().stream()
 						.collect(
@@ -106,38 +140,24 @@ public class DailyPlanPersister {
 										(first, second) -> first));
 
 		for (AiPlanItem aiItem : aiItems) {
-			Task task = taskById.get(aiItem.taskId());
+			Task captured = capturedById.get(aiItem.taskId());
+			Task reference = taskById.get(aiItem.taskId());
 			DailyPlanTask planTask = new DailyPlanTask();
 			planTask.setRank(aiItem.position());
-			planTask.setSourceTaskId(task.getId() != null ? task.getId() : 0L);
-			planTask.setTaskReference(task);
-			planTask.setTaskTitle(task.getTitle());
-			planTask.setTaskPriority(task.getPriority());
-			planTask.setTaskStatus(task.getStatus());
-			planTask.setTaskDueDate(task.getDueDate());
-			planTask.setTaskEstimatedMinutes(task.getEstimatedMinutes());
-			planTask.setMustInclude(PlanMustIncludeRules.isMustInclude(task, planDate));
+			planTask.setSourceTaskId(captured.getId() != null ? captured.getId() : 0L);
+			planTask.setTaskReference(reference);
+			planTask.setTaskTitle(captured.getTitle());
+			planTask.setTaskPriority(captured.getPriority());
+			planTask.setTaskStatus(captured.getStatus());
+			planTask.setTaskDueDate(captured.getDueDate());
+			planTask.setTaskEstimatedMinutes(captured.getEstimatedMinutes());
+			planTask.setMustInclude(PlanMustIncludeRules.isMustInclude(captured, planDate));
 			UnplacedWork unplaced = unplacedBySourceId.get(planTask.getSourceTaskId());
 			if (unplaced != null) {
 				planTask.setUnplacedReason(unplaced.reason());
 				planTask.setUnplacedMinutes(unplaced.unplacedMinutes());
 			}
 			plan.addTask(planTask);
-			planTaskBySourceId.put(planTask.getSourceTaskId(), planTask);
-		}
-
-		int position = 1;
-		for (ScheduledBlock block : schedule.blocks()) {
-			DailyPlanBlock planBlock = new DailyPlanBlock();
-			planBlock.setKind(block.kind());
-			planBlock.setStartTime(block.start());
-			planBlock.setEndTime(block.end());
-			planBlock.setLabel(block.label());
-			planBlock.setPosition(position++);
-			if (block.kind() == BlockKind.WORK && block.sourceTaskId() != null) {
-				planBlock.setDailyPlanTask(planTaskBySourceId.get(block.sourceTaskId()));
-			}
-			plan.addBlock(planBlock);
 		}
 
 		return plan;

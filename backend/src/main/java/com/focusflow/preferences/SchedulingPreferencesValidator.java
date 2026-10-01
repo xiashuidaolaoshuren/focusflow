@@ -1,6 +1,7 @@
 package com.focusflow.preferences;
 
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.preferences.dto.FixedBreakRequest;
 import com.focusflow.preferences.dto.SchedulingPreferencesRequest;
 import java.time.LocalTime;
@@ -12,8 +13,8 @@ final class SchedulingPreferencesValidator {
 	private SchedulingPreferencesValidator() {}
 
 	static void validate(SchedulingPreferencesRequest request) {
-		validateMinuteAligned(request.workDayStart(), "work day start");
-		validateMinuteAligned(request.workDayEnd(), "work day end");
+		MinutePrecision.requireMinuteAligned(request.workDayStart());
+		MinutePrecision.requireMinuteAligned(request.workDayEnd());
 		if (!request.workDayEnd().isAfter(request.workDayStart())) {
 			throw new BadRequestException("work day end must be after work day start");
 		}
@@ -48,8 +49,8 @@ final class SchedulingPreferencesValidator {
 		if (peakStart == null || peakEnd == null) {
 			throw new BadRequestException("peak window requires both start and end");
 		}
-		validateMinuteAligned(peakStart, "peak start");
-		validateMinuteAligned(peakEnd, "peak end");
+		MinutePrecision.requireMinuteAligned(peakStart);
+		MinutePrecision.requireMinuteAligned(peakEnd);
 		if (!peakEnd.isAfter(peakStart)) {
 			throw new BadRequestException("peak end must be after peak start");
 		}
@@ -74,8 +75,8 @@ final class SchedulingPreferencesValidator {
 			if (fixedBreak.label().length() > 255) {
 				throw new BadRequestException("fixed break label must be at most 255 characters");
 			}
-			validateMinuteAligned(fixedBreak.startTime(), "fixed break start");
-			validateMinuteAligned(fixedBreak.endTime(), "fixed break end");
+			MinutePrecision.requireMinuteAligned(fixedBreak.startTime());
+			MinutePrecision.requireMinuteAligned(fixedBreak.endTime());
 			if (!fixedBreak.endTime().isAfter(fixedBreak.startTime())) {
 				throw new BadRequestException("fixed break end must be after fixed break start");
 			}
@@ -90,12 +91,6 @@ final class SchedulingPreferencesValidator {
 				throw new BadRequestException("fixed breaks must not overlap");
 			}
 			previousEnd = fixedBreak.endTime();
-		}
-	}
-
-	private static void validateMinuteAligned(LocalTime time, String fieldName) {
-		if (time.getSecond() != 0 || time.getNano() != 0) {
-			throw new BadRequestException("times must be minute-aligned");
 		}
 	}
 

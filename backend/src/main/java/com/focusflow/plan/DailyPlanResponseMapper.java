@@ -58,7 +58,7 @@ public class DailyPlanResponseMapper {
 	private DailyPlanWarning deriveWarning(DailyPlan plan) {
 		List<DailyPlanTask> mustIncludeUnplaced =
 				plan.getTasks().stream()
-						.filter(task -> task.isMustInclude() && task.getUnplacedReason() != null)
+						.filter(PlanMustIncludeRules::isShortfallContributor)
 						.toList();
 		if (mustIncludeUnplaced.isEmpty()) {
 			return null;

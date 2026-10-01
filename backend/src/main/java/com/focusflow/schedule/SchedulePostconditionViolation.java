@@ -8,5 +8,6 @@ public enum SchedulePostconditionViolation {
 	OUT_OF_WINDOW,
 	STAGE1_MISMATCH,
 	ESTIMATE_CONSERVATION,
-	TASK_IDENTITY
+	TASK_IDENTITY,
+	BLOCK_SHAPE
 }

@@ -26,6 +26,7 @@ public class SchedulingPreferencesService {
 		this.ownerSchedulingLock = ownerSchedulingLock;
 	}
 
+	@Transactional(readOnly = true)
 	public SchedulingPreferencesResponse getEffective() {
 		Long ownerId = currentUser.getCurrentUser().id();
 		return schedulingPreferencesRepository

@@ -38,9 +38,7 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(10, 30),
 								7L,
-								null,
-								1,
-								1));
+								null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -72,17 +70,13 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(10, 0),
 								7L,
-								null,
-								1,
-								1),
+								null),
 						new ScheduledBlock(
 								BlockKind.FIXED_BREAK,
 								LocalTime.of(12, 0),
 								LocalTime.of(13, 0),
 								null,
-								"Lunch",
-								0,
-								0));
+								"Lunch"));
 	}
 
 	@Test
@@ -113,25 +107,19 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(12, 0),
 								7L,
-								null,
-								1,
-								2),
+								null),
 						new ScheduledBlock(
 								BlockKind.FIXED_BREAK,
 								LocalTime.of(12, 0),
 								LocalTime.of(13, 0),
 								null,
-								"Lunch",
-								0,
-								0),
+								"Lunch"),
 						new ScheduledBlock(
 								BlockKind.WORK,
 								LocalTime.of(13, 0),
 								LocalTime.of(13, 20),
 								7L,
-								null,
-								2,
-								2));
+								null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -153,9 +141,7 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(9, 30),
 								9L,
-								null,
-								1,
-								1));
+								null));
 	}
 
 	@Test
@@ -179,9 +165,7 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(10, 0),
 								7L,
-								null,
-								1,
-								1));
+								null));
 		assertThat(result.unplacedWork())
 				.containsExactly(new UnplacedWork(7L, UnplacedReason.OUT_OF_TIME, 30));
 	}
@@ -215,17 +199,13 @@ class WorkPlacementPlannerTest {
 								LocalTime.of(9, 0),
 								LocalTime.of(9, 30),
 								7L,
-								null,
-								1,
-								1),
+								null),
 						new ScheduledBlock(
 								BlockKind.WORK,
 								LocalTime.of(9, 30),
 								LocalTime.of(9, 50),
 								9L,
-								null,
-								1,
-								1));
+								null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -240,27 +220,23 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null, 1, 3),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(9, 50),
 								LocalTime.of(10, 0),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 50), 7L, null, 2, 3),
+								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(10, 50),
 								LocalTime.of(11, 0),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 20), 7L, null, 3, 3));
+								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 20), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -281,27 +257,23 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null, 1, 3),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(9, 50),
 								LocalTime.of(10, 0),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 50), 7L, null, 2, 3),
+								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(10, 50),
 								LocalTime.of(11, 0),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 50), 7L, null, 3, 3));
+								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 50), 7L, null));
 		assertThat(result.unplacedWork())
 				.containsExactly(new UnplacedWork(7L, UnplacedReason.OUT_OF_TIME, 10));
 	}
@@ -330,25 +302,37 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null, 1, 1),
-						new ScheduledBlock(
-								BlockKind.CADENCE_BREAK,
-								LocalTime.of(9, 50),
-								LocalTime.of(10, 0),
-								null,
-								"Cadence break",
-								0,
-								0),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.FIXED_BREAK,
 								LocalTime.of(10, 0),
 								LocalTime.of(11, 50),
 								null,
-								"Lunch",
-								0,
-								0));
+								"Lunch"));
 		assertThat(result.unplacedWork())
 				.containsExactly(new UnplacedWork(7L, UnplacedReason.OUT_OF_TIME, 40));
+	}
+
+	@Test
+	void place_withCadenceOn_whenNothingFollowsBreak_leavesSliverIdle() {
+		FreeIntervalPlan stage1 =
+				new FreeIntervalPlan(
+						List.of(new FreeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0), false, false)),
+						List.of(),
+						60,
+						0,
+						0);
+		List<RankedTask> ranking = List.of(new RankedTask(7L, 80));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_ON);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null));
+		assertThat(result.unplacedWork())
+				.containsExactly(new UnplacedWork(7L, UnplacedReason.OUT_OF_TIME, 30));
 	}
 
 	@Test
@@ -362,17 +346,15 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null, 1, 2),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(9, 50),
 								LocalTime.of(10, 0),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 3), 7L, null, 2, 2));
+								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 3), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -387,7 +369,7 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 55), 7L, null, 1, 1));
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 55), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -402,17 +384,15 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null, 1, 1),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(9, 40),
 								LocalTime.of(9, 50),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 50), LocalTime.of(10, 20), 9L, null, 1, 1));
+								BlockKind.WORK, LocalTime.of(9, 50), LocalTime.of(10, 20), 9L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -440,27 +420,23 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 30), 7L, null, 1, 3),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 30), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(10, 30),
 								LocalTime.of(10, 40),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 40), LocalTime.of(12, 0), 7L, null, 2, 3),
+								BlockKind.WORK, LocalTime.of(10, 40), LocalTime.of(12, 0), 7L, null),
 						new ScheduledBlock(
 								BlockKind.FIXED_BREAK,
 								LocalTime.of(12, 0),
 								LocalTime.of(13, 0),
 								null,
-								"Lunch",
-								0,
-								0),
+								"Lunch"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(13, 0), LocalTime.of(13, 30), 7L, null, 3, 3));
+								BlockKind.WORK, LocalTime.of(13, 0), LocalTime.of(13, 30), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -488,35 +464,29 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 30), 7L, null, 1, 3),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 30), 7L, null),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(10, 30),
 								LocalTime.of(10, 40),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 40), LocalTime.of(12, 0), 7L, null, 2, 3),
+								BlockKind.WORK, LocalTime.of(10, 40), LocalTime.of(12, 0), 7L, null),
 						new ScheduledBlock(
 								BlockKind.COMMITMENT,
 								LocalTime.of(12, 0),
 								LocalTime.of(13, 0),
 								null,
-								"Meeting",
-								0,
-								0),
+								"Meeting"),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(13, 0),
 								LocalTime.of(13, 10),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(13, 10), LocalTime.of(13, 40), 7L, null, 3, 3));
+								BlockKind.WORK, LocalTime.of(13, 10), LocalTime.of(13, 40), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -544,25 +514,21 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null, 1, 1),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null),
 						new ScheduledBlock(
 								BlockKind.COMMITMENT,
 								LocalTime.of(9, 45),
 								LocalTime.of(10, 15),
 								null,
-								"Appt",
-								0,
-								0),
+								"Appt"),
 						new ScheduledBlock(
 								BlockKind.CADENCE_BREAK,
 								LocalTime.of(10, 15),
 								LocalTime.of(10, 25),
 								null,
-								"Cadence break",
-								0,
-								0),
+								"Cadence break"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 25), LocalTime.of(10, 55), 9L, null, 1, 1));
+								BlockKind.WORK, LocalTime.of(10, 25), LocalTime.of(10, 55), 9L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -590,17 +556,15 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null, 1, 1),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 40), 7L, null),
 						new ScheduledBlock(
 								BlockKind.FIXED_BREAK,
 								LocalTime.of(9, 45),
 								LocalTime.of(10, 15),
 								null,
-								"Lunch",
-								0,
-								0),
+								"Lunch"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 15), LocalTime.of(10, 45), 9L, null, 1, 1));
+								BlockKind.WORK, LocalTime.of(10, 15), LocalTime.of(10, 45), 9L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -634,25 +598,21 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 10), 7L, null, 1, 2),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 10), 7L, null),
 						new ScheduledBlock(
 								BlockKind.COMMITMENT,
 								LocalTime.of(10, 10),
 								LocalTime.of(10, 30),
 								null,
-								"Call",
-								0,
-								0),
+								"Call"),
 						new ScheduledBlock(
 								BlockKind.COMMITMENT,
 								LocalTime.of(10, 38),
 								LocalTime.of(11, 0),
 								null,
-								"Standup",
-								0,
-								0),
+								"Standup"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 30), 7L, null, 2, 2));
+								BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 30), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 
@@ -680,17 +640,15 @@ class WorkPlacementPlannerTest {
 		assertThat(result.blocks())
 				.containsExactly(
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 10), 7L, null, 1, 2),
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 10), 7L, null),
 						new ScheduledBlock(
 								BlockKind.COMMITMENT,
 								LocalTime.of(10, 10),
 								LocalTime.of(10, 30),
 								null,
-								"Call",
-								0,
-								0),
+								"Call"),
 						new ScheduledBlock(
-								BlockKind.WORK, LocalTime.of(10, 30), LocalTime.of(10, 40), 7L, null, 2, 2));
+								BlockKind.WORK, LocalTime.of(10, 30), LocalTime.of(10, 40), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
 }

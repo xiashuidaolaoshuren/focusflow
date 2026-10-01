@@ -2,6 +2,7 @@ package com.focusflow.commitment;
 
 import com.focusflow.commitment.dto.CommitmentRequest;
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.time.MinutePrecision;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -16,8 +17,8 @@ final class CommitmentValidator {
 		if (request.title().length() > 255) {
 			throw new BadRequestException("title must be at most 255 characters");
 		}
-		validateMinuteAligned(request.startTime());
-		validateMinuteAligned(request.endTime());
+		MinutePrecision.requireMinuteAligned(request.startTime());
+		MinutePrecision.requireMinuteAligned(request.endTime());
 		if (!request.endTime().isAfter(request.startTime())) {
 			throw new BadRequestException("end time must be after start time");
 		}
@@ -42,11 +43,5 @@ final class CommitmentValidator {
 	private static boolean intervalsOverlap(
 			LocalTime start, LocalTime end, LocalTime otherStart, LocalTime otherEnd) {
 		return start.isBefore(otherEnd) && otherStart.isBefore(end);
-	}
-
-	private static void validateMinuteAligned(LocalTime time) {
-		if (time.getSecond() != 0 || time.getNano() != 0) {
-			throw new BadRequestException("times must be minute-aligned");
-		}
 	}
 }

@@ -25,6 +25,9 @@ public final class PersistenceFixtures {
 	}
 
 	public static DailyPlan savedPlan(DailyPlanRepository planRepository, DailyPlanTestBuilder builder) {
-		return planRepository.save(builder.build());
+		DailyPlan plan = planRepository.save(builder.buildTasksOnly());
+		planRepository.flush();
+		builder.attachBlocksTo(plan);
+		return planRepository.saveAndFlush(plan);
 	}
 }

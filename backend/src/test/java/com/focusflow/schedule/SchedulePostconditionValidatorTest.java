@@ -41,9 +41,7 @@ class SchedulePostconditionValidatorTest {
 										LocalTime.of(9, 0, 30),
 										LocalTime.of(10, 0),
 										1L,
-										null,
-										1,
-										1)),
+										null)),
 						List.of());
 
 		assertThatThrownBy(() -> validate(result))
@@ -63,9 +61,7 @@ class SchedulePostconditionValidatorTest {
 										LocalTime.of(9, 0),
 										LocalTime.of(9, 0),
 										1L,
-										null,
-										1,
-										1)),
+										null)),
 						List.of());
 
 		assertThatThrownBy(() -> validate(result))
@@ -85,9 +81,7 @@ class SchedulePostconditionValidatorTest {
 										LocalTime.of(10, 0),
 										LocalTime.of(9, 0),
 										1L,
-										null,
-										1,
-										1)),
+										null)),
 						List.of());
 
 		assertThatThrownBy(() -> validate(result))
@@ -474,11 +468,90 @@ class SchedulePostconditionValidatorTest {
 	}
 
 	private static ScheduledBlock workBlock(long taskId, LocalTime start, LocalTime end) {
-		return new ScheduledBlock(BlockKind.WORK, start, end, taskId, null, 1, 1);
+		return new ScheduledBlock(BlockKind.WORK, start, end, taskId, null);
+	}
+
+	@Test
+	void validate_withWorkBlockMissingSourceTaskId_throwsBlockShape() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(9, 0),
+										LocalTime.of(10, 0),
+										null,
+										null)),
+						List.of());
+
+		assertThatThrownBy(() -> validate(result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.BLOCK_SHAPE);
+	}
+
+	@Test
+	void validate_withWorkBlockCarryingLabel_throwsBlockShape() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(9, 0),
+										LocalTime.of(10, 0),
+										1L,
+										"Should not label work")),
+						List.of());
+
+		assertThatThrownBy(() -> validate(result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.BLOCK_SHAPE);
+	}
+
+	@Test
+	void validate_withNonWorkBlockMissingLabel_throwsBlockShape() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								labeledBlock(
+										BlockKind.FIXED_BREAK,
+										null,
+										LocalTime.of(12, 0),
+										LocalTime.of(13, 0))),
+						List.of());
+
+		assertThatThrownBy(() -> validate(result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.BLOCK_SHAPE);
+	}
+
+	@Test
+	void validate_withNonWorkBlockCarryingSourceTaskId_throwsBlockShape() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								new ScheduledBlock(
+										BlockKind.BUFFER,
+										LocalTime.of(17, 0),
+										LocalTime.of(18, 0),
+										99L,
+										"Buffer")),
+						List.of());
+
+		assertThatThrownBy(() -> validate(result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.BLOCK_SHAPE);
 	}
 
 	private static ScheduledBlock labeledBlock(
 			BlockKind kind, String label, LocalTime start, LocalTime end) {
-		return new ScheduledBlock(kind, start, end, null, label, 0, 0);
+		return new ScheduledBlock(kind, start, end, null, label);
 	}
 }

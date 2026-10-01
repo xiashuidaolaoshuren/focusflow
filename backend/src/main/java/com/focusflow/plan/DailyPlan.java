@@ -16,9 +16,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 @Entity
@@ -71,7 +69,7 @@ public class DailyPlan {
 			cascade = CascadeType.ALL,
 			orphanRemoval = true)
 	@OrderBy("rank ASC")
-	private final List<DailyPlanTask> tasks = new ArrayList<>();
+	private final Set<DailyPlanTask> tasks = new LinkedHashSet<>();
 
 	@OneToMany(
 			mappedBy = "dailyPlan",
@@ -180,7 +178,7 @@ public class DailyPlan {
 		this.realizedBufferMinutes = realizedBufferMinutes;
 	}
 
-	public List<DailyPlanTask> getTasks() {
+	public Set<DailyPlanTask> getTasks() {
 		return tasks;
 	}
 

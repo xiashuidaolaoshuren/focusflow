@@ -62,7 +62,8 @@ public final class WorkPlacementPlanner {
 			}
 			int budget = Math.max(policy.targetFocusMinutes() - cursor.focusClock(), 0);
 			if (budget < policy.minSessionMinutes()) {
-				if (available >= policy.breakMinutes()) {
+				if (available >= policy.breakMinutes()
+						&& workCanFollowBreak(intervals, cursor, policy, remaining)) {
 					LocalTime breakStart = cursor.position();
 					LocalTime breakEnd = breakStart.plusMinutes(policy.breakMinutes());
 					placed.add(
@@ -70,10 +71,8 @@ public final class WorkPlacementPlanner {
 									BlockKind.CADENCE_BREAK,
 									breakStart,
 									breakEnd,
-									null,
-									CADENCE_BREAK_LABEL,
-									0,
-									0));
+null,
+							CADENCE_BREAK_LABEL));
 					cursor.moveTo(breakEnd, intervals);
 					cursor.resetFocus();
 				} else {
@@ -105,9 +104,7 @@ public final class WorkPlacementPlanner {
 							blockStart,
 							blockEnd,
 							task.sourceTaskId(),
-							null,
-							0,
-							0));
+							null));
 			cursor.addFocus(sessionLength);
 			cursor.moveTo(blockEnd, intervals);
 			remaining -= sessionLength;
@@ -119,7 +116,8 @@ public final class WorkPlacementPlanner {
 			if (remaining > 0 && cursor.hasRemaining(intervals)) {
 				FreeInterval current = intervals.get(cursor.intervalIndex());
 				int room = minutesBetween(cursor.position(), current.end());
-				if (room >= policy.breakMinutes()) {
+				if (room >= policy.breakMinutes()
+						&& workCanFollowBreak(intervals, cursor, policy, remaining)) {
 					LocalTime breakStart = cursor.position();
 					LocalTime breakEnd = breakStart.plusMinutes(policy.breakMinutes());
 					placed.add(
@@ -127,10 +125,8 @@ public final class WorkPlacementPlanner {
 									BlockKind.CADENCE_BREAK,
 									breakStart,
 									breakEnd,
-									null,
-									CADENCE_BREAK_LABEL,
-									0,
-									0));
+null,
+							CADENCE_BREAK_LABEL));
 					cursor.moveTo(breakEnd, intervals);
 					cursor.resetFocus();
 				} else {
@@ -138,7 +134,7 @@ public final class WorkPlacementPlanner {
 				}
 			}
 		}
-		return new TaskPlacement(numberSessions(placed), remaining);
+		return new TaskPlacement(placed, remaining);
 	}
 
 	private static TaskPlacement placeTaskCadenceOff(
@@ -169,41 +165,11 @@ public final class WorkPlacementPlanner {
 							blockStart,
 							blockEnd,
 							task.sourceTaskId(),
-							null,
-							0,
-							0));
+							null));
 			cursor.moveTo(blockEnd, intervals);
 			remaining -= placed;
 		}
-		return new TaskPlacement(numberSessions(workBlocks), remaining);
-	}
-
-	private static List<ScheduledBlock> numberSessions(List<ScheduledBlock> placed) {
-		int sessionCount = 0;
-		for (ScheduledBlock block : placed) {
-			if (block.kind() == BlockKind.WORK) {
-				sessionCount++;
-			}
-		}
-		List<ScheduledBlock> numbered = new ArrayList<>();
-		int sessionIndex = 0;
-		for (ScheduledBlock block : placed) {
-			if (block.kind() == BlockKind.WORK) {
-				sessionIndex++;
-				numbered.add(
-						new ScheduledBlock(
-								block.kind(),
-								block.start(),
-								block.end(),
-								block.sourceTaskId(),
-								block.label(),
-								sessionIndex,
-								sessionCount));
-			} else {
-				numbered.add(block);
-			}
-		}
-		return numbered;
+		return new TaskPlacement(workBlocks, remaining);
 	}
 
 	private record TaskPlacement(List<ScheduledBlock> blocks, int remainingMinutes) {}
@@ -213,23 +179,37 @@ public final class WorkPlacementPlanner {
 		for (UnavailableSegment segment : segments) {
 			blocks.add(
 					new ScheduledBlock(
-							toBlockKind(segment.kind()),
+							segment.kind().toBlockKind(),
 							segment.start(),
 							segment.end(),
 							null,
-							segment.label(),
-							0,
-							0));
+							segment.label()));
 		}
 		return blocks;
 	}
 
-	private static BlockKind toBlockKind(UnavailableSegmentKind kind) {
-		return switch (kind) {
-			case FIXED_BREAK -> BlockKind.FIXED_BREAK;
-			case COMMITMENT -> BlockKind.COMMITMENT;
-			case BUFFER -> BlockKind.BUFFER;
-		};
+	private static boolean workCanFollowBreak(
+			List<FreeInterval> intervals,
+			PlacementCursor cursor,
+			PlacementPolicy policy,
+			int remaining) {
+		LocalTime breakEnd = cursor.position().plusMinutes(policy.breakMinutes());
+		int freeMinutesAfterBreak = freeMinutesAfter(intervals, cursor.intervalIndex(), breakEnd);
+		return freeMinutesAfterBreak >= policy.minSessionMinutes()
+				|| remaining <= freeMinutesAfterBreak;
+	}
+
+	private static int freeMinutesAfter(
+			List<FreeInterval> intervals, int intervalIndex, LocalTime from) {
+		int total = 0;
+		for (int index = intervalIndex; index < intervals.size(); index++) {
+			FreeInterval interval = intervals.get(index);
+			LocalTime start = from.isAfter(interval.start()) ? from : interval.start();
+			if (start.isBefore(interval.end())) {
+				total += minutesBetween(start, interval.end());
+			}
+		}
+		return total;
 	}
 
 	private static int minutesBetween(LocalTime start, LocalTime end) {

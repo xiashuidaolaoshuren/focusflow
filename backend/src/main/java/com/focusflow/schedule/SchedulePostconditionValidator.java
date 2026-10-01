@@ -19,6 +19,7 @@ public final class SchedulePostconditionValidator {
 			PlacementResult result) {
 		List<ScheduledBlock> blocks = result.blocks();
 		validateWellFormedBlocks(blocks);
+		validateBlockShape(blocks);
 		validateTimeline(window, blocks);
 		validateStage1Segments(stage1, blocks);
 		validateEstimateConservation(ranking, result);
@@ -53,6 +54,34 @@ public final class SchedulePostconditionValidator {
 		return time.getSecond() == 0 && time.getNano() == 0;
 	}
 
+	private static void validateBlockShape(List<ScheduledBlock> blocks) {
+		for (ScheduledBlock block : blocks) {
+			if (block.kind() == BlockKind.WORK) {
+				if (block.sourceTaskId() == null) {
+					throw new SchedulePostconditionException(
+							SchedulePostconditionViolation.BLOCK_SHAPE,
+							"work blocks must reference a source task");
+				}
+				if (block.label() != null) {
+					throw new SchedulePostconditionException(
+							SchedulePostconditionViolation.BLOCK_SHAPE,
+							"work blocks must not carry a label");
+				}
+			} else {
+				if (block.label() == null || block.label().isBlank()) {
+					throw new SchedulePostconditionException(
+							SchedulePostconditionViolation.BLOCK_SHAPE,
+							"non-work blocks must carry a label");
+				}
+				if (block.sourceTaskId() != null) {
+					throw new SchedulePostconditionException(
+							SchedulePostconditionViolation.BLOCK_SHAPE,
+							"non-work blocks must not reference a source task");
+				}
+			}
+		}
+	}
+
 	private static void validateTimeline(WorkWindow window, List<ScheduledBlock> blocks) {
 		for (ScheduledBlock block : blocks) {
 			if (block.start().isBefore(window.start()) || block.end().isAfter(window.end())) {
@@ -83,7 +112,7 @@ public final class SchedulePostconditionValidator {
 		for (UnavailableSegment segment : stage1.unavailableSegments()) {
 			expected.add(
 					new StageOneSegmentKey(
-							toBlockKind(segment.kind()),
+							segment.kind().toBlockKind(),
 							segment.label(),
 							segment.start(),
 							segment.end()));
@@ -111,14 +140,6 @@ public final class SchedulePostconditionValidator {
 		return kind == BlockKind.FIXED_BREAK
 				|| kind == BlockKind.COMMITMENT
 				|| kind == BlockKind.BUFFER;
-	}
-
-	private static BlockKind toBlockKind(UnavailableSegmentKind kind) {
-		return switch (kind) {
-			case FIXED_BREAK -> BlockKind.FIXED_BREAK;
-			case COMMITMENT -> BlockKind.COMMITMENT;
-			case BUFFER -> BlockKind.BUFFER;
-		};
 	}
 
 	private static void validateEstimateConservation(

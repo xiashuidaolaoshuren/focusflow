@@ -14,6 +14,7 @@ import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
+import java.lang.reflect.Method;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class SchedulingPreferencesServiceTest {
@@ -43,6 +45,16 @@ class SchedulingPreferencesServiceTest {
 		schedulingPreferencesService =
 				new SchedulingPreferencesService(
 						schedulingPreferencesRepository, currentUser, ownerSchedulingLock);
+	}
+
+	@Test
+	void getEffective_isReadOnlyTransactional() throws Exception {
+		Method method = SchedulingPreferencesService.class.getMethod("getEffective");
+
+		Transactional transactional = method.getAnnotation(Transactional.class);
+
+		assertThat(transactional).isNotNull();
+		assertThat(transactional.readOnly()).isTrue();
 	}
 
 	@Test

@@ -18,4 +18,8 @@ final class PlanMustIncludeRules {
 		}
 		return false;
 	}
+
+	static boolean isShortfallContributor(DailyPlanTask planTask) {
+		return planTask.isMustInclude() && planTask.getUnplacedReason() != null;
+	}
 }

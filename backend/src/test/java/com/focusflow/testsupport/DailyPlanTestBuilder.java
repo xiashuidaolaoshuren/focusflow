@@ -32,6 +32,7 @@ public final class DailyPlanTestBuilder {
 	private int realizedBufferMinutes;
 	private final List<TaskSpec> tasks = new ArrayList<>();
 	private final List<BlockSpec> blocks = new ArrayList<>();
+	private final List<DailyPlanTask> builtTasks = new ArrayList<>();
 
 	private DailyPlanTestBuilder(User owner, LocalDate planDate) {
 		this.owner = owner;
@@ -95,6 +96,12 @@ public final class DailyPlanTestBuilder {
 	}
 
 	public DailyPlan build() {
+		DailyPlan plan = buildTasksOnly();
+		attachBlocksTo(plan);
+		return plan;
+	}
+
+	public DailyPlan buildTasksOnly() {
 		DailyPlan plan = new DailyPlan();
 		plan.setOwner(owner);
 		plan.setPlanDate(planDate);
@@ -108,7 +115,7 @@ public final class DailyPlanTestBuilder {
 		plan.setRequiredMinutes(requiredMinutes);
 		plan.setRequestedBufferMinutes(requestedBufferMinutes);
 		plan.setRealizedBufferMinutes(realizedBufferMinutes);
-		List<DailyPlanTask> builtTasks = new ArrayList<>();
+		List<DailyPlanTask> built = new ArrayList<>();
 		for (TaskSpec spec : tasks) {
 			DailyPlanTask planTask = new DailyPlanTask();
 			planTask.setRank(spec.rank);
@@ -123,8 +130,14 @@ public final class DailyPlanTestBuilder {
 			planTask.setUnplacedReason(spec.unplacedReason);
 			planTask.setUnplacedMinutes(spec.unplacedMinutes);
 			plan.addTask(planTask);
-			builtTasks.add(planTask);
+			built.add(planTask);
 		}
+		builtTasks.clear();
+		builtTasks.addAll(built);
+		return plan;
+	}
+
+	public void attachBlocksTo(DailyPlan plan) {
 		for (BlockSpec spec : blocks) {
 			DailyPlanBlock block = new DailyPlanBlock();
 			block.setKind(spec.kind);
@@ -137,7 +150,6 @@ public final class DailyPlanTestBuilder {
 			}
 			plan.addBlock(block);
 		}
-		return plan;
 	}
 
 	private record TaskSpec(

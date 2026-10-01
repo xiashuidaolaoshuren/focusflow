@@ -22,7 +22,7 @@ public class DailyPlanPromptBuilder {
 		prompt.append(
 				"- Open tasks with dueDate on or before the plan date are due-or-overdue and must be included before optional work.\n");
 		prompt.append(
-				"- Prefer tasks that have estimates. Do not pile on unestimated optional tasks.\n");
+				"- When priority and due date are equal, prefer tasks that have estimates.\n");
 		prompt.append("Return an ordered daily plan using only the listed task ids.");
 		return prompt.toString();
 	}

@@ -1,8 +1,8 @@
 import type {
   DailyPlanResponse,
   DailyPlanSummaryResponse,
-  ScheduledBlockResponse,
   TaskSnapshotResponse,
+  WorkBlockResponse,
 } from '@/types/api'
 
 export const sampleTaskSnapshot: TaskSnapshotResponse = {
@@ -16,7 +16,7 @@ export const sampleTaskSnapshot: TaskSnapshotResponse = {
   mustInclude: true,
 }
 
-export const sampleWorkBlock: ScheduledBlockResponse = {
+export const sampleWorkBlock: WorkBlockResponse = {
   kind: 'WORK',
   startTime: '09:00:00',
   endTime: '09:45:00',

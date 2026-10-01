@@ -5,17 +5,20 @@ import com.focusflow.ai.AiDailyPlanResponse;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
+import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.preferences.EffectiveSchedulingPreferences;
+import com.focusflow.preferences.SchedulingPreferencesQueryService;
+import com.focusflow.schedule.CommitmentWindow;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
 import com.focusflow.user.OwnerSchedulingLock;
-import com.focusflow.user.UserRepository;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -32,29 +35,30 @@ public class DailyPlanService {
 
 	private final DailyPlanAiClient aiClient;
 	private final TaskQueryService taskQueryService;
-	private final UserRepository userRepository;
 	private final CurrentUser currentUser;
 	private final DailyPlanRepository dailyPlanRepository;
 	private final DailyPlanPersister persister;
 	private final DailyPlanResponseMapper responseMapper;
 	private final DailyPlanRankingValidator rankingValidator;
+	private final SchedulingPreferencesQueryService schedulingPreferencesQueryService;
+	private final CommitmentQueryService commitmentQueryService;
 	private final DailyPlanScheduler scheduler;
 	private final OwnerSchedulingLock ownerSchedulingLock;
 
 	public DailyPlanService(
 			DailyPlanAiClient aiClient,
 			TaskQueryService taskQueryService,
-			UserRepository userRepository,
 			CurrentUser currentUser,
 			DailyPlanRepository dailyPlanRepository,
 			DailyPlanPersister persister,
 			DailyPlanResponseMapper responseMapper,
 			DailyPlanRankingValidator rankingValidator,
 			DailyPlanScheduler scheduler,
-			OwnerSchedulingLock ownerSchedulingLock) {
+			OwnerSchedulingLock ownerSchedulingLock,
+			SchedulingPreferencesQueryService schedulingPreferencesQueryService,
+			CommitmentQueryService commitmentQueryService) {
 		this.aiClient = aiClient;
 		this.taskQueryService = taskQueryService;
-		this.userRepository = userRepository;
 		this.currentUser = currentUser;
 		this.dailyPlanRepository = dailyPlanRepository;
 		this.persister = persister;
@@ -62,6 +66,8 @@ public class DailyPlanService {
 		this.rankingValidator = rankingValidator;
 		this.scheduler = scheduler;
 		this.ownerSchedulingLock = ownerSchedulingLock;
+		this.schedulingPreferencesQueryService = schedulingPreferencesQueryService;
+		this.commitmentQueryService = commitmentQueryService;
 	}
 
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
@@ -78,14 +84,17 @@ public class DailyPlanService {
 		if (activeTasks.size() > 100) {
 			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
 		}
+		EffectiveSchedulingPreferences preferences =
+				schedulingPreferencesQueryService.effectiveFor(ownerId);
+		List<CommitmentWindow> commitments = commitmentQueryService.windowsFor(ownerId, planDate);
 		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
 		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
 		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
 		List<Task> rankedTasks = orderTasksByAiRanking(activeTasks, aiResponse.taskIds());
 		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
-		DailyPlanSchedule schedule = scheduler.compose(ownerId, planDate, rankedTasks);
+		DailyPlanSchedule schedule = scheduler.compose(planDate, rankedTasks, preferences, commitments);
 		return persister.persistPlan(
-				ownerId, planDate, request.replacePlanId(), aiItems, schedule);
+				ownerId, planDate, request.replacePlanId(), aiItems, rankedTasks, schedule);
 	}
 
 	private List<Task> orderTasksByAiRanking(List<Task> activeTasks, List<Long> orderedTaskIds) {

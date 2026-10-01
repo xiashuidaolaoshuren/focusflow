@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,6 +16,7 @@ import com.focusflow.ai.AiDailyPlanResponse;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiProviderException;
 import com.focusflow.ai.DailyPlanAiClient;
+import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
@@ -23,8 +25,11 @@ import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.preferences.EffectiveSchedulingPreferences;
+import com.focusflow.preferences.SchedulingPreferencesQueryService;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
+import com.focusflow.schedule.CommitmentWindow;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskPriority;
 import com.focusflow.task.TaskQueryService;
@@ -34,7 +39,6 @@ import com.focusflow.schedule.SchedulePostconditionViolation;
 import com.focusflow.task.TaskStatus;
 import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
-import com.focusflow.user.UserRepository;
 import java.time.LocalTime;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -46,6 +50,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.annotation.AnnotationUtils;
@@ -66,9 +71,6 @@ class DailyPlanServiceTest {
 	private TaskQueryService taskQueryService;
 
 	@Mock
-	private UserRepository userRepository;
-
-	@Mock
 	private CurrentUser currentUser;
 
 	@Mock
@@ -82,6 +84,12 @@ class DailyPlanServiceTest {
 
 	@Mock
 	private OwnerSchedulingLock ownerSchedulingLock;
+
+	@Mock
+	private SchedulingPreferencesQueryService schedulingPreferencesQueryService;
+
+	@Mock
+	private CommitmentQueryService commitmentQueryService;
 
 	@Spy
 	private DailyPlanRankingValidator rankingValidator =
@@ -97,14 +105,15 @@ class DailyPlanServiceTest {
 				new DailyPlanService(
 						aiClient,
 						taskQueryService,
-						userRepository,
 						currentUser,
 						dailyPlanRepository,
 						persister,
 						responseMapper,
 						rankingValidator,
 						scheduler,
-						ownerSchedulingLock);
+						ownerSchedulingLock,
+						schedulingPreferencesQueryService,
+						commitmentQueryService);
 		lenient()
 				.when(
 						dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
@@ -156,16 +165,16 @@ class DailyPlanServiceTest {
 						LocalDate.of(2026, 6, 1),
 						Instant.parse("2026-06-01T09:00:00Z"),
 						warning);
-		when(persister.persistPlan(any(), any(), any(), any(), any())).thenReturn(response);
+		when(persister.persistPlan(any(), any(), any(), any(), any(), any())).thenReturn(response);
 		return response;
 	}
 
 	private void stubPersisterReturn(DailyPlanResponse response) {
-		when(persister.persistPlan(any(), any(), any(), any(), any())).thenReturn(response);
+		when(persister.persistPlan(any(), any(), any(), any(), any(), any())).thenReturn(response);
 	}
 
 	private void stubSchedulerCompose() {
-		when(scheduler.compose(anyLong(), any(), any())).thenReturn(stubSchedule());
+		when(scheduler.compose(any(), any(), any(), any())).thenReturn(stubSchedule());
 	}
 
 	@Test
@@ -179,6 +188,7 @@ class DailyPlanServiceTest {
 						Long.class,
 						LocalDate.class,
 						Long.class,
+						List.class,
 						List.class,
 						DailyPlanSchedule.class);
 		assertThat(AnnotationUtils.findAnnotation(persistPlan, Transactional.class)).isNotNull();
@@ -205,14 +215,64 @@ class DailyPlanServiceTest {
 		dailyPlanService.generate(new GeneratePlanRequest(planDate, null));
 
 		verify(aiClient).generate(any(AiDailyPlanRequest.class));
-		verify(scheduler).compose(eq(42L), eq(planDate), eq(List.of(task)));
+		verify(scheduler).compose(eq(planDate), eq(List.of(task)), any(), any());
 		verify(persister)
 				.persistPlan(
 						eq(42L),
 						eq(planDate),
 						eq(null),
 						eq(List.of(new AiPlanItem(1L, 1))),
+						eq(List.of(task)),
 						eq(schedule));
+	}
+
+	@Test
+	void generate_loadsSchedulingInputsBeforeProviderCall() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+
+		Task task = new Task();
+		ReflectionTestUtils.setField(task, "id", 1L);
+		task.setTitle("Continue work");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setPriority(TaskPriority.MEDIUM);
+		task.setEstimatedMinutes(30);
+		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
+
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		EffectiveSchedulingPreferences preferences = defaultEffectivePreferences();
+		List<CommitmentWindow> commitments =
+				List.of(new CommitmentWindow("Standup", LocalTime.of(10, 0), LocalTime.of(10, 30)));
+		lenient().when(schedulingPreferencesQueryService.effectiveFor(42L)).thenReturn(preferences);
+		lenient().when(commitmentQueryService.windowsFor(42L, planDate)).thenReturn(commitments);
+		lenient()
+				.when(scheduler.compose(planDate, List.of(task), preferences, commitments))
+				.thenReturn(stubSchedule());
+		when(aiClient.generate(any(AiDailyPlanRequest.class)))
+				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
+		stubPersisterReturnWithWarning(null);
+
+		dailyPlanService.generate(new GeneratePlanRequest(planDate, null));
+
+		InOrder inOrder = inOrder(schedulingPreferencesQueryService, commitmentQueryService, aiClient);
+		inOrder.verify(schedulingPreferencesQueryService).effectiveFor(42L);
+		inOrder.verify(commitmentQueryService).windowsFor(42L, planDate);
+		inOrder.verify(aiClient).generate(any(AiDailyPlanRequest.class));
+		verify(scheduler).compose(planDate, List.of(task), preferences, commitments);
+	}
+
+	private EffectiveSchedulingPreferences defaultEffectivePreferences() {
+		return new EffectiveSchedulingPreferences(
+				LocalTime.of(9, 0),
+				LocalTime.of(18, 0),
+				true,
+				50,
+				10,
+				15,
+				0,
+				null,
+				null,
+				List.of());
 	}
 
 	@Test
@@ -251,8 +311,8 @@ class DailyPlanServiceTest {
 				.hasMessage("no plannable tasks available for planning");
 
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -272,8 +332,8 @@ class DailyPlanServiceTest {
 										.isEqualTo("PLAN_CANDIDATE_LIMIT"));
 
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -294,8 +354,8 @@ class DailyPlanServiceTest {
 								assertThat(((ConflictException) ex).getCode()).isEqualTo("PLAN_EXISTS"));
 
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -330,6 +390,7 @@ class DailyPlanServiceTest {
 						eq(planDate),
 						eq(5L),
 						eq(List.of(new AiPlanItem(1L, 1))),
+						eq(List.of(task)),
 						eq(schedule));
 	}
 
@@ -349,8 +410,8 @@ class DailyPlanServiceTest {
 
 		verify(taskQueryService, never()).findPlannableTasksByOwnerId(anyLong());
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -372,8 +433,8 @@ class DailyPlanServiceTest {
 
 		verify(taskQueryService, never()).findPlannableTasksByOwnerId(anyLong());
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -395,8 +456,8 @@ class DailyPlanServiceTest {
 
 		verify(taskQueryService, never()).findPlannableTasksByOwnerId(anyLong());
 		verify(aiClient, never()).generate(any());
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -524,6 +585,7 @@ class DailyPlanServiceTest {
 						eq(planDate),
 						eq(null),
 						eq(List.of(new AiPlanItem(1L, 1))),
+						eq(List.of(task)),
 						eq(schedule));
 		assertThat(response).isSameAs(stubbed);
 	}
@@ -541,7 +603,7 @@ class DailyPlanServiceTest {
 		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
 		when(aiClient.generate(any(AiDailyPlanRequest.class)))
 				.thenReturn(new AiDailyPlanResponse(List.of(1L)));
-		when(scheduler.compose(anyLong(), any(), any()))
+		when(scheduler.compose(any(), any(), any(), any()))
 				.thenThrow(
 						new SchedulePostconditionException(
 								SchedulePostconditionViolation.OUT_OF_WINDOW,
@@ -553,7 +615,7 @@ class DailyPlanServiceTest {
 										new GeneratePlanRequest(LocalDate.of(2026, 6, 1), null)))
 				.isInstanceOf(SchedulePostconditionException.class);
 
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -576,8 +638,8 @@ class DailyPlanServiceTest {
 										new GeneratePlanRequest(LocalDate.of(2026, 6, 1), null)))
 				.isInstanceOf(AiProviderException.class);
 
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -599,8 +661,8 @@ class DailyPlanServiceTest {
 										new GeneratePlanRequest(LocalDate.of(2026, 6, 1), null)))
 				.isInstanceOf(AiProviderException.class);
 
-		verify(scheduler, never()).compose(anyLong(), any(), any());
-		verify(persister, never()).persistPlan(any(), any(), any(), any(), any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
 	}
 
 	@Test

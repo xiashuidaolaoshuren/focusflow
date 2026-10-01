@@ -16,6 +16,7 @@ import {
   usePlanByDate,
   usePlans,
 } from '@/features/plans/hooks'
+import { markRegeneratePromptNeeded, useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
 
 vi.mock('@/features/plans/api', () => ({
   deletePlan: vi.fn(),
@@ -111,6 +112,26 @@ describe('useGeneratePlan', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],
     })
+  })
+
+  it('clears the regenerate prompt on generate success', async () => {
+    mockedGenerateDailyPlan.mockResolvedValue(samplePlanResponse)
+    markRegeneratePromptNeeded()
+
+    const { result } = renderHook(() => useRegeneratePrompt(), {
+      wrapper: createWrapper(),
+    })
+
+    expect(result.current.needed).toBe(true)
+
+    const generate = renderHook(() => useGeneratePlan(), {
+      wrapper: createWrapper(),
+    })
+
+    generate.result.current.mutate({ planDate: '2026-06-15' })
+
+    await waitFor(() => expect(generate.result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(result.current.needed).toBe(false))
   })
 })
 

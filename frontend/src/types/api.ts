@@ -153,16 +153,30 @@ export type TaskSnapshotResponse = {
   mustInclude: boolean
 }
 
-/** Mirrors `com.focusflow.plan.dto.ScheduledBlockResponse` */
-export type ScheduledBlockResponse = {
-  kind: BlockKind
+/** Mirrors `com.focusflow.plan.dto.ScheduledBlockResponse` as discriminated variants. */
+export type LabelledBlockKind = 'CADENCE_BREAK' | 'FIXED_BREAK' | 'COMMITMENT' | 'BUFFER'
+
+export type WorkBlockResponse = {
+  kind: 'WORK'
   startTime: string
   endTime: string
-  sessionIndex: number | null
-  sessionCount: number | null
-  taskSnapshot: TaskSnapshotResponse | null
-  label: string | null
+  sessionIndex: number
+  sessionCount: number
+  taskSnapshot: TaskSnapshotResponse
+  label: null
 }
+
+export type LabelledBlockResponse = {
+  kind: LabelledBlockKind
+  startTime: string
+  endTime: string
+  sessionIndex: null
+  sessionCount: null
+  taskSnapshot: null
+  label: string
+}
+
+export type ScheduledBlockResponse = WorkBlockResponse | LabelledBlockResponse
 
 /** Mirrors `com.focusflow.plan.dto.UnplacedWorkResponse` */
 export type UnplacedWorkResponse = {

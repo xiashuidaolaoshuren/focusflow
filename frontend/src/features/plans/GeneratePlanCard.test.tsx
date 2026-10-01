@@ -161,6 +161,48 @@ describe('GeneratePlanCard', () => {
     )
   })
 
+  it('shows the conflict error when the by-date refetch fails', async () => {
+    const mutate = vi.fn(
+      async (
+        payload: { planDate: string; replacePlanId?: number },
+        options?: {
+          onError?: (error: Error) => void | Promise<void>
+          onSuccess?: () => void
+        },
+      ) => {
+        if (payload.replacePlanId == null) {
+          await options?.onError?.(
+            new ApiError({
+              status: 409,
+              message: 'plan already exists',
+              code: 'PLAN_EXISTS',
+            }),
+          )
+        }
+      },
+    )
+
+    mockedUseGeneratePlan.mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: false,
+      error: null,
+      reset: vi.fn(),
+    } as unknown as ReturnType<typeof useGeneratePlan>)
+    mockedGetPlanByDate.mockRejectedValue(new Error('refetch failed'))
+
+    renderGeneratePlanCard('2026-06-16')
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /generate plan for 2026-06-16/i }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/plan already exists/i)
+    })
+    expect(screen.queryByText(/replace existing plan\?/i)).not.toBeInTheDocument()
+  })
+
   it('offers a fresh create when refetch finds no plan after PLAN_CHANGED', async () => {
     const mutate = vi.fn(
       async (

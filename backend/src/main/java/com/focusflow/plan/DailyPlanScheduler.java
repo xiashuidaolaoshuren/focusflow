@@ -1,9 +1,7 @@
 package com.focusflow.plan;
 
-import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.preferences.EffectiveFixedBreak;
 import com.focusflow.preferences.EffectiveSchedulingPreferences;
-import com.focusflow.preferences.SchedulingPreferencesQueryService;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.CommitmentWindow;
 import com.focusflow.schedule.FixedBreakWindow;
@@ -26,27 +24,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class DailyPlanScheduler {
 
-	private final SchedulingPreferencesQueryService schedulingPreferencesQueryService;
-	private final CommitmentQueryService commitmentQueryService;
-
-	public DailyPlanScheduler(
-			SchedulingPreferencesQueryService schedulingPreferencesQueryService,
-			CommitmentQueryService commitmentQueryService) {
-		this.schedulingPreferencesQueryService = schedulingPreferencesQueryService;
-		this.commitmentQueryService = commitmentQueryService;
-	}
-
-	public DailyPlanSchedule compose(Long ownerId, LocalDate planDate, List<Task> rankedTasks) {
-		EffectiveSchedulingPreferences preferences =
-				schedulingPreferencesQueryService.effectiveFor(ownerId);
+	public DailyPlanSchedule compose(
+			LocalDate planDate,
+			List<Task> rankedTasks,
+			EffectiveSchedulingPreferences preferences,
+			List<CommitmentWindow> commitments) {
 		WorkWindow window =
 				new WorkWindow(preferences.workDayStart(), preferences.workDayEnd());
 		List<FixedBreakWindow> fixedBreaks =
 				preferences.fixedBreaks().stream()
 						.map(this::toFixedBreakWindow)
 						.toList();
-		List<CommitmentWindow> commitments =
-				commitmentQueryService.windowsFor(ownerId, planDate);
 
 		FreeIntervalPlan stage1 =
 				FreeIntervalPlanner.plan(

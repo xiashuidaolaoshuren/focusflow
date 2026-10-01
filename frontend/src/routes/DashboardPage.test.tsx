@@ -410,6 +410,17 @@ describe('DashboardPage', () => {
     expect(deleteMutate).toHaveBeenCalledWith(1)
   })
 
+  it('labels the plan view with the selected planning date', () => {
+    mockEmptyTasks()
+    mockMutations()
+    mockExistingPlan()
+
+    renderDashboard('/dashboard?date=2026-06-16')
+
+    expect(screen.getByText('Plan for 2026-06-16')).toBeInTheDocument()
+    expect(screen.queryByText(/today's plan/i)).not.toBeInTheDocument()
+  })
+
   it('displays existing today plan on page load', () => {
     mockEmptyTasks()
     mockMutations()

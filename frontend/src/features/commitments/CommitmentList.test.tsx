@@ -49,25 +49,25 @@ describe('CommitmentList', () => {
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCommitments>)
+    } as unknown as ReturnType<typeof useCommitments>)
     mockedUseCreateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCreateCommitment>)
+    } as unknown as ReturnType<typeof useCreateCommitment>)
     mockedUseUpdateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useUpdateCommitment>)
+    } as unknown as ReturnType<typeof useUpdateCommitment>)
     mockedUseDeleteCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useDeleteCommitment>)
+    } as unknown as ReturnType<typeof useDeleteCommitment>)
 
     renderCommitmentList('2026-06-16')
 
@@ -82,25 +82,25 @@ describe('CommitmentList', () => {
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCommitments>)
+    } as unknown as ReturnType<typeof useCommitments>)
     mockedUseCreateCommitment.mockReturnValue({
       mutate,
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCreateCommitment>)
+    } as unknown as ReturnType<typeof useCreateCommitment>)
     mockedUseUpdateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useUpdateCommitment>)
+    } as unknown as ReturnType<typeof useUpdateCommitment>)
     mockedUseDeleteCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useDeleteCommitment>)
+    } as unknown as ReturnType<typeof useDeleteCommitment>)
 
     renderCommitmentList('2026-06-16')
 
@@ -146,25 +146,25 @@ describe('CommitmentList', () => {
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCommitments>)
+    } as unknown as ReturnType<typeof useCommitments>)
     mockedUseCreateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCreateCommitment>)
+    } as unknown as ReturnType<typeof useCreateCommitment>)
     mockedUseUpdateCommitment.mockReturnValue({
       mutate,
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useUpdateCommitment>)
+    } as unknown as ReturnType<typeof useUpdateCommitment>)
     mockedUseDeleteCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useDeleteCommitment>)
+    } as unknown as ReturnType<typeof useDeleteCommitment>)
 
     renderCommitmentList('2026-06-16')
 
@@ -214,25 +214,25 @@ describe('CommitmentList', () => {
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCommitments>)
+    } as unknown as ReturnType<typeof useCommitments>)
     mockedUseCreateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useCreateCommitment>)
+    } as unknown as ReturnType<typeof useCreateCommitment>)
     mockedUseUpdateCommitment.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useUpdateCommitment>)
+    } as unknown as ReturnType<typeof useUpdateCommitment>)
     mockedUseDeleteCommitment.mockReturnValue({
       mutate,
       isPending: false,
       isError: false,
       error: null,
-    } as ReturnType<typeof useDeleteCommitment>)
+    } as unknown as ReturnType<typeof useDeleteCommitment>)
 
     renderCommitmentList('2026-06-16')
 

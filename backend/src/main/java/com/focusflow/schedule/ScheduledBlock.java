@@ -7,6 +7,4 @@ public record ScheduledBlock(
 		LocalTime start,
 		LocalTime end,
 		Long sourceTaskId,
-		String label,
-		int sessionIndex,
-		int sessionCount) {}
+		String label) {}

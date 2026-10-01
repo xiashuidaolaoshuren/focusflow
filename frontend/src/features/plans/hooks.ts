@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
+  clearRegeneratePrompt,
+} from '@/features/plans/regeneratePrompt'
+import {
   deletePlan,
   generateDailyPlan,
   getPlanByDate,
@@ -74,6 +77,7 @@ export function useGeneratePlan() {
   return useMutation({
     mutationFn: (request: GeneratePlanRequest) => generateDailyPlan(request),
     onSuccess: async (plan) => {
+      clearRegeneratePrompt()
       queryClient.setQueryData(planByDateQueryKey(plan.planDate), plan)
       await Promise.all([
         queryClient.invalidateQueries({

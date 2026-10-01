@@ -44,6 +44,7 @@ function isPlanConflictError(error: Error): error is ApiError {
 export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
   const { mutate, isPending, isError, error, reset } = useGeneratePlan()
   const [conflict, setConflict] = useState<ConflictState | null>(null)
+  const [conflictRefetchFailure, setConflictRefetchFailure] = useState<Error | null>(null)
 
   const showGenerateError =
     isError && error instanceof Error && !isPlanConflictError(error)
@@ -51,6 +52,7 @@ export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
   function handleSuccess() {
     toast.success(`Plan generated for ${planDate}`)
     setConflict(null)
+    setConflictRefetchFailure(null)
     reset()
   }
 
@@ -66,8 +68,12 @@ export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
             return
           }
 
-          const existingPlan = await getPlanByDate(planDate)
-          setConflict({ existingPlan })
+          try {
+            const existingPlan = await getPlanByDate(planDate)
+            setConflict({ existingPlan })
+          } catch {
+            setConflictRefetchFailure(mutationError)
+          }
         },
       },
     )
@@ -75,6 +81,7 @@ export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
 
   function handleGenerateClick() {
     setConflict(null)
+    setConflictRefetchFailure(null)
     reset()
     submitGenerate()
   }
@@ -103,6 +110,15 @@ export function GeneratePlanCard({ planDate }: GeneratePlanCardProps) {
               <Alert variant="destructive">
                 <AlertTitle>Could not generate plan</AlertTitle>
                 <AlertDescription>{error.message}</AlertDescription>
+              </Alert>
+            )}
+            {conflictRefetchFailure && (
+              <Alert variant="destructive">
+                <AlertTitle>Could not generate plan</AlertTitle>
+                <AlertDescription>
+                  Could not check the current plan for {planDate}:{' '}
+                  {conflictRefetchFailure.message}
+                </AlertDescription>
               </Alert>
             )}
             <Button type="button" disabled={isPending} onClick={handleGenerateClick}>

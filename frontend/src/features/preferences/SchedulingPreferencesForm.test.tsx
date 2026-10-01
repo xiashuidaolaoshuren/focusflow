@@ -58,7 +58,7 @@ function mockLoadedPreferences(
     isPending: false,
     isError: false,
     error: null,
-  } as ReturnType<typeof useSchedulingPreferences>)
+  } as unknown as ReturnType<typeof useSchedulingPreferences>)
 }
 
 function mockSaveMutation(
@@ -74,7 +74,7 @@ function mockSaveMutation(
     isPending: options.isPending ?? false,
     isError: options.isError ?? false,
     error: options.error ?? null,
-  } as ReturnType<typeof useUpdateSchedulingPreferences>)
+  } as unknown as ReturnType<typeof useUpdateSchedulingPreferences>)
 }
 
 describe('SchedulingPreferencesForm loading', () => {

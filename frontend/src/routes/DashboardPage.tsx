@@ -141,6 +141,8 @@ export function DashboardPage() {
         <CommitmentList planDate={planningDate} />
         <DailyPlanView
           plan={plan}
+          title={`Plan for ${planningDate}`}
+          emptyDescription={`No plan for ${planningDate} yet.`}
           isPending={isPending}
           isError={isError}
           onRetry={refetch}
