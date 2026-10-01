@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  clearRegeneratePrompt,
+  markRegeneratePromptNeeded,
+} from '@/features/plans/regeneratePrompt'
 import { DashboardPage } from '@/routes/DashboardPage'
 
 vi.mock('@/features/tasks/hooks', async (importOriginal) => {
@@ -16,8 +21,35 @@ vi.mock('@/features/tasks/hooks', async (importOriginal) => {
 })
 
 vi.mock('@/features/plans/hooks', () => ({
-  useTodayPlan: vi.fn(),
+  usePlanByDate: vi.fn(),
   useGeneratePlan: vi.fn(),
+}))
+
+vi.mock('@/features/commitments/hooks', () => ({
+  useCommitments: vi.fn(() => ({
+    commitments: [],
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useCreateCommitment: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useUpdateCommitment: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
+  useDeleteCommitment: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  })),
 }))
 
 vi.mock('sonner', () => ({
@@ -27,14 +59,14 @@ vi.mock('sonner', () => ({
 }))
 
 import { useCreateTask, useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
-import { useGeneratePlan, useTodayPlan } from '@/features/plans/hooks'
-import type { DailyPlanResponse } from '@/types/api'
+import { samplePlan } from '@/features/plans/planFixtures'
+import { useGeneratePlan, usePlanByDate } from '@/features/plans/hooks'
 
 const mockedUseTasks = vi.mocked(useTasks)
 const mockedUseCreateTask = vi.mocked(useCreateTask)
 const mockedUseUpdateTask = vi.mocked(useUpdateTask)
 const mockedUseDeleteTask = vi.mocked(useDeleteTask)
-const mockedUseTodayPlan = vi.mocked(useTodayPlan)
+const mockedUsePlanByDate = vi.mocked(usePlanByDate)
 const mockedUseGeneratePlan = vi.mocked(useGeneratePlan)
 
 const sampleTask = {
@@ -47,29 +79,9 @@ const sampleTask = {
   estimatedMinutes: 60,
 }
 
-const samplePlan: DailyPlanResponse = {
-  id: 1,
-  planDate: '2026-06-15',
-  createdAt: '2026-06-15T09:00:00Z',
-  availableMinutes: null,
-  warning: null,
-  items: [
-    {
-      position: 1,
-      task: {
-        id: 10,
-        title: 'Write tests',
-        description: null,
-        priority: 'HIGH',
-        status: 'OPEN',
-        dueDate: '2026-06-15',
-        estimatedMinutes: 45,
-      },
-    },
-  ],
-}
+const dashboardSamplePlan = samplePlan
 
-function renderDashboard() {
+function renderDashboard(initialEntry = '/dashboard') {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -77,18 +89,24 @@ function renderDashboard() {
     },
   })
 
+  const router = createMemoryRouter(
+    [{ path: '/dashboard', element: <DashboardPage /> }],
+    { initialEntries: [initialEntry] },
+  )
+
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <DashboardPage />
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   )
 
   return {
     ...view,
+    router,
     rerenderDashboard: () =>
       view.rerender(
         <QueryClientProvider client={queryClient}>
-          <DashboardPage />
+          <RouterProvider router={router} />
         </QueryClientProvider>,
       ),
   }
@@ -132,13 +150,13 @@ function mockMutations() {
 }
 
 function mockNoPlan() {
-  mockedUseTodayPlan.mockReturnValue({
+  mockedUsePlanByDate.mockReturnValue({
     isPending: false,
     isError: false,
     plan: null,
     hasPlan: false,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useTodayPlan>)
+  } as unknown as ReturnType<typeof usePlanByDate>)
   mockedUseGeneratePlan.mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
@@ -148,13 +166,13 @@ function mockNoPlan() {
 }
 
 function mockPendingPlan() {
-  mockedUseTodayPlan.mockReturnValue({
+  mockedUsePlanByDate.mockReturnValue({
     isPending: true,
     isError: false,
     plan: null,
     hasPlan: false,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useTodayPlan>)
+  } as unknown as ReturnType<typeof usePlanByDate>)
   mockedUseGeneratePlan.mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
@@ -164,13 +182,13 @@ function mockPendingPlan() {
 }
 
 function mockPlanError() {
-  mockedUseTodayPlan.mockReturnValue({
+  mockedUsePlanByDate.mockReturnValue({
     isPending: false,
     isError: true,
     plan: null,
     hasPlan: false,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useTodayPlan>)
+  } as unknown as ReturnType<typeof usePlanByDate>)
   mockedUseGeneratePlan.mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
@@ -180,13 +198,13 @@ function mockPlanError() {
 }
 
 function mockExistingPlan() {
-  mockedUseTodayPlan.mockReturnValue({
+  mockedUsePlanByDate.mockReturnValue({
     isPending: false,
     isError: false,
-    plan: samplePlan,
+    plan: dashboardSamplePlan,
     hasPlan: true,
     refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useTodayPlan>)
+  } as unknown as ReturnType<typeof usePlanByDate>)
   mockedUseGeneratePlan.mockReturnValue({
     mutate: vi.fn(),
     isPending: false,
@@ -196,6 +214,50 @@ function mockExistingPlan() {
 }
 
 describe('DashboardPage', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    clearRegeneratePrompt()
+  })
+
+  it('defaults to the browser-local planning date when no query param is present', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
+    mockEmptyTasks()
+    mockMutations()
+    mockNoPlan()
+
+    const { router } = renderDashboard('/dashboard')
+
+    expect(mockedUsePlanByDate).toHaveBeenCalledWith('2026-06-15')
+    expect(screen.getByLabelText(/planning date/i)).toHaveValue('2026-06-15')
+    expect(router.state.location.search).toBe('?date=2026-06-15')
+  })
+
+  it('loads the plan for ?date= query param', () => {
+    mockEmptyTasks()
+    mockMutations()
+    mockNoPlan()
+
+    renderDashboard('/dashboard?date=2026-06-16')
+
+    expect(mockedUsePlanByDate).toHaveBeenCalledWith('2026-06-16')
+    expect(screen.getByLabelText(/planning date/i)).toHaveValue('2026-06-16')
+  })
+
+  it('updates the search param when the planning date changes', () => {
+    mockEmptyTasks()
+    mockMutations()
+    mockNoPlan()
+
+    const { router } = renderDashboard('/dashboard?date=2026-06-16')
+
+    fireEvent.change(screen.getByLabelText(/planning date/i), {
+      target: { value: '2026-06-20' },
+    })
+
+    expect(router.state.location.search).toBe('?date=2026-06-20')
+  })
+
   it('shows actionable empty-state CTA copy', () => {
     mockEmptyTasks()
     mockMutations()
@@ -270,14 +332,11 @@ describe('DashboardPage', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /^new task$/i })[0]!)
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
-    })
-
-    fireEvent.change(screen.getByLabelText(/^title$/i), {
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText(/^title$/i), {
       target: { value: 'Write tests' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /create task/i }))
+    fireEvent.click(within(dialog).getByRole('button', { name: /create task/i }))
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -295,13 +354,11 @@ describe('DashboardPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /task actions for write report/i }))
     fireEvent.click(await screen.findByRole('menuitem', { name: /edit/i }))
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
-    })
+    const dialog = await screen.findByRole('dialog')
     expect(
-      screen.getByRole('heading', { name: /edit task/i }),
+      within(dialog).getByRole('heading', { name: /edit task/i }),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText(/^title$/i)).toHaveValue('Write report')
+    expect(within(dialog).getByLabelText(/^title$/i)).toHaveValue('Write report')
   })
 
   it('triggers status update mutation from quick status control', () => {
@@ -353,6 +410,17 @@ describe('DashboardPage', () => {
     expect(deleteMutate).toHaveBeenCalledWith(1)
   })
 
+  it('labels the plan view with the selected planning date', () => {
+    mockEmptyTasks()
+    mockMutations()
+    mockExistingPlan()
+
+    renderDashboard('/dashboard?date=2026-06-16')
+
+    expect(screen.getByText('Plan for 2026-06-16')).toBeInTheDocument()
+    expect(screen.queryByText(/today's plan/i)).not.toBeInTheDocument()
+  })
+
   it('displays existing today plan on page load', () => {
     mockEmptyTasks()
     mockMutations()
@@ -360,8 +428,8 @@ describe('DashboardPage', () => {
 
     renderDashboard()
 
-    expect(screen.getByText('Write tests')).toBeInTheDocument()
-    expect(screen.getByText('45 min')).toBeInTheDocument()
+    expect(screen.getByText(/Write tests/)).toBeInTheDocument()
+    expect(screen.getByText(/45 min scheduled/)).toBeInTheDocument()
   })
 
   it('shows plan skeleton while today plan is loading', () => {
@@ -385,51 +453,81 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/could not load plan/i)
   })
 
-  it('updates displayed plan after successful generate', () => {
+  it('submits generate for the selected planning date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-15T10:00:00'))
     mockEmptyTasks()
     mockMutations()
-    mockedUseTodayPlan.mockReturnValue({
-      isPending: false,
-      plan: null,
-      hasPlan: false,
-    } as unknown as ReturnType<typeof useTodayPlan>)
+    mockNoPlan()
 
-    const mutate = vi.fn(
-      (_payload: unknown, options?: { onSuccess?: () => void }) => {
-        mockedUseTodayPlan.mockReturnValue({
-          isPending: false,
-          plan: samplePlan,
-          hasPlan: true,
-        } as unknown as ReturnType<typeof useTodayPlan>)
-        options?.onSuccess?.()
-      },
-    )
+    const mutate = vi.fn()
     mockedUseGeneratePlan.mockReturnValue({
       mutate,
       isPending: false,
       isError: false,
       error: null,
+      reset: vi.fn(),
     } as unknown as ReturnType<typeof useGeneratePlan>)
 
-    const { rerenderDashboard } = renderDashboard()
+    renderDashboard('/dashboard')
 
-    expect(screen.getByText(/no plan for today yet/i)).toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText(/available focus time/i), {
-      target: { value: '90' },
-    })
     fireEvent.click(
-      screen.getByRole('button', { name: /generate today's plan/i }),
+      screen.getByRole('button', { name: /generate plan for 2026-06-15/i }),
     )
+
+    expect(mutate).toHaveBeenCalledWith(
+      { planDate: '2026-06-15' },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    )
+  })
+
+  it('shows regenerate prompt after task edit when a plan exists', async () => {
+    mockLoadedTasks()
+    mockMutations()
+    mockExistingPlan()
+
+    const mutate = vi.fn(
+      (_payload: unknown, options?: { onSuccess?: () => void }) => {
+        markRegeneratePromptNeeded()
+        options?.onSuccess?.()
+      },
+    )
+    mockedUseUpdateTask.mockReturnValue({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    const { rerenderDashboard } = renderDashboard('/dashboard?date=2026-06-15')
+
+    expect(
+      screen.queryByText(/regenerate to apply changes/i),
+    ).not.toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/change status for write report/i), {
+      target: { value: 'IN_PROGRESS' },
+    })
 
     rerenderDashboard()
 
-    expect(screen.getByText('Write tests')).toBeInTheDocument()
-    expect(mutate).toHaveBeenCalledWith(
-      { availableMinutes: 90 },
-      expect.objectContaining({
-        onSuccess: expect.any(Function),
-      }),
-    )
+    expect(
+      screen.getByText(/regenerate to apply changes/i),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show regenerate prompt when no plan exists', () => {
+    mockLoadedTasks()
+    mockMutations()
+    mockNoPlan()
+
+    markRegeneratePromptNeeded()
+
+    renderDashboard('/dashboard?date=2026-06-15')
+
+    expect(
+      screen.queryByText(/regenerate to apply changes/i),
+    ).not.toBeInTheDocument()
   })
 })

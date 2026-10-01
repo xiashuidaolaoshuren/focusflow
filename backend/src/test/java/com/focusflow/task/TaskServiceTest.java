@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
@@ -85,6 +86,20 @@ class TaskServiceTest {
 		verify(taskRepository).save(captor.capture());
 		assertThat(captor.getValue().getStatus()).isEqualTo(TaskStatus.OPEN);
 		assertThat(captor.getValue().getPriority()).isEqualTo(TaskPriority.MEDIUM);
+	}
+
+	@Test
+	void create_withNonPositiveEstimatedMinutes_throwsBadRequestAndDoesNotSave() {
+		assertThatThrownBy(
+						() -> taskService.create(new CreateTaskRequest("My task", null, null, null, 0)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("estimated minutes must be null or positive");
+		assertThatThrownBy(
+						() -> taskService.create(new CreateTaskRequest("My task", null, null, null, -1)))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("estimated minutes must be null or positive");
+
+		verify(taskRepository, never()).save(any(Task.class));
 	}
 
 	@Test
@@ -167,6 +182,22 @@ class TaskServiceTest {
 		assertThat(response.title()).isEqualTo("New title");
 		assertThat(response.status()).isEqualTo(TaskStatus.DONE);
 		verify(taskRepository).save(task);
+	}
+
+	@Test
+	void updateForCurrentUser_withNonPositiveEstimatedMinutes_throwsBadRequestAndDoesNotSave() {
+		UpdateTaskRequest zeroEstimate =
+				new UpdateTaskRequest("New title", null, null, null, null, 0);
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, zeroEstimate))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("estimated minutes must be null or positive");
+		UpdateTaskRequest negativeEstimate =
+				new UpdateTaskRequest("New title", null, null, null, null, -1);
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, negativeEstimate))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("estimated minutes must be null or positive");
+
+		verify(taskRepository, never()).save(any(Task.class));
 	}
 
 	@Test

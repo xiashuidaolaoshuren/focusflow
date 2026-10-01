@@ -62,8 +62,8 @@ function PlanHistoryListEmpty() {
   )
 }
 
-function formatItemCount(count: number): string {
-  return `${count} block${count === 1 ? '' : 's'}`
+function formatSummaryCounts(plan: DailyPlanSummaryResponse): string {
+  return `${plan.scheduledWorkMinutes} min · ${plan.workSessionCount} session${plan.workSessionCount === 1 ? '' : 's'} · ${plan.scheduledTaskCount} task${plan.scheduledTaskCount === 1 ? '' : 's'} · ${plan.unplacedWorkCount} unplaced`
 }
 
 export function PlanHistoryList({
@@ -119,14 +119,14 @@ export function PlanHistoryList({
           >
             <Link
               to={`/plans/${plan.id}`}
-              className="flex flex-1 items-center justify-between rounded-lg px-2 py-2 transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              className="flex flex-1 flex-col gap-1 rounded-lg px-2 py-2 transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <span className="font-medium">{plan.planDate}</span>
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                {plan.hasWarning && (
+              <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                {plan.hasWarning ? (
                   <Badge variant="secondary">Shortfall</Badge>
-                )}
-                {formatItemCount(plan.itemCount)}
+                ) : null}
+                {formatSummaryCounts(plan)}
               </span>
             </Link>
             <PlanDeleteButton

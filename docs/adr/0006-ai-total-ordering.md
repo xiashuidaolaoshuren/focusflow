@@ -1,0 +1,3 @@
+# The model orders every candidate; Java places ranked work
+
+The AI returns one authoritative ordered `taskIds` array containing every candidate exactly once; it does not return redundant positions. The scheduler places must-include work, then partially places optional work in ranking order until free time is exhausted. Ranking outranks packing efficiency, so a shorter lower-ranked task never jumps ahead merely because it would finish. Validation checks known ids, completeness, uniqueness, and block order—not leftover arithmetic. Keeping model-selected subsets or dual array/position ordering would preserve ambiguity and arithmetic failures; dropping the model entirely would reopen the settled decision that ranking stays with AI.

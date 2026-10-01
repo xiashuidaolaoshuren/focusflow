@@ -1,0 +1,3 @@
+# Times are wall-clock; there is no timezone preference
+
+Work windows, breaks, commitments, and block boundaries are minute-aligned `LocalTime`; plan dates and commitment dates are `LocalDate`. Requests reject non-zero seconds or nanoseconds and PostgreSQL uses `time(0)`, so minute-based rules never silently round. "09:00" means nine in the morning for that planning date, wherever the user is. The dashboard owns an explicit planning-date selector in `?date=YYYY-MM-DD`, defaulted from the browser; it drives plan lookup, commitments, and generation. 1.3.0 can supply "now" the same way. An IANA timezone would only help the server infer "today," while UTC instants would make a recurring "09:00" ambiguous across DST. Overnight spans are out of scope.

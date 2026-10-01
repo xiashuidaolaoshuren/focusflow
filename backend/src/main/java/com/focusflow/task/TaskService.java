@@ -1,5 +1,6 @@
 package com.focusflow.task;
 
+import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
@@ -33,6 +34,7 @@ public class TaskService {
 
 	@Transactional
 	public TaskResponse create(CreateTaskRequest request) {
+		requireNullOrPositiveEstimate(request.estimatedMinutes());
 		User owner = loadCurrentUserEntity();
 
 		Task task = new Task();
@@ -61,6 +63,7 @@ public class TaskService {
 
 	@Transactional
 	public TaskResponse updateForCurrentUser(Long taskId, UpdateTaskRequest request) {
+		requireNullOrPositiveEstimate(request.estimatedMinutes());
 		Task task = loadTaskForCurrentUser(taskId);
 		task.setTitle(request.title());
 		task.setDescription(request.description());
@@ -76,6 +79,12 @@ public class TaskService {
 	public void deleteForCurrentUser(Long taskId) {
 		Task task = loadTaskForCurrentUser(taskId);
 		taskRepository.delete(task);
+	}
+
+	private static void requireNullOrPositiveEstimate(Integer estimatedMinutes) {
+		if (estimatedMinutes != null && estimatedMinutes <= 0) {
+			throw new BadRequestException("estimated minutes must be null or positive");
+		}
 	}
 
 	private User loadCurrentUserEntity() {

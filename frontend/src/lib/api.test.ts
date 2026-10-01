@@ -60,14 +60,15 @@ describe('apiRequest', () => {
       vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            status: 400,
-            error: 'Bad Request',
-            message: 'Validation failed',
-            path: '/api/tasks',
+            status: 409,
+            error: 'Conflict',
+            message: 'plan already exists',
+            code: 'PLAN_EXISTS',
+            path: '/api/daily-plans/generate',
             details: { title: ['must not be blank'] },
           } satisfies ApiErrorResponse),
           {
-            status: 400,
+            status: 409,
             headers: { 'Content-Type': 'application/json' },
           },
         ),
@@ -76,8 +77,9 @@ describe('apiRequest', () => {
 
     await expect(apiRequest('/api/tasks', { method: 'POST', body: {} })).rejects.toMatchObject({
       name: 'ApiError',
-      status: 400,
-      message: 'Validation failed',
+      status: 409,
+      message: 'plan already exists',
+      code: 'PLAN_EXISTS',
       details: { title: ['must not be blank'] },
     } satisfies Partial<ApiError>)
   })

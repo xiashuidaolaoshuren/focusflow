@@ -1,7 +1,7 @@
 package com.focusflow.plan;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,21 +17,24 @@ import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.GlobalExceptionHandler;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
-import com.focusflow.plan.dto.DailyPlanItemResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
-import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ScheduledBlockResponse;
+import com.focusflow.plan.dto.TaskSnapshotResponse;
+import com.focusflow.schedule.BlockKind;
+import com.focusflow.testsupport.DailyPlanResponseTestSupport;
 import java.util.Optional;
 import com.focusflow.security.FocusFlowUserDetailsService;
 import com.focusflow.security.SecurityConfig;
 import com.focusflow.task.TaskPriority;
 import com.focusflow.task.TaskStatus;
-import com.focusflow.task.dto.TaskResponse;
+import java.time.LocalTime;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -62,31 +65,10 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120
+										  "planDate": "2026-06-01"
 										}
 										"""))
 				.andExpect(status().isUnauthorized());
-
-		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
-	}
-
-	@Test
-	@WithMockUser
-	void generate_withInvalidAvailableMinutes_returns400WithDetails() throws Exception {
-		mockMvc.perform(
-						post("/api/daily-plans/generate")
-								.with(csrf())
-								.contentType(MediaType.APPLICATION_JSON)
-								.content(
-										"""
-										{
-										  "availableMinutes": 0
-										}
-										"""))
-				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.status").value(400))
-				.andExpect(jsonPath("$.path").value("/api/daily-plans/generate"))
-				.andExpect(jsonPath("$.details.availableMinutes").isArray());
 
 		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
 	}
@@ -98,18 +80,42 @@ class DailyPlanControllerTest {
 						post("/api/daily-plans/generate")
 								.with(csrf())
 								.contentType(MediaType.APPLICATION_JSON)
-								.content(
-										"""
-										{
-										  "availableMinutes": 120
-										}
-										"""))
+								.content("{}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value(400))
 				.andExpect(jsonPath("$.path").value("/api/daily-plans/generate"))
 				.andExpect(jsonPath("$.details.planDate").isArray());
 
 		verify(dailyPlanService, never()).generate(any(GeneratePlanRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void generate_passesReplacePlanIdToService() throws Exception {
+		when(dailyPlanService.generate(any(GeneratePlanRequest.class)))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								1L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		mockMvc.perform(
+						post("/api/daily-plans/generate")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "planDate": "2026-06-01",
+										  "replacePlanId": 5
+										}
+										"""))
+				.andExpect(status().isCreated());
+
+		ArgumentCaptor<GeneratePlanRequest> captor = ArgumentCaptor.forClass(GeneratePlanRequest.class);
+		verify(dailyPlanService).generate(captor.capture());
+		assertThat(captor.getValue().replacePlanId()).isEqualTo(5L);
 	}
 
 	@Test
@@ -125,7 +131,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 60,
 										  "planDate": "2026-06-01"
 										}
 										"""))
@@ -140,23 +145,28 @@ class DailyPlanControllerTest {
 	void generate_whenAuthenticated_returns201AndBody() throws Exception {
 		when(dailyPlanService.generate(any(GeneratePlanRequest.class)))
 				.thenReturn(
-						new DailyPlanResponse(
+						DailyPlanResponseTestSupport.withBlocksAndUnplaced(
 								1L,
 								LocalDate.of(2026, 6, 1),
 								Instant.parse("2026-06-01T09:00:00Z"),
 								List.of(
-										new DailyPlanItemResponse(
+										new ScheduledBlockResponse(
+												BlockKind.WORK,
+												LocalTime.of(9, 0),
+												LocalTime.of(9, 45),
 												1,
-												new TaskResponse(
+												1,
+												new TaskSnapshotResponse(
+														10L,
 														10L,
 														"Write tests",
-														null,
 														TaskPriority.HIGH,
 														TaskStatus.OPEN,
 														null,
-														45))),
-								null,
-								null));
+														45,
+														false),
+												null)),
+								List.of()));
 
 		mockMvc.perform(
 						post("/api/daily-plans/generate")
@@ -165,62 +175,15 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120,
 										  "planDate": "2026-06-01"
 										}
 										"""))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.id").value(1))
 				.andExpect(jsonPath("$.planDate").value("2026-06-01"))
-				.andExpect(jsonPath("$.items.length()").value(1))
-				.andExpect(jsonPath("$.items[0].position").value(1))
-				.andExpect(jsonPath("$.items[0].task.title").value("Write tests"));
-	}
-
-	@Test
-	@WithMockUser
-	void generate_whenResponseIncludesWarning_rendersAvailableMinutesAndWarningJson() throws Exception {
-		when(dailyPlanService.generate(any(GeneratePlanRequest.class)))
-				.thenReturn(
-						new DailyPlanResponse(
-								1L,
-								LocalDate.of(2026, 6, 1),
-								Instant.parse("2026-06-01T09:00:00Z"),
-								List.of(
-										new DailyPlanItemResponse(
-												1,
-												new TaskResponse(
-														10L,
-														"Write tests",
-														null,
-														TaskPriority.HIGH,
-														TaskStatus.OPEN,
-														null,
-														45))),
-								120,
-								new DailyPlanWarning(
-										90,
-										List.of(new DailyPlanWarning.EstimatedTask(10L, "Write tests", 90)),
-										List.of())));
-
-		mockMvc.perform(
-						post("/api/daily-plans/generate")
-								.with(csrf())
-								.contentType(MediaType.APPLICATION_JSON)
-								.content(
-										"""
-										{
-										  "availableMinutes": 120,
-										  "planDate": "2026-06-01"
-										}
-										"""))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.availableMinutes").value(120))
-				.andExpect(jsonPath("$.warning.minimumAvailableMinutes").value(90))
-				.andExpect(jsonPath("$.warning.estimatedTasks.length()").value(1))
-				.andExpect(jsonPath("$.warning.estimatedTasks[0].taskId").value(10))
-				.andExpect(jsonPath("$.warning.estimatedTasks[0].title").value("Write tests"))
-				.andExpect(jsonPath("$.warning.estimatedTasks[0].estimatedMinutes").value(90));
+				.andExpect(jsonPath("$.blocks.length()").value(1))
+				.andExpect(jsonPath("$.blocks[0].kind").value("WORK"))
+				.andExpect(jsonPath("$.blocks[0].taskSnapshot.title").value("Write tests"));
 	}
 
 	@Test
@@ -236,7 +199,6 @@ class DailyPlanControllerTest {
 								.content(
 										"""
 										{
-										  "availableMinutes": 120,
 										  "planDate": "2026-06-01"
 										}
 										"""))
@@ -265,9 +227,11 @@ class DailyPlanControllerTest {
 												1L,
 												LocalDate.of(2026, 6, 1),
 												Instant.parse("2026-06-01T09:00:00Z"),
+												120,
+												2,
 												1,
-												false,
-												120)),
+												0,
+												false)),
 								0,
 								20,
 								1L,
@@ -278,9 +242,11 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.content.length()").value(1))
 				.andExpect(jsonPath("$.content[0].id").value(1))
 				.andExpect(jsonPath("$.content[0].planDate").value("2026-06-01"))
-				.andExpect(jsonPath("$.content[0].itemCount").value(1))
+				.andExpect(jsonPath("$.content[0].scheduledWorkMinutes").value(120))
+				.andExpect(jsonPath("$.content[0].workSessionCount").value(2))
+				.andExpect(jsonPath("$.content[0].scheduledTaskCount").value(1))
+				.andExpect(jsonPath("$.content[0].unplacedWorkCount").value(0))
 				.andExpect(jsonPath("$.content[0].hasWarning").value(false))
-				.andExpect(jsonPath("$.content[0].availableMinutes").value(120))
 				.andExpect(jsonPath("$.page").value(0))
 				.andExpect(jsonPath("$.size").value(20))
 				.andExpect(jsonPath("$.totalElements").value(1))
@@ -303,56 +269,44 @@ class DailyPlanControllerTest {
 
 	@Test
 	@WithMockUser
-	void latest_whenPlanExists_returns200AndBody() throws Exception {
-		when(dailyPlanService.latestForCurrentUser(LocalDate.of(2026, 6, 1)))
+	void byDate_whenPlanExists_returns200AndBody() throws Exception {
+		when(dailyPlanService.byDateForCurrentUser(LocalDate.of(2026, 6, 1)))
 				.thenReturn(
 						Optional.of(
-								new DailyPlanResponse(
+								DailyPlanResponseTestSupport.minimal(
 										1L,
 										LocalDate.of(2026, 6, 1),
 										Instant.parse("2026-06-01T09:00:00Z"),
-										List.of(
-												new DailyPlanItemResponse(
-														1,
-														new TaskResponse(
-																10L,
-																"Write tests",
-																null,
-																TaskPriority.HIGH,
-																TaskStatus.OPEN,
-																null,
-																45))),
-										120,
 										null)));
 
-		mockMvc.perform(get("/api/daily-plans/latest").param("planDate", "2026-06-01"))
+		mockMvc.perform(get("/api/daily-plans/by-date").param("planDate", "2026-06-01"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.id").value(1))
 				.andExpect(jsonPath("$.planDate").value("2026-06-01"))
-				.andExpect(jsonPath("$.items.length()").value(1));
+				.andExpect(jsonPath("$.windowStart").value("09:00:00"));
 	}
 
 	@Test
 	@WithMockUser
-	void latest_whenNoPlanExists_returns204() throws Exception {
-		when(dailyPlanService.latestForCurrentUser(LocalDate.of(2026, 6, 1)))
+	void byDate_whenNoPlanExists_returns204() throws Exception {
+		when(dailyPlanService.byDateForCurrentUser(LocalDate.of(2026, 6, 1)))
 				.thenReturn(Optional.empty());
 
-		mockMvc.perform(get("/api/daily-plans/latest").param("planDate", "2026-06-01"))
+		mockMvc.perform(get("/api/daily-plans/by-date").param("planDate", "2026-06-01"))
 				.andExpect(status().isNoContent());
 	}
 
 	@Test
 	@WithMockUser
-	void latest_whenPlanDateMissing_returns400WithMessage() throws Exception {
-		when(dailyPlanService.latestForCurrentUser(null))
+	void byDate_whenPlanDateMissing_returns400WithMessage() throws Exception {
+		when(dailyPlanService.byDateForCurrentUser(null))
 				.thenThrow(new BadRequestException("planDate is required"));
 
-		mockMvc.perform(get("/api/daily-plans/latest"))
+		mockMvc.perform(get("/api/daily-plans/by-date"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value(400))
 				.andExpect(jsonPath("$.message").value("planDate is required"))
-				.andExpect(jsonPath("$.path").value("/api/daily-plans/latest"));
+				.andExpect(jsonPath("$.path").value("/api/daily-plans/by-date"));
 	}
 
 	@Test
@@ -368,30 +322,17 @@ class DailyPlanControllerTest {
 	void getById_whenAuthenticated_returns200AndBody() throws Exception {
 		when(dailyPlanService.getForCurrentUser(1L))
 				.thenReturn(
-						new DailyPlanResponse(
+						DailyPlanResponseTestSupport.minimal(
 								1L,
 								LocalDate.of(2026, 6, 1),
 								Instant.parse("2026-06-01T09:00:00Z"),
-								List.of(
-										new DailyPlanItemResponse(
-												1,
-												new TaskResponse(
-														10L,
-														"Write tests",
-														null,
-														TaskPriority.HIGH,
-														TaskStatus.OPEN,
-														null,
-														45))),
-								null,
 								null));
 
 		mockMvc.perform(get("/api/daily-plans/1"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.id").value(1))
 				.andExpect(jsonPath("$.planDate").value("2026-06-01"))
-				.andExpect(jsonPath("$.items.length()").value(1))
-				.andExpect(jsonPath("$.items[0].task.title").value("Write tests"));
+				.andExpect(jsonPath("$.windowStart").value("09:00:00"));
 	}
 
 	@Test

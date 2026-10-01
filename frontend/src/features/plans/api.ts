@@ -1,4 +1,5 @@
 import { apiRequest } from '@/lib/api'
+import { parseScheduledBlock } from '@/features/plans/blocks'
 import type {
   DailyPlanResponse,
   DailyPlanSummaryResponse,
@@ -6,12 +7,8 @@ import type {
   PageResponse,
 } from '@/types/api'
 
-function getTodayDateString(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function parsePlan(plan: DailyPlanResponse): DailyPlanResponse {
+  return { ...plan, blocks: plan.blocks.map(parseScheduledBlock) }
 }
 
 export async function listPlans(
@@ -28,24 +25,27 @@ export async function listPlans(
 }
 
 export async function getPlanById(id: number): Promise<DailyPlanResponse> {
-  return apiRequest<DailyPlanResponse>(`/api/daily-plans/${id}`)
+  return parsePlan(await apiRequest<DailyPlanResponse>(`/api/daily-plans/${id}`))
 }
 
-export async function getTodayPlan(): Promise<DailyPlanResponse | null> {
-  const planDate = getTodayDateString()
+export async function getPlanByDate(
+  planDate: string,
+): Promise<DailyPlanResponse | null> {
   const plan = await apiRequest<DailyPlanResponse | undefined>(
-    `/api/daily-plans/latest?planDate=${encodeURIComponent(planDate)}`,
+    `/api/daily-plans/by-date?planDate=${encodeURIComponent(planDate)}`,
   )
-  return plan ?? null
+  return plan == null ? null : parsePlan(plan)
 }
 
 export async function generateDailyPlan(
   request: GeneratePlanRequest,
 ): Promise<DailyPlanResponse> {
-  return apiRequest<DailyPlanResponse>('/api/daily-plans/generate', {
-    method: 'POST',
-    body: { planDate: getTodayDateString(), ...request },
-  })
+  return parsePlan(
+    await apiRequest<DailyPlanResponse>('/api/daily-plans/generate', {
+      method: 'POST',
+      body: request,
+    }),
+  )
 }
 
 export async function deletePlan(id: number): Promise<void> {

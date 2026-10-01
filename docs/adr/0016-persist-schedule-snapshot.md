@@ -1,0 +1,3 @@
+# A Daily plan stores the window it was scheduled against
+
+Each saved plan copies its work and peak windows, `freeMinutes`, `scheduledWorkMinutes`, `requiredMinutes`, normalized unavailable blocks, and task snapshots from generation time. The rail is painted from that snapshot, not live preferences, commitments, or tasks, so later edits do not rewrite history. Nothing auto-regenerates or spends provider money after a source edit. When the current client knows an affected plan exists, it offers a session-local “Regenerate to apply changes” prompt; 1.2.0 deliberately does not add persistent stale-state invalidation across aggregates.

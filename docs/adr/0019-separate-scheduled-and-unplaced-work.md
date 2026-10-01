@@ -1,0 +1,3 @@
+# Separate scheduled blocks from unplaced work in responses
+
+`DailyPlanResponse` exposes `blocks` and `unplacedWork` rather than one flat nullable `items` record. A Scheduled block always has a positive clock interval; Unplaced work belongs to a ranked plan-task snapshot and never has clock times. Scheduled work and non-work blocks are themselves discriminated variants. The persistence model mirrors this distinction with `daily_plan_blocks` and `daily_plan_tasks`. The domain and TypeScript API must not call something “timed” when it is off the clock or permit invalid nullable-field combinations.

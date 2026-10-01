@@ -1,0 +1,3 @@
+# Add machine-readable codes to actionable API errors
+
+`ApiErrorResponse` gains a nullable bounded `code` alongside human-readable `message`. Compare-and-replace and generation-limit flows use stable values such as `PLAN_EXISTS`, `PLAN_CHANGED`, `TASK_MISSING_DURING_GENERATION`, and `PLAN_CANDIDATE_LIMIT`; existing errors may leave it null. On plan conflicts, the frontend refetches `/by-date` before showing confirmation rather than deriving a replacement id from stale cache or error payload. The frontend branches on codes, never message copy. A plan-specific error body would fragment the shared contract, while parsing messages would make wording a hidden protocol.

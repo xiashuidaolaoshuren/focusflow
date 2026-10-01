@@ -2,84 +2,22 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DailyPlanView } from '@/features/plans/DailyPlanView'
-import type { DailyPlanResponse } from '@/types/api'
+import {
+  reducedBufferPlan,
+  samplePlan,
+  unplacedPlan,
+  warningPlan,
+} from '@/features/plans/planFixtures'
 
-const samplePlan: DailyPlanResponse = {
-  id: 1,
-  planDate: '2026-06-15',
-  createdAt: '2026-06-15T09:00:00Z',
-  availableMinutes: null,
-  warning: null,
-  items: [
-    {
-      position: 2,
-      task: {
-        id: 11,
-        title: 'Review pull requests',
-        description: null,
-        priority: 'MEDIUM',
-        status: 'OPEN',
-        dueDate: '2026-06-15',
-        estimatedMinutes: 30,
-      },
-    },
-    {
-      position: 1,
-      task: {
-        id: 10,
-        title: 'Write tests',
-        description: null,
-        priority: 'HIGH',
-        status: 'OPEN',
-        dueDate: '2026-06-15',
-        estimatedMinutes: 45,
-      },
-    },
-  ],
-}
-
-const warningPlan: DailyPlanResponse = {
-  id: 2,
-  planDate: '2026-06-16',
-  createdAt: '2026-06-16T09:00:00Z',
-  availableMinutes: 30,
-  warning: {
-    minimumAvailableMinutes: 60,
-    estimatedTasks: [{ taskId: 10, title: 'Write tests', estimatedMinutes: 60 }],
-    unestimatedTasks: [{ taskId: 11, title: 'Tidy up' }],
-  },
-  items: [],
-}
-
-const unestimatedOnlyWarningPlan: DailyPlanResponse = {
-  id: 3,
-  planDate: '2026-06-17',
-  createdAt: '2026-06-17T09:00:00Z',
-  availableMinutes: 120,
-  warning: {
-    minimumAvailableMinutes: 0,
-    estimatedTasks: [],
-    unestimatedTasks: [{ taskId: 12, title: 'Tidy up' }],
-  },
-  items: [],
-}
-
-describe('DailyPlanView', () => {
-  it('renders unestimated-only warning without claiming time was exceeded', () => {
-    render(<DailyPlanView plan={unestimatedOnlyWarningPlan} />)
-
-    const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent(/unknown duration/i)
-    expect(alert).not.toHaveTextContent(/exceeded/i)
-  })
-
-  it('renders shortfall alert when the plan has a warning', () => {
+describe('DailyPlanView shortfall alert', () => {
+  it('lists must-include out-of-time and unestimated tasks in the warning alert', () => {
     render(<DailyPlanView plan={warningPlan} />)
 
     const alert = screen.getByRole('alert')
     expect(alert).toHaveTextContent(/plan needs more focus time/i)
-    expect(alert).toHaveTextContent(/at least 60 min/i)
-    expect(alert).toHaveTextContent('Write tests — 60 min')
+    expect(alert).toHaveTextContent(/180 min of focus time/i)
+    expect(alert).toHaveTextContent(/120 min were free/i)
+    expect(alert).toHaveTextContent('Write tests — 60 min unplaced')
     expect(alert).toHaveTextContent('Tidy up — unknown duration')
   })
 
@@ -89,50 +27,43 @@ describe('DailyPlanView', () => {
     expect(screen.getByText(/today's plan/i)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
+})
 
-  it('renders plan items in position order with task title and focus minutes', () => {
-    render(<DailyPlanView plan={samplePlan} />)
+describe('DailyPlanView unplaced companion list', () => {
+  it('shows no-estimate and out-of-time copy for unplaced work', () => {
+    render(<DailyPlanView plan={unplacedPlan} />)
 
-    expect(screen.getByText(/today's plan/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/no estimate — add one to put it on the clock/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/out of time — 30 min unplaced/i)).toBeInTheDocument()
+  })
+})
 
-    const items = screen.getAllByRole('listitem')
-    expect(items).toHaveLength(2)
-    expect(items[0]).toHaveTextContent('Write tests')
-    expect(items[0]).toHaveTextContent('45 min')
-    expect(items[0]).toHaveTextContent('High')
-    expect(items[0]).toHaveTextContent('Open')
-    expect(items[0].querySelector('[data-priority="HIGH"]')).toBeInTheDocument()
-    expect(items[0].querySelector('[data-status="OPEN"]')).toBeInTheDocument()
-    expect(items[0].querySelector('[data-meta="priority"]')).toBeInTheDocument()
-    expect(items[0].querySelector('[data-meta="status"]')).toBeInTheDocument()
-    expect(items[0].querySelector('[data-meta="estimatedMinutes"]')).toBeInTheDocument()
-    expect(items[1]).toHaveTextContent('Review pull requests')
-    expect(items[1]).toHaveTextContent('30 min')
-    expect(items[1]).toHaveTextContent('Medium')
-    expect(items[1]).toHaveTextContent('Open')
-    expect(items[1].querySelector('[data-priority="MEDIUM"]')).toBeInTheDocument()
-    expect(items[1].querySelector('[data-status="OPEN"]')).toBeInTheDocument()
-    expect(items[1].querySelector('[data-meta="priority"]')).toBeInTheDocument()
-    expect(items[1].querySelector('[data-meta="status"]')).toBeInTheDocument()
-    expect(items[1].querySelector('[data-meta="estimatedMinutes"]')).toBeInTheDocument()
+describe('DailyPlanView reduced buffer note', () => {
+  it('shows a non-error note when realized buffer is smaller than requested', () => {
+    render(<DailyPlanView plan={reducedBufferPlan} />)
 
-    for (const item of items) {
-      expect(item).toHaveClass('flex-col')
-      const title = item.querySelector('.font-medium')
-      expect(title).toHaveClass('min-w-0')
-      const metaCluster = item.querySelector('[data-meta="priority"]')?.parentElement
-      expect(metaCluster).toBeInTheDocument()
-      expect(metaCluster).not.toHaveClass('justify-end')
-      expect(metaCluster).not.toHaveClass('min-w-0')
-    }
+    expect(
+      screen.getByText(/fixed breaks or commitments reduced contingency/i),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/5 of 15 requested buffer minutes/i)).toBeInTheDocument()
   })
 
+  it('hides the reduced-buffer note when buffer was fully reserved', () => {
+    render(<DailyPlanView plan={samplePlan} />)
+
+    expect(
+      screen.queryByText(/fixed breaks or commitments reduced contingency/i),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('DailyPlanView states', () => {
   it('shows empty fallback when no plan is available', () => {
     render(<DailyPlanView plan={null} />)
 
-    expect(
-      screen.getByText(/no plan for today yet/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/no plan for today yet/i)).toBeInTheDocument()
   })
 
   it('shows a skeleton card while loading', () => {

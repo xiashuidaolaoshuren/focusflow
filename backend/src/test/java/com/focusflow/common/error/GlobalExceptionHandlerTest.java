@@ -114,4 +114,36 @@ class GlobalExceptionHandlerTest {
 				.andExpect(jsonPath("$.path").value("/__test/errors/generic"))
 				.andExpect(jsonPath("$.details").doesNotExist());
 	}
+
+	@Test
+	void conflict_coded_includesCode() throws Exception {
+		mockMvc.perform(get("/__test/errors/conflict").param("coded", "true"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("PLAN_EXISTS"))
+				.andExpect(jsonPath("$.message").value("plan already exists"));
+	}
+
+	@Test
+	void badRequest_coded_includesCode() throws Exception {
+		mockMvc.perform(get("/__test/errors/bad-request").param("coded", "true"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("PLAN_CANDIDATE_LIMIT"))
+				.andExpect(jsonPath("$.message").value("too many candidates"));
+	}
+
+	@Test
+	void conflict_messageOnly_omitsCode() throws Exception {
+		mockMvc.perform(get("/__test/errors/conflict"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").doesNotExist())
+				.andExpect(jsonPath("$.message").value("plan already exists"));
+	}
+
+	@Test
+	void badRequest_messageOnly_omitsCode() throws Exception {
+		mockMvc.perform(get("/__test/errors/bad-request"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").doesNotExist())
+				.andExpect(jsonPath("$.message").value("invalid request"));
+	}
 }

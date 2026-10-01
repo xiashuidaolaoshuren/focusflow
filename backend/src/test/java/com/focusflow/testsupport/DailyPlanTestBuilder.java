@@ -1,26 +1,38 @@
 package com.focusflow.testsupport;
 
 import com.focusflow.plan.DailyPlan;
-import com.focusflow.plan.DailyPlanItem;
-import com.focusflow.plan.DailyPlanWarningSnapshot;
+import com.focusflow.plan.DailyPlanBlock;
+import com.focusflow.plan.DailyPlanTask;
+import com.focusflow.schedule.BlockKind;
+import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.task.Task;
+import com.focusflow.task.TaskPriority;
+import com.focusflow.task.TaskStatus;
 import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Fluent builder for {@link DailyPlan} and ordered {@link DailyPlanItem} rows in tests.
- */
+/** Fluent builder for {@link DailyPlan} with V3 tasks and blocks in tests. */
 public final class DailyPlanTestBuilder {
 
 	private final User owner;
 	private final LocalDate planDate;
 	private Instant createdAt = Instant.parse("1970-01-01T00:00:00Z");
-	private Integer availableMinutes;
-	private DailyPlanWarningSnapshot warning;
-	private final List<ItemSpec> items = new ArrayList<>();
+	private LocalTime windowStart = LocalTime.of(9, 0);
+	private LocalTime windowEnd = LocalTime.of(18, 0);
+	private LocalTime peakStart;
+	private LocalTime peakEnd;
+	private int freeMinutes;
+	private int scheduledWorkMinutes;
+	private long requiredMinutes;
+	private int requestedBufferMinutes;
+	private int realizedBufferMinutes;
+	private final List<TaskSpec> tasks = new ArrayList<>();
+	private final List<BlockSpec> blocks = new ArrayList<>();
+	private final List<DailyPlanTask> builtTasks = new ArrayList<>();
 
 	private DailyPlanTestBuilder(User owner, LocalDate planDate) {
 		this.owner = owner;
@@ -36,36 +48,122 @@ public final class DailyPlanTestBuilder {
 		return this;
 	}
 
-	public DailyPlanTestBuilder withAvailableMinutes(Integer availableMinutes) {
-		this.availableMinutes = availableMinutes;
+	public DailyPlanTestBuilder withWindow(LocalTime start, LocalTime end) {
+		this.windowStart = start;
+		this.windowEnd = end;
 		return this;
 	}
 
-	public DailyPlanTestBuilder withWarning(DailyPlanWarningSnapshot warning) {
-		this.warning = warning;
+	public DailyPlanTestBuilder withPeak(LocalTime start, LocalTime end) {
+		this.peakStart = start;
+		this.peakEnd = end;
 		return this;
 	}
 
-	public DailyPlanTestBuilder addItem(Task task, int position) {
-		items.add(new ItemSpec(task, position));
+	public DailyPlanTestBuilder withMetrics(
+			int freeMinutes,
+			int scheduledWorkMinutes,
+			long requiredMinutes,
+			int requestedBufferMinutes,
+			int realizedBufferMinutes) {
+		this.freeMinutes = freeMinutes;
+		this.scheduledWorkMinutes = scheduledWorkMinutes;
+		this.requiredMinutes = requiredMinutes;
+		this.requestedBufferMinutes = requestedBufferMinutes;
+		this.realizedBufferMinutes = realizedBufferMinutes;
+		return this;
+	}
+
+	public DailyPlanTestBuilder addTask(
+			Task task,
+			int rank,
+			boolean mustInclude,
+			UnplacedReason unplacedReason,
+			Integer unplacedMinutes) {
+		tasks.add(new TaskSpec(task, rank, mustInclude, unplacedReason, unplacedMinutes));
+		return this;
+	}
+
+	public DailyPlanTestBuilder addBlock(
+			int taskIndex,
+			BlockKind kind,
+			LocalTime start,
+			LocalTime end,
+			String label,
+			int position) {
+		blocks.add(new BlockSpec(taskIndex, kind, start, end, label, position));
 		return this;
 	}
 
 	public DailyPlan build() {
+		DailyPlan plan = buildTasksOnly();
+		attachBlocksTo(plan);
+		return plan;
+	}
+
+	public DailyPlan buildTasksOnly() {
 		DailyPlan plan = new DailyPlan();
 		plan.setOwner(owner);
 		plan.setPlanDate(planDate);
 		plan.setCreatedAt(createdAt);
-		plan.setAvailableMinutes(availableMinutes);
-		plan.setWarning(warning);
-		for (ItemSpec spec : items) {
-			DailyPlanItem item = new DailyPlanItem();
-			item.setTask(spec.task);
-			item.setPosition(spec.position);
-			plan.addItem(item);
+		plan.setWindowStart(windowStart);
+		plan.setWindowEnd(windowEnd);
+		plan.setPeakStart(peakStart);
+		plan.setPeakEnd(peakEnd);
+		plan.setFreeMinutes(freeMinutes);
+		plan.setScheduledWorkMinutes(scheduledWorkMinutes);
+		plan.setRequiredMinutes(requiredMinutes);
+		plan.setRequestedBufferMinutes(requestedBufferMinutes);
+		plan.setRealizedBufferMinutes(realizedBufferMinutes);
+		List<DailyPlanTask> built = new ArrayList<>();
+		for (TaskSpec spec : tasks) {
+			DailyPlanTask planTask = new DailyPlanTask();
+			planTask.setRank(spec.rank);
+			planTask.setSourceTaskId(spec.task.getId() != null ? spec.task.getId() : 0L);
+			planTask.setTaskReference(spec.task);
+			planTask.setTaskTitle(spec.task.getTitle());
+			planTask.setTaskPriority(spec.task.getPriority());
+			planTask.setTaskStatus(spec.task.getStatus());
+			planTask.setTaskDueDate(spec.task.getDueDate());
+			planTask.setTaskEstimatedMinutes(spec.task.getEstimatedMinutes());
+			planTask.setMustInclude(spec.mustInclude);
+			planTask.setUnplacedReason(spec.unplacedReason);
+			planTask.setUnplacedMinutes(spec.unplacedMinutes);
+			plan.addTask(planTask);
+			built.add(planTask);
 		}
+		builtTasks.clear();
+		builtTasks.addAll(built);
 		return plan;
 	}
 
-	private record ItemSpec(Task task, int position) {}
+	public void attachBlocksTo(DailyPlan plan) {
+		for (BlockSpec spec : blocks) {
+			DailyPlanBlock block = new DailyPlanBlock();
+			block.setKind(spec.kind);
+			block.setStartTime(spec.start);
+			block.setEndTime(spec.end);
+			block.setLabel(spec.label);
+			block.setPosition(spec.position);
+			if (spec.taskIndex >= 0) {
+				block.setDailyPlanTask(builtTasks.get(spec.taskIndex));
+			}
+			plan.addBlock(block);
+		}
+	}
+
+	private record TaskSpec(
+			Task task,
+			int rank,
+			boolean mustInclude,
+			UnplacedReason unplacedReason,
+			Integer unplacedMinutes) {}
+
+	private record BlockSpec(
+			int taskIndex,
+			BlockKind kind,
+			LocalTime start,
+			LocalTime end,
+			String label,
+			int position) {}
 }

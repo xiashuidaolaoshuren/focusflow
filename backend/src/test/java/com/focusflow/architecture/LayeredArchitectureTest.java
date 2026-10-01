@@ -60,6 +60,17 @@ class LayeredArchitectureTest {
 					.because("task layer must not couple to auth API DTOs");
 
 	@ArchTest
+	static final ArchRule schedule_should_not_depend_on_framework_layers =
+			noClasses()
+					.that()
+					.resideInAPackage("com.focusflow.schedule")
+					.should()
+					.dependOnClassesThat()
+					.resideInAnyPackage(
+							"org.springframework..", "jakarta.persistence..", "com.focusflow.plan.dto..")
+					.because("the scheduler is pure: no Spring, JPA, or plan DTOs");
+
+	@ArchTest
 	static final ArchRule security_should_not_depend_on_auth_dtos =
 			noClasses()
 					.that()

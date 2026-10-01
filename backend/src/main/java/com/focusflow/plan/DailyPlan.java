@@ -15,10 +15,9 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import java.time.LocalTime;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "daily_plans")
@@ -38,19 +37,46 @@ public class DailyPlan {
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
+	@Column(name = "window_start", nullable = false)
+	private LocalTime windowStart;
+
+	@Column(name = "window_end", nullable = false)
+	private LocalTime windowEnd;
+
+	@Column(name = "peak_start")
+	private LocalTime peakStart;
+
+	@Column(name = "peak_end")
+	private LocalTime peakEnd;
+
+	@Column(name = "free_minutes", nullable = false)
+	private int freeMinutes;
+
+	@Column(name = "scheduled_work_minutes", nullable = false)
+	private int scheduledWorkMinutes;
+
+	@Column(name = "required_minutes", nullable = false)
+	private long requiredMinutes;
+
+	@Column(name = "requested_buffer_minutes", nullable = false)
+	private int requestedBufferMinutes;
+
+	@Column(name = "realized_buffer_minutes", nullable = false)
+	private int realizedBufferMinutes;
+
+	@OneToMany(
+			mappedBy = "dailyPlan",
+			cascade = CascadeType.ALL,
+			orphanRemoval = true)
+	@OrderBy("rank ASC")
+	private final Set<DailyPlanTask> tasks = new LinkedHashSet<>();
+
 	@OneToMany(
 			mappedBy = "dailyPlan",
 			cascade = CascadeType.ALL,
 			orphanRemoval = true)
 	@OrderBy("position ASC")
-	private final List<DailyPlanItem> items = new ArrayList<>();
-
-	@Column(name = "available_minutes")
-	private Integer availableMinutes;
-
-	@JdbcTypeCode(SqlTypes.JSON)
-	@Column(name = "warning")
-	private DailyPlanWarningSnapshot warning;
+	private final Set<DailyPlanBlock> blocks = new LinkedHashSet<>();
 
 	public Long getId() {
 		return id;
@@ -80,28 +106,93 @@ public class DailyPlan {
 		this.createdAt = createdAt;
 	}
 
-	public List<DailyPlanItem> getItems() {
-		return items;
+	public LocalTime getWindowStart() {
+		return windowStart;
 	}
 
-	public Integer getAvailableMinutes() {
-		return availableMinutes;
+	public void setWindowStart(LocalTime windowStart) {
+		this.windowStart = windowStart;
 	}
 
-	public void setAvailableMinutes(Integer availableMinutes) {
-		this.availableMinutes = availableMinutes;
+	public LocalTime getWindowEnd() {
+		return windowEnd;
 	}
 
-	public DailyPlanWarningSnapshot getWarning() {
-		return warning;
+	public void setWindowEnd(LocalTime windowEnd) {
+		this.windowEnd = windowEnd;
 	}
 
-	public void setWarning(DailyPlanWarningSnapshot warning) {
-		this.warning = warning;
+	public LocalTime getPeakStart() {
+		return peakStart;
 	}
 
-	public void addItem(DailyPlanItem item) {
-		items.add(item);
-		item.setDailyPlan(this);
+	public void setPeakStart(LocalTime peakStart) {
+		this.peakStart = peakStart;
+	}
+
+	public LocalTime getPeakEnd() {
+		return peakEnd;
+	}
+
+	public void setPeakEnd(LocalTime peakEnd) {
+		this.peakEnd = peakEnd;
+	}
+
+	public int getFreeMinutes() {
+		return freeMinutes;
+	}
+
+	public void setFreeMinutes(int freeMinutes) {
+		this.freeMinutes = freeMinutes;
+	}
+
+	public int getScheduledWorkMinutes() {
+		return scheduledWorkMinutes;
+	}
+
+	public void setScheduledWorkMinutes(int scheduledWorkMinutes) {
+		this.scheduledWorkMinutes = scheduledWorkMinutes;
+	}
+
+	public long getRequiredMinutes() {
+		return requiredMinutes;
+	}
+
+	public void setRequiredMinutes(long requiredMinutes) {
+		this.requiredMinutes = requiredMinutes;
+	}
+
+	public int getRequestedBufferMinutes() {
+		return requestedBufferMinutes;
+	}
+
+	public void setRequestedBufferMinutes(int requestedBufferMinutes) {
+		this.requestedBufferMinutes = requestedBufferMinutes;
+	}
+
+	public int getRealizedBufferMinutes() {
+		return realizedBufferMinutes;
+	}
+
+	public void setRealizedBufferMinutes(int realizedBufferMinutes) {
+		this.realizedBufferMinutes = realizedBufferMinutes;
+	}
+
+	public Set<DailyPlanTask> getTasks() {
+		return tasks;
+	}
+
+	public Set<DailyPlanBlock> getBlocks() {
+		return blocks;
+	}
+
+	public void addTask(DailyPlanTask task) {
+		tasks.add(task);
+		task.setDailyPlan(this);
+	}
+
+	public void addBlock(DailyPlanBlock block) {
+		blocks.add(block);
+		block.setDailyPlan(this);
 	}
 }

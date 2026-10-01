@@ -1,0 +1,3 @@
+# Buffer reserves the latest free minutes
+
+Buffer time reserves the latest N **free** minutes after fixed breaks and commitments are removed, then renders them as distinct `BUFFER` blocks so contingency is visible rather than an invisible shorter day. It may split around unavailable intervals. If fewer free minutes exist than requested, all remaining free time becomes buffer; the plan snapshots both requested and realized values and explains the reduction without failing generation. Per-block padding would multiply blocks and fragment the rail. Cutting buffer until 1.3.0 was tempting, but a persisted preference and a block kind now mean 1.3.0's overrun handling consumes something users can already see.

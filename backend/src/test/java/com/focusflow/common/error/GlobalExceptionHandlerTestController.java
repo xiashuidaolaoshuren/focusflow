@@ -33,6 +33,22 @@ public class GlobalExceptionHandlerTestController {
 		throw new RuntimeException("boom");
 	}
 
+	@GetMapping("/conflict")
+	void conflict(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean coded) {
+		if (coded) {
+			throw new ConflictException("PLAN_EXISTS", "plan already exists");
+		}
+		throw new ConflictException("plan already exists");
+	}
+
+	@GetMapping("/bad-request")
+	void badRequest(@org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean coded) {
+		if (coded) {
+			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
+		}
+		throw new BadRequestException("invalid request");
+	}
+
 	@PostMapping("/validation")
 	void validation(@Valid @RequestBody ValidationDto body) {
 		throw new IllegalStateException("should not run: " + body);

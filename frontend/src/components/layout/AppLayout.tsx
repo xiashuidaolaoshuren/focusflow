@@ -1,5 +1,10 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutDashboardIcon, ListIcon, UserIcon } from 'lucide-react'
+import {
+  LayoutDashboardIcon,
+  ListIcon,
+  SettingsIcon,
+  UserIcon,
+} from 'lucide-react'
 
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
 import {
@@ -67,6 +72,16 @@ export function AppLayout() {
                   >
                     <ListIcon />
                     <span>Plans</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<NavLink to="/settings" />}
+                    isActive={location.pathname === '/settings'}
+                    tooltip="Settings"
+                  >
+                    <SettingsIcon />
+                    <span>Settings</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>

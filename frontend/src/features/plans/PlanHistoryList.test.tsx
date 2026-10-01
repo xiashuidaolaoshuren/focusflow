@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { PlanHistoryList } from '@/features/plans/PlanHistoryList'
+import { samplePlanSummary } from '@/features/plans/planFixtures'
 import type { DailyPlanSummaryResponse } from '@/types/api'
 
 vi.mock('@/features/plans/hooks', () => ({
@@ -16,21 +17,16 @@ import { useDeletePlan } from '@/features/plans/hooks'
 const mockedUseDeletePlan = vi.mocked(useDeletePlan)
 
 const samplePlans: DailyPlanSummaryResponse[] = [
-  {
-    id: 1,
-    planDate: '2026-06-14',
-    createdAt: '2026-06-14T09:00:00Z',
-    itemCount: 1,
-    hasWarning: true,
-    availableMinutes: 30,
-  },
+  samplePlanSummary,
   {
     id: 2,
     planDate: '2026-06-15',
     createdAt: '2026-06-15T09:00:00Z',
-    itemCount: 0,
+    scheduledWorkMinutes: 0,
+    workSessionCount: 0,
+    scheduledTaskCount: 0,
+    unplacedWorkCount: 0,
     hasWarning: false,
-    availableMinutes: null,
   },
 ]
 
@@ -72,17 +68,17 @@ describe('PlanHistoryList', () => {
     } as unknown as ReturnType<typeof useDeletePlan>)
   })
 
-  it('renders a link per plan showing plan date and item count', () => {
+  it('renders summary counts instead of legacy item count', () => {
     renderPlanHistoryList()
 
     const links = screen.getAllByRole('link')
-    expect(links).toHaveLength(2)
     expect(links[0]).toHaveAttribute('href', '/plans/1')
     expect(links[0]).toHaveTextContent('2026-06-14')
-    expect(links[0]).toHaveTextContent('1 block')
-    expect(links[1]).toHaveAttribute('href', '/plans/2')
-    expect(links[1]).toHaveTextContent('2026-06-15')
-    expect(links[1]).toHaveTextContent('0 blocks')
+    expect(links[0]).toHaveTextContent('120 min')
+    expect(links[0]).toHaveTextContent('3 sessions')
+    expect(links[0]).toHaveTextContent('2 tasks')
+    expect(links[0]).toHaveTextContent('1 unplaced')
+    expect(links[0]).not.toHaveTextContent(/block/i)
   })
 
   it('shows a Shortfall indicator only for plans with hasWarning', () => {

@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiProviderException;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskPriority;
@@ -29,18 +28,14 @@ class DailyPlanRankingValidatorTest {
 	}
 
 	@Test
-	void validate_rejectsUnknownTaskId() {
-		Task candidate = new Task();
-		ReflectionTestUtils.setField(candidate, "id", 1L);
-		candidate.setTitle("Task 1");
-		candidate.setStatus(TaskStatus.OPEN);
-		candidate.setPriority(TaskPriority.MEDIUM);
-
+	void validateOrder_rejectsUnknownTaskId() {
+		Task candidate = task(1L, TaskStatus.OPEN, null, null);
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
-		List<AiPlanItem> aiItems = List.of(new AiPlanItem(999L, 1));
 
 		assertThatThrownBy(
-						() -> validator.validate(List.of(candidate), planDate, 120, aiItems))
+						() ->
+								validator.validateOrder(
+										List.of(candidate), planDate, List.of(999L)))
 				.isInstanceOf(AiProviderException.class)
 				.extracting(ex -> ((AiProviderException) ex).getReason())
 				.isEqualTo(RankingRejectionReason.UNKNOWN_TASK);
@@ -49,13 +44,29 @@ class DailyPlanRankingValidatorTest {
 	}
 
 	@Test
-	void validate_rejectsMissingBlock1Candidate() {
+	void validateOrder_rejectsDuplicateTaskId() {
+		Task candidate = task(1L, TaskStatus.OPEN, null, null);
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+
+		assertThatThrownBy(
+						() ->
+								validator.validateOrder(
+										List.of(candidate), planDate, List.of(1L, 1L)))
+				.isInstanceOf(AiProviderException.class)
+				.extracting(ex -> ((AiProviderException) ex).getReason())
+				.isEqualTo(RankingRejectionReason.DUPLICATE_TASK);
+
+		assertRejectionCounted(RankingRejectionReason.DUPLICATE_TASK);
+	}
+
+	@Test
+	void validateOrder_rejectsMissingBlock1Candidate() {
 		Task candidate = task(1L, TaskStatus.IN_PROGRESS, null, null);
 
 		assertThatThrownBy(
 						() ->
-								validator.validate(
-										List.of(candidate), LocalDate.of(2026, 6, 1), 120, List.of()))
+								validator.validateOrder(
+										List.of(candidate), LocalDate.of(2026, 6, 1), List.of()))
 				.isInstanceOf(AiProviderException.class)
 				.extracting(ex -> ((AiProviderException) ex).getReason())
 				.isEqualTo(RankingRejectionReason.MISSING_BLOCK_1);
@@ -64,12 +75,12 @@ class DailyPlanRankingValidatorTest {
 	}
 
 	@Test
-	void validate_rejectsMissingBlock2Candidate() {
+	void validateOrder_rejectsMissingBlock2Candidate() {
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		Task candidate = task(1L, TaskStatus.OPEN, planDate, null);
 
 		assertThatThrownBy(
-						() -> validator.validate(List.of(candidate), planDate, 120, List.of()))
+						() -> validator.validateOrder(List.of(candidate), planDate, List.of()))
 				.isInstanceOf(AiProviderException.class)
 				.extracting(ex -> ((AiProviderException) ex).getReason())
 				.isEqualTo(RankingRejectionReason.MISSING_BLOCK_2);
@@ -78,18 +89,32 @@ class DailyPlanRankingValidatorTest {
 	}
 
 	@Test
-	void validate_rejectsBlockOrderViolation() {
+	void validateOrder_rejectsMissingOptionalCandidate() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task candidate = task(1L, TaskStatus.OPEN, planDate.plusDays(1), null);
+
+		assertThatThrownBy(
+						() -> validator.validateOrder(List.of(candidate), planDate, List.of()))
+				.isInstanceOf(AiProviderException.class)
+				.extracting(ex -> ((AiProviderException) ex).getReason())
+				.isEqualTo(RankingRejectionReason.MISSING_OPTIONAL);
+
+		assertRejectionCounted(RankingRejectionReason.MISSING_OPTIONAL);
+	}
+
+	@Test
+	void validateOrder_rejectsBlockOrderViolation() {
 		LocalDate planDate = LocalDate.of(2026, 6, 1);
 		Task block1 = task(1L, TaskStatus.IN_PROGRESS, null, null);
 		Task block2 = task(2L, TaskStatus.OPEN, planDate, null);
 		Task block3 = task(3L, TaskStatus.OPEN, planDate.plusDays(1), null);
-		List<AiPlanItem> aiItems =
-				List.of(new AiPlanItem(3L, 1), new AiPlanItem(1L, 2), new AiPlanItem(2L, 3));
 
 		assertThatThrownBy(
 						() ->
-								validator.validate(
-										List.of(block1, block2, block3), planDate, 120, aiItems))
+								validator.validateOrder(
+										List.of(block1, block2, block3),
+										planDate,
+										List.of(3L, 1L, 2L)))
 				.isInstanceOf(AiProviderException.class)
 				.extracting(ex -> ((AiProviderException) ex).getReason())
 				.isEqualTo(RankingRejectionReason.BLOCK_ORDER);
@@ -98,34 +123,14 @@ class DailyPlanRankingValidatorTest {
 	}
 
 	@Test
-	void validate_rejectsOptionalOverflow() {
-		LocalDate planDate = LocalDate.of(2026, 6, 1);
-		Task block1 = task(1L, TaskStatus.IN_PROGRESS, null, 30);
-		Task block2 = task(2L, TaskStatus.OPEN, planDate, 30);
-		Task block3 = task(3L, TaskStatus.OPEN, planDate.plusDays(1), 20);
-		List<AiPlanItem> aiItems =
-				List.of(new AiPlanItem(1L, 1), new AiPlanItem(2L, 2), new AiPlanItem(3L, 3));
-
-		assertThatThrownBy(
-						() ->
-								validator.validate(
-										List.of(block1, block2, block3), planDate, 50, aiItems))
-				.isInstanceOf(AiProviderException.class)
-				.extracting(ex -> ((AiProviderException) ex).getReason())
-				.isEqualTo(RankingRejectionReason.OPTIONAL_OVERFLOW);
-
-		assertRejectionCounted(RankingRejectionReason.OPTIONAL_OVERFLOW);
-	}
-
-	@Test
-	void validate_acceptsIntraBlockSortMistake() {
+	void validateOrder_acceptsIntraBlockSortMistake() {
 		Task high = task(1L, TaskStatus.IN_PROGRESS, null, null);
 		high.setPriority(TaskPriority.HIGH);
 		Task low = task(2L, TaskStatus.IN_PROGRESS, null, null);
 		low.setPriority(TaskPriority.LOW);
-		List<AiPlanItem> aiItems = List.of(new AiPlanItem(2L, 1), new AiPlanItem(1L, 2));
 
-		validator.validate(List.of(high, low), LocalDate.of(2026, 6, 1), 120, aiItems);
+		validator.validateOrder(
+				List.of(high, low), LocalDate.of(2026, 6, 1), List.of(2L, 1L));
 	}
 
 	private void assertRejectionCounted(RankingRejectionReason reason) {

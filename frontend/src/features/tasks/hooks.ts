@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import { createTask, deleteTask, listTasks, updateTask } from '@/features/tasks/api'
 import type { CreateTaskRequest, UpdateTaskRequest } from '@/types/api'
 
@@ -32,6 +33,7 @@ export function useCreateTask() {
     mutationKey: createTaskMutationKey,
     mutationFn: (request: CreateTaskRequest) => createTask(request),
     onSuccess: async () => {
+      markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
     },
   })
@@ -50,6 +52,7 @@ export function useUpdateTask(options?: UseUpdateTaskOptions) {
       request: UpdateTaskRequest
     }) => updateTask(id, request),
     onSuccess: async () => {
+      markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
     },
   })
@@ -61,6 +64,7 @@ export function useDeleteTask() {
   return useMutation({
     mutationFn: (id: number) => deleteTask(id),
     onSuccess: async () => {
+      markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
     },
   })

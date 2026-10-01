@@ -3,40 +3,41 @@ import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { DailyPlanResponse, DailyPlanSummaryResponse, PageResponse } from '@/types/api'
+import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
+import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
 import {
+  planByDateQueryKey,
   planDetailQueryKey,
   plansQueryKey,
-  todayPlanQueryKey,
   useDeletePlan,
   useGeneratePlan,
   usePlan,
+  usePlanByDate,
   usePlans,
-  useTodayPlan,
 } from '@/features/plans/hooks'
+import { markRegeneratePromptNeeded, useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
 
 vi.mock('@/features/plans/api', () => ({
   deletePlan: vi.fn(),
   generateDailyPlan: vi.fn(),
+  getPlanByDate: vi.fn(),
   getPlanById: vi.fn(),
-  getTodayPlan: vi.fn(),
   listPlans: vi.fn(),
 }))
 
 import {
   deletePlan,
   generateDailyPlan,
+  getPlanByDate,
   getPlanById,
-  getTodayPlan,
   listPlans,
 } from '@/features/plans/api'
 
 const mockedDeletePlan = vi.mocked(deletePlan)
-
 const mockedGenerateDailyPlan = vi.mocked(generateDailyPlan)
+const mockedGetPlanByDate = vi.mocked(getPlanByDate)
 const mockedGetPlanById = vi.mocked(getPlanById)
-const mockedGetTodayPlan = vi.mocked(getTodayPlan)
 const mockedListPlans = vi.mocked(listPlans)
 
 function createWrapper(queryClient?: QueryClient) {
@@ -57,12 +58,10 @@ function createWrapper(queryClient?: QueryClient) {
 }
 
 const sampleSummary: DailyPlanSummaryResponse = {
-  id: 1,
+  ...samplePlanSummary,
   planDate: '2026-06-15',
   createdAt: '2026-06-15T09:00:00Z',
-  itemCount: 1,
   hasWarning: false,
-  availableMinutes: null,
 }
 
 const samplePage: PageResponse<DailyPlanSummaryResponse> = {
@@ -73,35 +72,15 @@ const samplePage: PageResponse<DailyPlanSummaryResponse> = {
   totalPages: 1,
 }
 
-const samplePlan: DailyPlanResponse = {
-  id: 1,
-  planDate: '2026-06-15',
-  createdAt: '2026-06-15T09:00:00Z',
-  availableMinutes: null,
-  warning: null,
-  items: [
-    {
-      position: 1,
-      task: {
-        id: 10,
-        title: 'Write tests',
-        description: null,
-        priority: 'HIGH',
-        status: 'OPEN',
-        dueDate: '2026-06-15',
-        estimatedMinutes: 45,
-      },
-    },
-  ],
-}
+const samplePlanResponse = samplePlan
 
 describe('useGeneratePlan', () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('calls generateDailyPlan and refreshes today-plan query on success', async () => {
-    mockedGenerateDailyPlan.mockResolvedValue(samplePlan)
+  it('calls generateDailyPlan and refreshes plan-by-date query on success', async () => {
+    mockedGenerateDailyPlan.mockResolvedValue(samplePlanResponse)
 
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -116,53 +95,77 @@ describe('useGeneratePlan', () => {
       wrapper: createWrapper(queryClient),
     })
 
-    result.current.mutate({ availableMinutes: 120 })
+    result.current.mutate({ planDate: '2026-06-15' })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(mockedGenerateDailyPlan).toHaveBeenCalledWith({
-      availableMinutes: 120,
+      planDate: '2026-06-15',
     })
     expect(setQueryDataSpy).toHaveBeenCalledWith(
-      todayPlanQueryKey,
-      samplePlan,
+      planByDateQueryKey('2026-06-15'),
+      samplePlanResponse,
     )
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: todayPlanQueryKey,
+      queryKey: planByDateQueryKey('2026-06-15'),
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],
     })
   })
+
+  it('clears the regenerate prompt on generate success', async () => {
+    mockedGenerateDailyPlan.mockResolvedValue(samplePlanResponse)
+    markRegeneratePromptNeeded()
+
+    const { result } = renderHook(() => useRegeneratePrompt(), {
+      wrapper: createWrapper(),
+    })
+
+    expect(result.current.needed).toBe(true)
+
+    const generate = renderHook(() => useGeneratePlan(), {
+      wrapper: createWrapper(),
+    })
+
+    generate.result.current.mutate({ planDate: '2026-06-15' })
+
+    await waitFor(() => expect(generate.result.current.isSuccess).toBe(true))
+    await waitFor(() => expect(result.current.needed).toBe(false))
+  })
 })
 
-describe('useTodayPlan', () => {
+describe('usePlanByDate', () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('uses a stable query key for today plan', () => {
-    expect(todayPlanQueryKey).toEqual(['plans', 'today'])
+  it('uses a date-scoped query key', () => {
+    expect(planByDateQueryKey('2026-06-16')).toEqual([
+      'plans',
+      'by-date',
+      '2026-06-16',
+    ])
   })
 
-  it('returns today plan when the query succeeds', async () => {
-    mockedGetTodayPlan.mockResolvedValue(samplePlan)
+  it('returns the plan when the query succeeds', async () => {
+    mockedGetPlanByDate.mockResolvedValue(samplePlanResponse)
 
-    const { result } = renderHook(() => useTodayPlan(), {
+    const { result } = renderHook(() => usePlanByDate('2026-06-15'), {
       wrapper: createWrapper(),
     })
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(mockedGetTodayPlan).toHaveBeenCalled()
-    expect(result.current.plan).toEqual(samplePlan)
+    expect(mockedGetPlanByDate).toHaveBeenCalledWith('2026-06-15')
+    expect(result.current.plan).toEqual(samplePlanResponse)
     expect(result.current.hasPlan).toBe(true)
   })
 
-  it('returns null plan state when no plan exists for today', async () => {
-    mockedGetTodayPlan.mockResolvedValue(null)
+  it('returns null plan state when no plan exists for the date', async () => {
+    mockedGetPlanByDate.mockResolvedValue(null)
 
-    const { result } = renderHook(() => useTodayPlan(), {
+    const { result } = renderHook(() => usePlanByDate('2026-06-15'), {
       wrapper: createWrapper(),
     })
 
@@ -223,7 +226,7 @@ describe('usePlan', () => {
   })
 
   it('fetches plan detail by id and exposes plan', async () => {
-    mockedGetPlanById.mockResolvedValue(samplePlan)
+    mockedGetPlanById.mockResolvedValue(samplePlanResponse)
 
     const { result } = renderHook(() => usePlan(1), {
       wrapper: createWrapper(),
@@ -232,7 +235,7 @@ describe('usePlan', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(mockedGetPlanById).toHaveBeenCalledWith(1)
-    expect(result.current.plan).toEqual(samplePlan)
+    expect(result.current.plan).toEqual(samplePlanResponse)
   })
 
   it('does not fetch when id is invalid', () => {
@@ -270,7 +273,7 @@ describe('useDeletePlan', () => {
 
     expect(mockedDeletePlan).toHaveBeenCalledWith(1)
     expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: todayPlanQueryKey,
+      queryKey: ['plans', 'by-date'],
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],

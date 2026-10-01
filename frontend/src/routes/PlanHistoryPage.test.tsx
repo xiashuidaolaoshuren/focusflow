@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { samplePlanSummary } from '@/features/plans/planFixtures'
 import { PlanHistoryPage } from '@/routes/PlanHistoryPage'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
@@ -17,14 +18,7 @@ import { usePlans } from '@/features/plans/hooks'
 
 const mockedUsePlans = vi.mocked(usePlans)
 
-const sampleSummary: DailyPlanSummaryResponse = {
-  id: 1,
-  planDate: '2026-06-14',
-  createdAt: '2026-06-14T09:00:00Z',
-  itemCount: 1,
-  hasWarning: false,
-  availableMinutes: null,
-}
+const sampleSummary: DailyPlanSummaryResponse = samplePlanSummary
 
 const samplePage: PageResponse<DailyPlanSummaryResponse> = {
   content: [sampleSummary],

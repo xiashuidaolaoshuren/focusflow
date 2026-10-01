@@ -17,7 +17,7 @@ import { useCurrentUser, useLogout } from '@/features/auth/hooks'
 const mockedUseCurrentUser = vi.mocked(useCurrentUser)
 const mockedUseLogout = vi.mocked(useLogout)
 
-function renderAppLayout() {
+function renderAppLayout(initialPath = '/dashboard') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -26,10 +26,11 @@ function renderAppLayout() {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
-          <MemoryRouter initialEntries={['/dashboard']}>
+          <MemoryRouter initialEntries={[initialPath]}>
             <Routes>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<div>Dashboard content</div>} />
+                <Route path="/settings" element={<div>Settings content</div>} />
               </Route>
             </Routes>
           </MemoryRouter>
@@ -104,6 +105,38 @@ describe('AppLayout accessibility', () => {
     expect(
       screen.getByRole('button', { name: /user menu/i }),
     ).toBeInTheDocument()
+  })
+})
+
+describe('AppLayout navigation', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
+    mockAuthForLayout()
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders a Settings link in the sidebar', () => {
+    renderAppLayout()
+
+    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute(
+      'href',
+      '/settings',
+    )
   })
 })
 

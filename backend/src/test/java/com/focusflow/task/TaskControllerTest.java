@@ -82,6 +82,41 @@ class TaskControllerTest {
 
 	@Test
 	@WithMockUser
+	void create_withNonPositiveEstimatedMinutes_returns400WithDetails() throws Exception {
+		mockMvc.perform(
+						post("/api/tasks")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "title": "Write tests",
+										  "estimatedMinutes": 0
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.path").value("/api/tasks"))
+				.andExpect(jsonPath("$.details.estimatedMinutes").isArray());
+		mockMvc.perform(
+						post("/api/tasks")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "title": "Write tests",
+										  "estimatedMinutes": -30
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.details.estimatedMinutes").isArray());
+
+		verify(taskService, never()).create(any(CreateTaskRequest.class));
+	}
+
+	@Test
+	@WithMockUser
 	void create_whenAuthenticated_returns201AndBody() throws Exception {
 		when(taskService.create(any(CreateTaskRequest.class)))
 				.thenReturn(
@@ -225,6 +260,42 @@ class TaskControllerTest {
 				.andExpect(jsonPath("$.details.title").isArray());
 
 		verify(taskService, never()).updateForCurrentUser(any(Long.class), any(UpdateTaskRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void update_withNonPositiveEstimatedMinutes_returns400WithDetails() throws Exception {
+		mockMvc.perform(
+						put("/api/tasks/1")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "title": "Updated task",
+										  "estimatedMinutes": 0
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.path").value("/api/tasks/1"))
+				.andExpect(jsonPath("$.details.estimatedMinutes").isArray());
+		mockMvc.perform(
+						put("/api/tasks/1")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "title": "Updated task",
+										  "estimatedMinutes": -30
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.details.estimatedMinutes").isArray());
+
+		verify(taskService, never())
+				.updateForCurrentUser(any(Long.class), any(UpdateTaskRequest.class));
 	}
 
 	@Test

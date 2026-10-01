@@ -8,6 +8,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 export class ApiError extends Error {
   readonly status: number
   readonly error?: string
+  readonly code?: string | null
   readonly path?: string
   readonly details?: Record<string, string[]>
   readonly timestamp?: string
@@ -17,6 +18,7 @@ export class ApiError extends Error {
     this.name = 'ApiError'
     this.status = body.status
     this.error = body.error
+    this.code = body.code
     this.path = body.path
     this.details = body.details
     this.timestamp = body.timestamp
@@ -63,6 +65,7 @@ async function normalizeError(response: Response): Promise<ApiError> {
           data.message ??
           data.error ??
           `Request failed with status ${response.status}`,
+        code: data.code,
         path: data.path,
         details: data.details,
       })

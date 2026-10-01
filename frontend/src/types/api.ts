@@ -6,6 +6,7 @@ export type ApiErrorResponse = {
   status: number
   error?: string
   message: string
+  code?: string | null
   path?: string
   details?: Record<string, string[]>
   requestId?: string
@@ -60,8 +61,64 @@ export type UpdateTaskRequest = {
 }
 
 export type GeneratePlanRequest = {
-  availableMinutes: number
-  planDate?: string | null
+  planDate: string
+  replacePlanId?: number | null
+}
+
+/** Mirrors `com.focusflow.commitment.dto.CommitmentResponse` */
+export type CommitmentResponse = {
+  id: number
+  title: string
+  commitmentDate: string
+  startTime: string
+  endTime: string
+}
+
+/** Mirrors `com.focusflow.commitment.dto.CommitmentRequest` */
+export type CommitmentRequest = {
+  title: string
+  commitmentDate: string
+  startTime: string
+  endTime: string
+}
+
+/** Mirrors `com.focusflow.preferences.dto.FixedBreakResponse` */
+export type FixedBreakResponse = {
+  label: string
+  startTime: string
+  endTime: string
+}
+
+/** Mirrors `com.focusflow.preferences.dto.FixedBreakRequest` */
+export type FixedBreakRequest = FixedBreakResponse
+
+/** Mirrors `com.focusflow.preferences.dto.SchedulingPreferencesResponse` */
+export type SchedulingPreferencesResponse = {
+  workDayStart: string
+  workDayEnd: string
+  cadenceEnabled: boolean
+  targetFocusMinutes: number
+  breakMinutes: number
+  minSessionMinutes: number
+  bufferMinutes: number
+  peakStart: string | null
+  peakEnd: string | null
+  fixedBreaks: FixedBreakResponse[]
+  persisted: boolean
+}
+
+/** Mirrors `com.focusflow.preferences.dto.SchedulingPreferencesRequest` */
+export type SchedulingPreferencesRequest = {
+  workDayStart: string
+  workDayEnd: string
+  cadenceEnabled: boolean
+  targetFocusMinutes: number
+  breakMinutes: number
+  minSessionMinutes: number
+  bufferMinutes: number
+  peakStart: string | null
+  peakEnd: string | null
+  fixedBreaks: FixedBreakRequest[]
 }
 
 /** Mirrors `com.focusflow.common.web.PageResponse` */
@@ -73,41 +130,104 @@ export type PageResponse<T> = {
   totalPages: number
 }
 
+/** Mirrors `com.focusflow.schedule.BlockKind` */
+export type BlockKind =
+  | 'WORK'
+  | 'CADENCE_BREAK'
+  | 'FIXED_BREAK'
+  | 'COMMITMENT'
+  | 'BUFFER'
+
+/** Mirrors `com.focusflow.schedule.UnplacedReason` */
+export type UnplacedReason = 'NO_ESTIMATE' | 'OUT_OF_TIME'
+
+/** Mirrors `com.focusflow.plan.dto.TaskSnapshotResponse` */
+export type TaskSnapshotResponse = {
+  sourceTaskId: number
+  taskReferenceId: number | null
+  title: string
+  priority: TaskPriority
+  status: TaskStatus
+  dueDate: string | null
+  estimatedMinutes: number | null
+  mustInclude: boolean
+}
+
+/** Mirrors `com.focusflow.plan.dto.ScheduledBlockResponse` as discriminated variants. */
+export type LabelledBlockKind = 'CADENCE_BREAK' | 'FIXED_BREAK' | 'COMMITMENT' | 'BUFFER'
+
+export type WorkBlockResponse = {
+  kind: 'WORK'
+  startTime: string
+  endTime: string
+  sessionIndex: number
+  sessionCount: number
+  taskSnapshot: TaskSnapshotResponse
+  label: null
+}
+
+export type LabelledBlockResponse = {
+  kind: LabelledBlockKind
+  startTime: string
+  endTime: string
+  sessionIndex: null
+  sessionCount: null
+  taskSnapshot: null
+  label: string
+}
+
+export type ScheduledBlockResponse = WorkBlockResponse | LabelledBlockResponse
+
+/** Mirrors `com.focusflow.plan.dto.UnplacedWorkResponse` */
+export type UnplacedWorkResponse = {
+  reason: UnplacedReason
+  unplacedMinutes: number | null
+  taskSnapshot: TaskSnapshotResponse
+}
+
 /** Mirrors `com.focusflow.plan.dto.DailyPlanSummaryResponse` */
 export type DailyPlanSummaryResponse = {
   id: number
   planDate: string
   createdAt: string
-  itemCount: number
+  scheduledWorkMinutes: number
+  workSessionCount: number
+  scheduledTaskCount: number
+  unplacedWorkCount: number
   hasWarning: boolean
-  availableMinutes: number | null
 }
 
-export type DailyPlanItemResponse = {
-  position: number
-  task: TaskResponse
-}
-
-export type DailyPlanWarningTask = {
-  taskId: number
-  title: string
-}
-
-export type DailyPlanWarningEstimatedTask = DailyPlanWarningTask & {
-  estimatedMinutes: number
-}
-
+/** Mirrors `com.focusflow.plan.dto.DailyPlanWarning` */
 export type DailyPlanWarning = {
-  minimumAvailableMinutes: number
-  estimatedTasks: DailyPlanWarningEstimatedTask[]
-  unestimatedTasks: DailyPlanWarningTask[]
+  requiredMinutes: number
+  freeMinutes: number
+  scheduledWorkMinutes: number
+  outOfTimeTasks: {
+    sourceTaskId: number
+    title: string
+    unplacedMinutes: number
+  }[]
+  unestimatedTasks: {
+    sourceTaskId: number
+    title: string
+  }[]
 }
 
+/** Mirrors `com.focusflow.plan.dto.DailyPlanResponse` */
 export type DailyPlanResponse = {
   id: number
   planDate: string
   createdAt: string
-  availableMinutes: number | null
+  windowStart: string
+  windowEnd: string
+  peakStart: string | null
+  peakEnd: string | null
+  freeMinutes: number
+  scheduledWorkMinutes: number
+  requiredMinutes: number
+  requestedBufferMinutes: number
+  realizedBufferMinutes: number
   warning: DailyPlanWarning | null
-  items: DailyPlanItemResponse[]
+  blocks: ScheduledBlockResponse[]
+  unplacedWork: UnplacedWorkResponse[]
 }

@@ -1,0 +1,3 @@
+# The scheduler is two pure stages: free intervals, then placement
+
+Stage 1 normalizes fixed breaks, commitments, and trailing buffer into non-overlapping unavailable segments and free intervals. Stage 2 walks the ranking with cadence look-ahead and fills those intervals. A third pure postcondition validator rejects overlap, out-of-window blocks, missing candidates, and failures to conserve each task's estimated minutes before persistence. All use immutable records in `com.focusflow.schedule` with no Spring or JPA types, so tests and production checks identify which job broke. A single-pass clock walk would couple availability to placement; a slot grid would quantize boundaries. 1.3.0 reuses stage 1 with a shrunk window.

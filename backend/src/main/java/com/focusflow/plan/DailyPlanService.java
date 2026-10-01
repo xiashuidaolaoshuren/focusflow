@@ -2,22 +2,28 @@ package com.focusflow.plan;
 
 import com.focusflow.ai.AiDailyPlanRequest;
 import com.focusflow.ai.AiDailyPlanResponse;
+import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
+import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.preferences.EffectiveSchedulingPreferences;
+import com.focusflow.preferences.SchedulingPreferencesQueryService;
+import com.focusflow.schedule.CommitmentWindow;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
-import com.focusflow.task.TaskStatus;
-import com.focusflow.user.UserRepository;
+import com.focusflow.user.OwnerSchedulingLock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,48 +35,86 @@ public class DailyPlanService {
 
 	private final DailyPlanAiClient aiClient;
 	private final TaskQueryService taskQueryService;
-	private final UserRepository userRepository;
 	private final CurrentUser currentUser;
 	private final DailyPlanRepository dailyPlanRepository;
 	private final DailyPlanPersister persister;
 	private final DailyPlanResponseMapper responseMapper;
 	private final DailyPlanRankingValidator rankingValidator;
+	private final SchedulingPreferencesQueryService schedulingPreferencesQueryService;
+	private final CommitmentQueryService commitmentQueryService;
+	private final DailyPlanScheduler scheduler;
+	private final OwnerSchedulingLock ownerSchedulingLock;
 
 	public DailyPlanService(
 			DailyPlanAiClient aiClient,
 			TaskQueryService taskQueryService,
-			UserRepository userRepository,
 			CurrentUser currentUser,
 			DailyPlanRepository dailyPlanRepository,
 			DailyPlanPersister persister,
 			DailyPlanResponseMapper responseMapper,
-			DailyPlanRankingValidator rankingValidator) {
+			DailyPlanRankingValidator rankingValidator,
+			DailyPlanScheduler scheduler,
+			OwnerSchedulingLock ownerSchedulingLock,
+			SchedulingPreferencesQueryService schedulingPreferencesQueryService,
+			CommitmentQueryService commitmentQueryService) {
 		this.aiClient = aiClient;
 		this.taskQueryService = taskQueryService;
-		this.userRepository = userRepository;
 		this.currentUser = currentUser;
 		this.dailyPlanRepository = dailyPlanRepository;
 		this.persister = persister;
 		this.responseMapper = responseMapper;
 		this.rankingValidator = rankingValidator;
+		this.scheduler = scheduler;
+		this.ownerSchedulingLock = ownerSchedulingLock;
+		this.schedulingPreferencesQueryService = schedulingPreferencesQueryService;
+		this.commitmentQueryService = commitmentQueryService;
 	}
 
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
 		Long ownerId = currentUser.getCurrentUser().id();
 		LocalDate planDate = request.planDate();
+		Optional<DailyPlan> latestPlan =
+				dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						ownerId, planDate);
+		PlanReplacePreconditions.validateReplacePrecondition(latestPlan, request.replacePlanId());
 		List<Task> activeTasks = taskQueryService.findPlannableTasksByOwnerId(ownerId);
 		if (activeTasks.isEmpty()) {
 			throw new BadRequestException("no plannable tasks available for planning");
 		}
+		if (activeTasks.size() > 100) {
+			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
+		}
+		EffectiveSchedulingPreferences preferences =
+				schedulingPreferencesQueryService.effectiveFor(ownerId);
+		List<CommitmentWindow> commitments = commitmentQueryService.windowsFor(ownerId, planDate);
 		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
-		AiDailyPlanResponse aiResponse =
-				aiClient.generate(new AiDailyPlanRequest(aiTasks, request.availableMinutes(), planDate));
-		rankingValidator.validate(
-				activeTasks, planDate, request.availableMinutes(), aiResponse.items());
-		DailyPlanWarningSnapshot warning =
-				computeWarning(activeTasks, planDate, request.availableMinutes());
+		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
+		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
+		List<Task> rankedTasks = orderTasksByAiRanking(activeTasks, aiResponse.taskIds());
+		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
+		DailyPlanSchedule schedule = scheduler.compose(planDate, rankedTasks, preferences, commitments);
 		return persister.persistPlan(
-				ownerId, planDate, aiResponse.items(), request.availableMinutes(), warning);
+				ownerId, planDate, request.replacePlanId(), aiItems, rankedTasks, schedule);
+	}
+
+	private List<Task> orderTasksByAiRanking(List<Task> activeTasks, List<Long> orderedTaskIds) {
+		Map<Long, Task> taskById = new LinkedHashMap<>();
+		for (Task task : activeTasks) {
+			taskById.put(task.getId() != null ? task.getId() : 0L, task);
+		}
+		List<Task> rankedTasks = new ArrayList<>(orderedTaskIds.size());
+		for (Long taskId : orderedTaskIds) {
+			rankedTasks.add(taskById.get(taskId));
+		}
+		return rankedTasks;
+	}
+
+	private List<AiPlanItem> toPositionedPlanItems(List<Long> orderedTaskIds) {
+		List<AiPlanItem> items = new ArrayList<>(orderedTaskIds.size());
+		for (int index = 0; index < orderedTaskIds.size(); index++) {
+			items.add(new AiPlanItem(orderedTaskIds.get(index), index + 1));
+		}
+		return items;
 	}
 
 	public PageResponse<DailyPlanSummaryResponse> listForCurrentUser(int page, int size) {
@@ -93,7 +137,7 @@ public class DailyPlanService {
 				summaries.getTotalPages());
 	}
 
-	public Optional<DailyPlanResponse> latestForCurrentUser(LocalDate planDate) {
+	public Optional<DailyPlanResponse> byDateForCurrentUser(LocalDate planDate) {
 		if (planDate == null) {
 			throw new BadRequestException("planDate is required");
 		}
@@ -109,6 +153,7 @@ public class DailyPlanService {
 
 	@Transactional
 	public void deleteForCurrentUser(Long planId) {
+		ownerSchedulingLock.lockCurrentOwner();
 		dailyPlanRepository.delete(loadPlanForCurrentUser(planId));
 	}
 
@@ -124,50 +169,11 @@ public class DailyPlanService {
 				projection.getId(),
 				projection.getPlanDate(),
 				projection.getCreatedAt(),
-				projection.getItemCount() != null ? projection.getItemCount() : 0,
-				Boolean.TRUE.equals(projection.getHasWarning()),
-				projection.getAvailableMinutes());
-	}
-
-	private DailyPlanWarningSnapshot computeWarning(
-			List<Task> candidates, LocalDate planDate, int availableMinutes) {
-		List<DailyPlanWarningSnapshot.EstimatedTask> estimatedTasks = new ArrayList<>();
-		List<DailyPlanWarningSnapshot.UnestimatedTask> unestimatedTasks = new ArrayList<>();
-		int minimumAvailableMinutes = 0;
-
-		for (Task candidate : candidates) {
-			if (!isMustInclude(candidate, planDate)) {
-				continue;
-			}
-			long taskId = candidate.getId() != null ? candidate.getId() : 0L;
-			Integer estimate = candidate.getEstimatedMinutes();
-			if (estimate != null) {
-				minimumAvailableMinutes += estimate;
-				estimatedTasks.add(
-						new DailyPlanWarningSnapshot.EstimatedTask(
-								taskId, candidate.getTitle(), estimate));
-			} else {
-				unestimatedTasks.add(
-						new DailyPlanWarningSnapshot.UnestimatedTask(taskId, candidate.getTitle()));
-			}
-		}
-
-		if (unestimatedTasks.isEmpty() && availableMinutes >= minimumAvailableMinutes) {
-			return null;
-		}
-		return new DailyPlanWarningSnapshot(
-				minimumAvailableMinutes, estimatedTasks, unestimatedTasks);
-	}
-
-	private boolean isMustInclude(Task task, LocalDate planDate) {
-		if (task.getStatus() == TaskStatus.IN_PROGRESS) {
-			return true;
-		}
-		if (task.getStatus() == TaskStatus.OPEN) {
-			LocalDate dueDate = task.getDueDate();
-			return dueDate != null && !dueDate.isAfter(planDate);
-		}
-		return false;
+				projection.getScheduledWorkMinutes() != null ? projection.getScheduledWorkMinutes() : 0,
+				projection.getWorkSessionCount() != null ? projection.getWorkSessionCount() : 0,
+				projection.getScheduledTaskCount() != null ? projection.getScheduledTaskCount() : 0,
+				projection.getUnplacedWorkCount() != null ? projection.getUnplacedWorkCount() : 0,
+				Boolean.TRUE.equals(projection.getHasWarning()));
 	}
 
 	private AiPlanTask toAiPlanTask(Task task) {

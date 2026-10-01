@@ -11,16 +11,27 @@ import org.springframework.data.repository.query.Param;
 
 public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 
-	@EntityGraph(attributePaths = {"items", "items.task"})
+	@EntityGraph(attributePaths = {"tasks", "blocks", "blocks.dailyPlanTask"})
 	Optional<DailyPlan> findByOwner_IdAndId(Long ownerId, Long planId);
 
 	@Query(
 			value =
 					"""
 					SELECT p.id AS id, p.planDate AS planDate, p.createdAt AS createdAt,
-					       p.availableMinutes AS availableMinutes,
-					       CASE WHEN p.warning IS NOT NULL THEN true ELSE false END AS hasWarning,
-					       (SELECT COUNT(i) FROM DailyPlanItem i WHERE i.dailyPlan.id = p.id) AS itemCount
+					       p.scheduledWorkMinutes AS scheduledWorkMinutes,
+					       (SELECT COUNT(b) FROM DailyPlanBlock b
+					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
+					           AS workSessionCount,
+					       (SELECT COUNT(DISTINCT b.dailyPlanTask.id) FROM DailyPlanBlock b
+					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
+					           AS scheduledTaskCount,
+					       (SELECT COUNT(t) FROM DailyPlanTask t
+					        WHERE t.dailyPlan.id = p.id AND t.unplacedReason IS NOT NULL)
+					           AS unplacedWorkCount,
+					       EXISTS (SELECT t FROM DailyPlanTask t
+					               WHERE t.dailyPlan.id = p.id
+					                 AND t.mustInclude = true
+					                 AND t.unplacedReason IS NOT NULL) AS hasWarning
 					FROM DailyPlan p
 					WHERE p.owner.id = :ownerId
 					ORDER BY p.createdAt DESC, p.id DESC
@@ -29,7 +40,7 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 	Page<DailyPlanSummaryProjection> findSummariesByOwner(
 			@Param("ownerId") Long ownerId, Pageable pageable);
 
-	@EntityGraph(attributePaths = {"items", "items.task"})
+	@EntityGraph(attributePaths = {"tasks", "blocks", "blocks.dailyPlanTask"})
 	Optional<DailyPlan> findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 			Long ownerId, LocalDate planDate);
 }
