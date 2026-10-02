@@ -1,0 +1,5 @@
+# Remaining effort is checkpointed separately from time spent
+
+Remaining effort is the current estimate of how long a Task still needs, while actual minutes only record time spent. A done block provisionally credits its planned duration, a partly done block credits its actual minutes, and skipped work credits nothing. An explicit reassessment, finish, reopen, or crossing-block reconciliation replaces that running estimate and forms a checkpoint: earlier-dated work can still be corrected for history, but it does not move the reassessed value.
+
+Subtracting every actual minute from the original estimate was rejected because an hour spent does not tell FocusFlow whether an hour of the Task was finished. Requiring a manual remainder on every save was rejected because the common case, completing the planned block, already has a useful default. Same-day events after a checkpoint use recording order because the product does not collect actual start and end times; the checkpoint dialog tells the user that later same-day entries count as new progress.
