@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
@@ -34,6 +35,9 @@ class TaskServiceTest {
 	private TaskRepository taskRepository;
 
 	@Mock
+	private RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
+
+	@Mock
 	private UserRepository userRepository;
 
 	@Mock
@@ -47,7 +51,11 @@ class TaskServiceTest {
 	void setUp() {
 		taskService =
 				new TaskService(
-						taskRepository, userRepository, currentUser, taskResponseMapper);
+						taskRepository,
+						remainingEffortCheckpointRepository,
+						userRepository,
+						currentUser,
+						taskResponseMapper);
 	}
 
 	@Test
@@ -181,6 +189,224 @@ class TaskServiceTest {
 	}
 
 	@Test
+	void updateForCurrentUser_openEstimateEditCopiesRemainingEffort() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Open task");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(0);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Open task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						90,
+						null,
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(90);
+		assertThat(task.getEffortVersion()).isEqualTo(1);
+	}
+
+	@Test
+	void updateForCurrentUser_finishSetsDoneAndZeroRemaining() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		User owner = new User();
+		owner.setEmail("owner@example.com");
+		owner.setUsername("owner");
+
+		Task task = new Task();
+		task.setOwner(owner);
+		task.setTitle("Finish me");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(0);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+		when(remainingEffortCheckpointRepository.save(any(RemainingEffortCheckpoint.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Finish me",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.DONE,
+						null,
+						60,
+						LocalDate.of(2026, 10, 3),
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.DONE);
+		assertThat(task.getRemainingEffortMinutes()).isZero();
+		assertThat(task.getEffortVersion()).isEqualTo(1);
+
+		ArgumentCaptor<RemainingEffortCheckpoint> checkpointCaptor =
+				ArgumentCaptor.forClass(RemainingEffortCheckpoint.class);
+		verify(remainingEffortCheckpointRepository).save(checkpointCaptor.capture());
+		assertThat(checkpointCaptor.getValue().getAssessedRemainingMinutes()).isZero();
+	}
+
+	@Test
+	void updateForCurrentUser_estimateEditAfterProgressKeepsRemainingEffort() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Open task with checkpoint");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(45);
+		task.setEffortVersion(2);
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(remainingEffortCheckpointRepository.existsByTaskReference_Id(7L)).thenReturn(true);
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Open task with checkpoint",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						90,
+						null,
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
+		assertThat(task.getEffortVersion()).isEqualTo(2);
+	}
+
+	@Test
+	void updateForCurrentUser_cancelKeepsRemainingEffort() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Cancel me");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(45);
+		task.setEffortVersion(2);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Cancel me",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.CANCELLED,
+						null,
+						60,
+						null,
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.CANCELLED);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
+		assertThat(task.getEffortVersion()).isEqualTo(3);
+		verify(remainingEffortCheckpointRepository, never()).save(any(RemainingEffortCheckpoint.class));
+	}
+
+	@Test
+	void updateForCurrentUser_reopenRequiresPositiveAssessment() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Done task");
+		task.setStatus(TaskStatus.DONE);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(0);
+		task.setEffortVersion(3);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Done task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						LocalDate.of(2026, 10, 3),
+						null,
+						null);
+
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("remaining effort minutes is required to reopen");
+
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.DONE);
+		verify(taskRepository, never()).save(any(Task.class));
+	}
+
+	@Test
+	void updateForCurrentUser_staleEffortVersionConflicts() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Stale version task");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(3);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Stale version task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						null,
+						null,
+						2);
+
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("PROGRESS_CONFLICT"));
+
+		assertThat(task.getTitle()).isEqualTo("Stale version task");
+		verify(taskRepository, never()).save(any(Task.class));
+	}
+
+	@Test
 	void updateForCurrentUser_whenOwned_updatesFieldsAndReturnsResponse() {
 		when(currentUser.getCurrentUser())
 				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
@@ -198,32 +424,35 @@ class TaskServiceTest {
 						"New title",
 						"New description",
 						TaskPriority.HIGH,
-						TaskStatus.DONE,
+						TaskStatus.OPEN,
 						LocalDate.of(2026, 6, 1),
-						90);
+						90,
+						null,
+						null,
+						null);
 
 		TaskResponse response = taskService.updateForCurrentUser(7L, request);
 
 		assertThat(task.getTitle()).isEqualTo("New title");
 		assertThat(task.getDescription()).isEqualTo("New description");
 		assertThat(task.getPriority()).isEqualTo(TaskPriority.HIGH);
-		assertThat(task.getStatus()).isEqualTo(TaskStatus.DONE);
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.OPEN);
 		assertThat(task.getDueDate()).isEqualTo(LocalDate.of(2026, 6, 1));
 		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
 		assertThat(response.title()).isEqualTo("New title");
-		assertThat(response.status()).isEqualTo(TaskStatus.DONE);
+		assertThat(response.status()).isEqualTo(TaskStatus.OPEN);
 		verify(taskRepository).save(task);
 	}
 
 	@Test
 	void updateForCurrentUser_withNonPositiveEstimatedMinutes_throwsBadRequestAndDoesNotSave() {
 		UpdateTaskRequest zeroEstimate =
-				new UpdateTaskRequest("New title", null, null, null, null, 0);
+				new UpdateTaskRequest("New title", null, null, null, null, 0, null, null, null);
 		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, zeroEstimate))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("estimated minutes must be null or positive");
 		UpdateTaskRequest negativeEstimate =
-				new UpdateTaskRequest("New title", null, null, null, null, -1);
+				new UpdateTaskRequest("New title", null, null, null, null, -1, null, null, null);
 		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, negativeEstimate))
 				.isInstanceOf(BadRequestException.class)
 				.hasMessage("estimated minutes must be null or positive");
@@ -238,7 +467,7 @@ class TaskServiceTest {
 		when(taskRepository.findByOwner_IdAndId(42L, 99L)).thenReturn(Optional.empty());
 
 		UpdateTaskRequest request =
-				new UpdateTaskRequest("New title", null, null, null, null, null);
+				new UpdateTaskRequest("New title", null, null, null, null, null, null, null, null);
 
 		assertThatThrownBy(() -> taskService.updateForCurrentUser(99L, request))
 				.isInstanceOf(NotFoundException.class)
