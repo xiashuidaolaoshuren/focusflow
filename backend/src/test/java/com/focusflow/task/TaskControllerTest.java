@@ -17,6 +17,7 @@ import com.focusflow.common.error.NotFoundException;
 import com.focusflow.security.FocusFlowUserDetailsService;
 import com.focusflow.security.SecurityConfig;
 import com.focusflow.task.dto.CreateTaskRequest;
+import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
 import java.util.List;
@@ -362,6 +363,45 @@ class TaskControllerTest {
 				.andExpect(jsonPath("$.status").value(404))
 				.andExpect(jsonPath("$.message").value("task not found"))
 				.andExpect(jsonPath("$.path").value("/api/tasks/99"));
+	}
+
+	@Test
+	@WithMockUser
+	void reassessRemainingEffort_whenAuthenticated_returns200AndBody() throws Exception {
+		when(taskService.reassessRemainingEffortForCurrentUser(
+						any(Long.class), any(RemainingEffortRequest.class)))
+				.thenReturn(
+						new TaskResponse(
+								1L,
+								"Task A",
+								null,
+								com.focusflow.task.TaskPriority.MEDIUM,
+								com.focusflow.task.TaskStatus.IN_PROGRESS,
+								null,
+								60,
+								45,
+								3));
+
+		mockMvc.perform(
+						post("/api/tasks/1/remaining-effort")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "remainingEffortMinutes": 45,
+										  "currentDate": "2026-10-03",
+										  "effortVersion": 2
+										}
+										"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(1))
+				.andExpect(jsonPath("$.remainingEffortMinutes").value(45))
+				.andExpect(jsonPath("$.effortVersion").value(3));
+
+		verify(taskService)
+				.reassessRemainingEffortForCurrentUser(
+						1L, new RemainingEffortRequest(45, java.time.LocalDate.of(2026, 10, 3), 2));
 	}
 
 	@Test

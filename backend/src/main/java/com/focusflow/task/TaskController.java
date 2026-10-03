@@ -1,6 +1,7 @@
 package com.focusflow.task;
 
 import com.focusflow.task.dto.CreateTaskRequest;
+import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
 import jakarta.validation.Valid;
@@ -46,6 +47,12 @@ public class TaskController {
 	public TaskResponse update(
 			@PathVariable Long id, @Valid @RequestBody UpdateTaskRequest request) {
 		return taskService.updateForCurrentUser(id, request);
+	}
+
+	@PostMapping("/{id}/remaining-effort")
+	public TaskResponse reassessRemainingEffort(
+			@PathVariable Long id, @Valid @RequestBody RemainingEffortRequest request) {
+		return taskService.reassessRemainingEffortForCurrentUser(id, request);
 	}
 
 	@DeleteMapping("/{id}")

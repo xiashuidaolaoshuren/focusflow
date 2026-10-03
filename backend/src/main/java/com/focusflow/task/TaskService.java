@@ -9,6 +9,7 @@ import com.focusflow.effort.RemainingEffortCalculator;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
+import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
 import com.focusflow.user.User;
@@ -98,7 +99,6 @@ public class TaskService {
 			task.setEffortVersion(task.getEffortVersion() + 1);
 		} else if (isReopen(previousStatus, nextStatus)) {
 			requireCurrentDate(request.currentDate());
-			requirePositiveRemainingForReopen(request.remainingEffortMinutes());
 			reopenTask(task, request.currentDate(), request.remainingEffortMinutes());
 		}
 		task.setStatus(nextStatus);
@@ -106,13 +106,19 @@ public class TaskService {
 	}
 
 	private void finishTask(Task task, LocalDate workDate) {
+		applyCheckpoint(task, workDate, 0);
+	}
+
+	private void applyCheckpoint(Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
 		EffortEvent.Checkpoint checkpoint =
-				new EffortEvent.Checkpoint(workDate, Instant.now(), task.getEffortVersion() + 1L, 0);
+				new EffortEvent.Checkpoint(
+						workDate, Instant.now(), task.getEffortVersion() + 1L, assessedRemainingMinutes);
 		EffortAssessment assessment =
-				RemainingEffortCalculator.apply(task.getRemainingEffortMinutes(), List.of(checkpoint));
+				RemainingEffortCalculator.apply(
+						task.getRemainingEffortMinutes(), List.of(checkpoint));
 		task.setRemainingEffortMinutes(assessment.remainingMinutes());
 		task.setEffortVersion(task.getEffortVersion() + 1);
-		saveCheckpoint(task, workDate, 0);
+		saveCheckpoint(task, workDate, assessedRemainingMinutes);
 	}
 
 	private void saveCheckpoint(Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
@@ -132,12 +138,6 @@ public class TaskService {
 		}
 	}
 
-	private static void requirePositiveRemainingForReopen(Integer remainingEffortMinutes) {
-		if (remainingEffortMinutes == null) {
-			throw new BadRequestException("remaining effort minutes is required to reopen");
-		}
-	}
-
 	private static boolean isReopen(TaskStatus previousStatus, TaskStatus nextStatus) {
 		if (nextStatus != TaskStatus.OPEN && nextStatus != TaskStatus.IN_PROGRESS) {
 			return false;
@@ -145,15 +145,8 @@ public class TaskService {
 		return previousStatus == TaskStatus.DONE || previousStatus == TaskStatus.CANCELLED;
 	}
 
-	private void reopenTask(Task task, LocalDate workDate, int remainingEffortMinutes) {
-		EffortEvent.Checkpoint checkpoint =
-				new EffortEvent.Checkpoint(
-						workDate, Instant.now(), task.getEffortVersion() + 1L, remainingEffortMinutes);
-		EffortAssessment assessment =
-				RemainingEffortCalculator.apply(task.getRemainingEffortMinutes(), List.of(checkpoint));
-		task.setRemainingEffortMinutes(assessment.remainingMinutes());
-		task.setEffortVersion(task.getEffortVersion() + 1);
-		saveCheckpoint(task, workDate, remainingEffortMinutes);
+	private void reopenTask(Task task, LocalDate workDate, Integer remainingEffortMinutes) {
+		applyCheckpoint(task, workDate, remainingEffortMinutes);
 	}
 
 	private boolean shouldSyncRemainingFromEstimate(
@@ -170,9 +163,32 @@ public class TaskService {
 	}
 
 	@Transactional
+	public TaskResponse reassessRemainingEffortForCurrentUser(
+			Long taskId, RemainingEffortRequest request) {
+		requireCurrentDate(request.currentDate());
+		Task task = loadTaskForCurrentUser(taskId);
+		requireMatchingEffortVersion(task, request.effortVersion());
+		applyCheckpoint(task, request.currentDate(), request.remainingEffortMinutes());
+		return taskResponseMapper.toResponse(taskRepository.save(task));
+	}
+
+	@Transactional
 	public void deleteForCurrentUser(Long taskId) {
 		Task task = loadTaskForCurrentUser(taskId);
+		detachCheckpointReferences(task);
 		taskRepository.delete(task);
+	}
+
+	private void detachCheckpointReferences(Task task) {
+		Long taskId = task.getId();
+		if (taskId == null) {
+			return;
+		}
+		for (RemainingEffortCheckpoint checkpoint :
+				remainingEffortCheckpointRepository.findByTaskReference_Id(taskId)) {
+			checkpoint.setTaskReference(null);
+			remainingEffortCheckpointRepository.save(checkpoint);
+		}
 	}
 
 	private static void requireMatchingEffortVersion(Task task, Integer expectedEffortVersion) {

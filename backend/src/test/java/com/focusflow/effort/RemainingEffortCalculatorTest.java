@@ -104,6 +104,34 @@ class RemainingEffortCalculatorTest {
 	}
 
 	@Test
+	void apply_unknownEffortStaysUnknown() {
+		AcceptedEffort unchanged =
+				(AcceptedEffort) RemainingEffortCalculator.apply(null, List.of());
+		assertThat(unchanged.remainingMinutes()).isNull();
+
+		EffortEvent.WorkCredit done =
+				new EffortEvent.WorkCredit(
+						MONDAY, RECORDED_AT, 1L, WorkOutcome.DONE, 50, 35);
+		AcceptedEffort afterCredit =
+				(AcceptedEffort) RemainingEffortCalculator.apply(null, List.of(done));
+		assertThat(afterCredit.remainingMinutes()).isNull();
+
+		EffortEvent.Checkpoint unknownCheckpoint =
+				new EffortEvent.Checkpoint(MONDAY, RECORDED_AT, 1L, null);
+		AcceptedEffort afterUnknownCheckpoint =
+				(AcceptedEffort)
+						RemainingEffortCalculator.apply(null, List.of(unknownCheckpoint));
+		assertThat(afterUnknownCheckpoint.remainingMinutes()).isNull();
+
+		EffortEvent.Checkpoint knownCheckpoint =
+				new EffortEvent.Checkpoint(MONDAY, RECORDED_AT, 1L, 90);
+		AcceptedEffort afterKnownCheckpoint =
+				(AcceptedEffort)
+						RemainingEffortCalculator.apply(null, List.of(knownCheckpoint));
+		assertThat(afterKnownCheckpoint.remainingMinutes()).isEqualTo(90);
+	}
+
+	@Test
 	void apply_doneCreditsPlannedDuration() {
 		EffortEvent.WorkCredit done =
 				new EffortEvent.WorkCredit(

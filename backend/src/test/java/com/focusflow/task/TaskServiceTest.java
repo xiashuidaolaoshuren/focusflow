@@ -14,6 +14,7 @@ import com.focusflow.common.error.NotFoundException;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
+import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
 import com.focusflow.user.User;
@@ -338,17 +339,25 @@ class TaskServiceTest {
 	}
 
 	@Test
-	void updateForCurrentUser_reopenRequiresPositiveAssessment() {
+	void updateForCurrentUser_reopenToExplicitUnknown() {
 		when(currentUser.getCurrentUser())
 				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
 
+		User owner = new User();
+		owner.setEmail("owner@example.com");
+		owner.setUsername("owner");
+
 		Task task = new Task();
+		task.setOwner(owner);
 		task.setTitle("Done task");
 		task.setStatus(TaskStatus.DONE);
 		task.setEstimatedMinutes(60);
 		task.setRemainingEffortMinutes(0);
 		task.setEffortVersion(3);
 		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+		when(remainingEffortCheckpointRepository.save(any(RemainingEffortCheckpoint.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		UpdateTaskRequest request =
 				new UpdateTaskRequest(
@@ -362,12 +371,16 @@ class TaskServiceTest {
 						null,
 						null);
 
-		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, request))
-				.isInstanceOf(BadRequestException.class)
-				.hasMessage("remaining effort minutes is required to reopen");
+		taskService.updateForCurrentUser(7L, request);
 
-		assertThat(task.getStatus()).isEqualTo(TaskStatus.DONE);
-		verify(taskRepository, never()).save(any(Task.class));
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.OPEN);
+		assertThat(task.getRemainingEffortMinutes()).isNull();
+		assertThat(task.getEffortVersion()).isEqualTo(4);
+
+		ArgumentCaptor<RemainingEffortCheckpoint> checkpointCaptor =
+				ArgumentCaptor.forClass(RemainingEffortCheckpoint.class);
+		verify(remainingEffortCheckpointRepository).save(checkpointCaptor.capture());
+		assertThat(checkpointCaptor.getValue().getAssessedRemainingMinutes()).isNull();
 	}
 
 	@Test
@@ -472,6 +485,134 @@ class TaskServiceTest {
 		assertThatThrownBy(() -> taskService.updateForCurrentUser(99L, request))
 				.isInstanceOf(NotFoundException.class)
 				.hasMessage("task not found");
+	}
+
+	@Test
+	void reassessRemainingEffortForCurrentUser_positiveValue() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		User owner = new User();
+		owner.setEmail("owner@example.com");
+		owner.setUsername("owner");
+
+		Task task = new Task();
+		task.setOwner(owner);
+		task.setTitle("Reassess me");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(2);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+		when(remainingEffortCheckpointRepository.save(any(RemainingEffortCheckpoint.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		RemainingEffortRequest request =
+				new RemainingEffortRequest(45, LocalDate.of(2026, 10, 3), 2);
+
+		TaskResponse response =
+				taskService.reassessRemainingEffortForCurrentUser(7L, request);
+
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
+		assertThat(task.getEffortVersion()).isEqualTo(3);
+		assertThat(response.remainingEffortMinutes()).isEqualTo(45);
+		assertThat(response.effortVersion()).isEqualTo(3);
+
+		ArgumentCaptor<RemainingEffortCheckpoint> checkpointCaptor =
+				ArgumentCaptor.forClass(RemainingEffortCheckpoint.class);
+		verify(remainingEffortCheckpointRepository).save(checkpointCaptor.capture());
+		assertThat(checkpointCaptor.getValue().getAssessedRemainingMinutes()).isEqualTo(45);
+	}
+
+	@Test
+	void reassessRemainingEffortForCurrentUser_explicitUnknown() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		User owner = new User();
+		owner.setEmail("owner@example.com");
+		owner.setUsername("owner");
+
+		Task task = new Task();
+		task.setOwner(owner);
+		task.setTitle("Unknown remainder");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(2);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+		when(remainingEffortCheckpointRepository.save(any(RemainingEffortCheckpoint.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		RemainingEffortRequest request =
+				new RemainingEffortRequest(null, LocalDate.of(2026, 10, 3), 2);
+
+		taskService.reassessRemainingEffortForCurrentUser(7L, request);
+
+		assertThat(task.getRemainingEffortMinutes()).isNull();
+		assertThat(task.getEffortVersion()).isEqualTo(3);
+
+		ArgumentCaptor<RemainingEffortCheckpoint> checkpointCaptor =
+				ArgumentCaptor.forClass(RemainingEffortCheckpoint.class);
+		verify(remainingEffortCheckpointRepository).save(checkpointCaptor.capture());
+		assertThat(checkpointCaptor.getValue().getAssessedRemainingMinutes()).isNull();
+	}
+
+	@Test
+	void reassessRemainingEffortForCurrentUser_staleEffortVersionConflicts() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Stale reassessment");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(3);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+
+		RemainingEffortRequest request =
+				new RemainingEffortRequest(45, LocalDate.of(2026, 10, 3), 2);
+
+		assertThatThrownBy(() -> taskService.reassessRemainingEffortForCurrentUser(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("PROGRESS_CONFLICT"));
+
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(60);
+		assertThat(task.getEffortVersion()).isEqualTo(3);
+		verify(taskRepository, never()).save(any(Task.class));
+		verify(remainingEffortCheckpointRepository, never()).save(any(RemainingEffortCheckpoint.class));
+	}
+
+	@Test
+	void deleteForCurrentUser_clearsCheckpointTaskReference() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("To delete");
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+
+		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
+		checkpoint.setSourceTaskId(7L);
+		checkpoint.setTaskReference(task);
+		when(remainingEffortCheckpointRepository.findByTaskReference_Id(7L))
+				.thenReturn(List.of(checkpoint));
+		when(remainingEffortCheckpointRepository.save(checkpoint))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		taskService.deleteForCurrentUser(7L);
+
+		assertThat(checkpoint.getTaskReference()).isNull();
+		assertThat(checkpoint.getSourceTaskId()).isEqualTo(7L);
+		verify(remainingEffortCheckpointRepository).save(checkpoint);
+		verify(remainingEffortCheckpointRepository, never()).delete(any(RemainingEffortCheckpoint.class));
+		verify(taskRepository).delete(task);
 	}
 
 	@Test

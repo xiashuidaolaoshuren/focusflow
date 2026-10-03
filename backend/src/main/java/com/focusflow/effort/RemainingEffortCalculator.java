@@ -14,11 +14,14 @@ public final class RemainingEffortCalculator {
 				Comparator.comparing(EffortEvent::workDate)
 						.thenComparing(EffortEvent::firstRecordedAt));
 
-		int remaining = startingRemaining;
+		Integer remaining = startingRemaining;
 		for (EffortEvent event : ordered) {
 			if (event instanceof EffortEvent.Checkpoint checkpoint) {
 				remaining = checkpoint.assessedRemainingMinutes();
 			} else if (event instanceof EffortEvent.WorkCredit work) {
+				if (remaining == null) {
+					continue;
+				}
 				if (work.outcome() == WorkOutcome.DONE) {
 					remaining -= work.plannedMinutes();
 				} else if (work.outcome() == WorkOutcome.PARTLY_DONE) {
