@@ -84,6 +84,18 @@ public class TaskService {
 		saveCheckpoint(task, workDate, assessedRemainingMinutes);
 	}
 
+	/**
+	 * When the most recent remaining-effort checkpoint for a Task was recorded, or null when the
+	 * Task has none. Plan-side callers use this to tell whether newer effort state already replaced
+	 * an earlier block credit.
+	 */
+	public Instant latestCheckpointRecordedAt(Task task) {
+		return remainingEffortCheckpointRepository
+				.findFirstByTaskReference_IdOrderByRecordedAtDesc(task)
+				.map(RemainingEffortCheckpoint::getRecordedAt)
+				.orElse(null);
+	}
+
 	@Transactional
 	public TaskResponse updateForCurrentUser(Long taskId, UpdateTaskRequest request) {
 		requireNullOrPositiveEstimate(request.estimatedMinutes());

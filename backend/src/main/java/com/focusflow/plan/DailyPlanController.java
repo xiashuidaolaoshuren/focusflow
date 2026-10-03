@@ -1,6 +1,8 @@
 package com.focusflow.plan;
 
 import com.focusflow.common.web.PageResponse;
+import com.focusflow.plan.dto.BlockProgressRequest;
+import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -25,9 +28,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class DailyPlanController {
 
 	private final DailyPlanService dailyPlanService;
+	private final BlockProgressService blockProgressService;
 
-	public DailyPlanController(DailyPlanService dailyPlanService) {
+	public DailyPlanController(
+			DailyPlanService dailyPlanService, BlockProgressService blockProgressService) {
 		this.dailyPlanService = dailyPlanService;
+		this.blockProgressService = blockProgressService;
 	}
 
 	@GetMapping
@@ -53,6 +59,14 @@ public class DailyPlanController {
 	@GetMapping("/{id}")
 	public DailyPlanResponse getById(@PathVariable Long id) {
 		return dailyPlanService.getForCurrentUser(id);
+	}
+
+	@PutMapping("/{planId}/blocks/{blockId}/progress")
+	public BlockProgressResponse recordProgress(
+			@PathVariable Long planId,
+			@PathVariable Long blockId,
+			@RequestBody BlockProgressRequest request) {
+		return blockProgressService.record(planId, blockId, request);
 	}
 
 	@DeleteMapping("/{id}")

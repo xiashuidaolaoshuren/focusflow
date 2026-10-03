@@ -20,6 +20,7 @@ import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
 import com.focusflow.user.User;
 import com.focusflow.user.UserRepository;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -627,6 +628,29 @@ class TaskServiceTest {
 		assertThat(task.getEffortVersion()).isEqualTo(3);
 		verify(taskRepository, never()).save(any(Task.class));
 		verify(remainingEffortCheckpointRepository, never()).save(any(RemainingEffortCheckpoint.class));
+	}
+
+	@Test
+	void latestCheckpointRecordedAt_returnsMostRecentCheckpointInstant() {
+		Task task = new Task();
+		Instant recordedAt = Instant.parse("2026-10-03T10:00:00Z");
+		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
+		checkpoint.setRecordedAt(recordedAt);
+		when(remainingEffortCheckpointRepository
+						.findFirstByTaskReference_IdOrderByRecordedAtDesc(task))
+				.thenReturn(Optional.of(checkpoint));
+
+		assertThat(taskService.latestCheckpointRecordedAt(task)).isEqualTo(recordedAt);
+	}
+
+	@Test
+	void latestCheckpointRecordedAt_whenNoCheckpointExists_returnsNull() {
+		Task task = new Task();
+		when(remainingEffortCheckpointRepository
+						.findFirstByTaskReference_IdOrderByRecordedAtDesc(task))
+				.thenReturn(Optional.empty());
+
+		assertThat(taskService.latestCheckpointRecordedAt(task)).isNull();
 	}
 
 	@Test

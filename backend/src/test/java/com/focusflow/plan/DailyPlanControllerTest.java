@@ -2,6 +2,7 @@ package com.focusflow.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,20 +10,26 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.focusflow.ai.AiProviderException;
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.GlobalExceptionHandler;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
+import com.focusflow.effort.WorkOutcome;
+import com.focusflow.plan.dto.BlockProgressRequest;
+import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
 import com.focusflow.plan.dto.TaskSnapshotResponse;
 import com.focusflow.schedule.BlockKind;
+import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.testsupport.DailyPlanResponseTestSupport;
 import java.util.Optional;
 import com.focusflow.security.FocusFlowUserDetailsService;
@@ -52,6 +59,9 @@ class DailyPlanControllerTest {
 
 	@MockBean
 	private DailyPlanService dailyPlanService;
+
+	@MockBean
+	private BlockProgressService blockProgressService;
 
 	@MockBean
 	private FocusFlowUserDetailsService userDetailsService;
@@ -165,7 +175,14 @@ class DailyPlanControllerTest {
 														null,
 														45,
 														false),
-												null)),
+												null,
+												null,
+												null,
+												null,
+												null,
+												false,
+												0,
+												BlockDisplayState.ACTIONABLE)),
 								List.of()));
 
 		mockMvc.perform(
@@ -206,6 +223,102 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.status").value(502))
 				.andExpect(jsonPath("$.message").value("provider down"))
 				.andExpect(jsonPath("$.path").value("/api/daily-plans/generate"));
+	}
+
+	@Test
+	void recordProgress_whenUnauthenticated_returns401() throws Exception {
+		mockMvc.perform(
+						put("/api/daily-plans/1/blocks/11/progress")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "outcome": "DONE",
+										  "currentDate": "2026-06-01"
+										}
+										"""))
+				.andExpect(status().isUnauthorized());
+
+		verify(blockProgressService, never())
+				.record(any(Long.class), any(Long.class), any(BlockProgressRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void recordProgress_whenAuthenticated_returns200AndBindsTheRequest() throws Exception {
+		when(blockProgressService.record(eq(1L), eq(11L), any(BlockProgressRequest.class)))
+				.thenReturn(
+						new BlockProgressResponse(
+								new TaskResponse(
+										10L,
+										"Write tests",
+										null,
+										TaskPriority.HIGH,
+										TaskStatus.IN_PROGRESS,
+										null,
+										45,
+										20,
+										2),
+								DailyPlanResponseTestSupport.minimal(
+										1L,
+										LocalDate.of(2026, 6, 1),
+										Instant.parse("2026-06-01T09:00:00Z"),
+										null)));
+
+		mockMvc.perform(
+						put("/api/daily-plans/1/blocks/11/progress")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "outcome": "PARTLY_DONE",
+										  "actualMinutes": 35,
+										  "currentDate": "2026-06-01",
+										  "expectedProgressVersion": 2,
+										  "cutoff": "09:20"
+										}
+										"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.task.id").value(10))
+				.andExpect(jsonPath("$.task.remainingEffortMinutes").value(20))
+				.andExpect(jsonPath("$.plan.id").value(1))
+				.andExpect(jsonPath("$.plan.planDate").value("2026-06-01"));
+
+		ArgumentCaptor<BlockProgressRequest> captor =
+				ArgumentCaptor.forClass(BlockProgressRequest.class);
+		verify(blockProgressService).record(eq(1L), eq(11L), captor.capture());
+		assertThat(captor.getValue().outcome()).isEqualTo(WorkOutcome.PARTLY_DONE);
+		assertThat(captor.getValue().actualMinutes()).isEqualTo(35);
+		assertThat(captor.getValue().currentDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+		assertThat(captor.getValue().expectedProgressVersion()).isEqualTo(2);
+		assertThat(captor.getValue().finish()).isFalse();
+		assertThat(captor.getValue().checkpoint()).isNull();
+		assertThat(captor.getValue().cutoff()).isEqualTo(LocalTime.of(9, 20));
+	}
+
+	@Test
+	@WithMockUser
+	void recordProgress_whenProgressIsStale_returns409WithCode() throws Exception {
+		when(blockProgressService.record(eq(1L), eq(11L), any(BlockProgressRequest.class)))
+				.thenThrow(new ConflictException("PROGRESS_CONFLICT", "block progress has changed"));
+
+		mockMvc.perform(
+						put("/api/daily-plans/1/blocks/11/progress")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "outcome": "DONE",
+										  "currentDate": "2026-06-01",
+										  "expectedProgressVersion": 0
+										}
+										"""))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.status").value(409))
+				.andExpect(jsonPath("$.code").value("PROGRESS_CONFLICT"));
 	}
 
 	@Test

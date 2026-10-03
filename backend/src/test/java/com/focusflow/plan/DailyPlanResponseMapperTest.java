@@ -2,6 +2,7 @@ package com.focusflow.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.focusflow.effort.WorkOutcome;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
@@ -197,6 +198,101 @@ class DailyPlanResponseMapperTest {
 							assertThat(task.title()).isEqualTo("No estimate");
 						});
 		assertThat(warning.outOfTimeTasks()).isEmpty();
+	}
+
+	@Test
+	void toResponse_mapsBlockProgressFieldsAndActionableDisplayState() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		ReflectionTestUtils.setField(revision, "id", 71L);
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.IN_PROGRESS,
+						null,
+						100,
+						false,
+						null,
+						null);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+		DailyPlanBlock block = revision.getBlocks().iterator().next();
+		ReflectionTestUtils.setField(block, "id", 61L);
+		block.setOutcome("PARTLY_DONE");
+		block.setActualMinutes(35);
+		block.setRecordedAt(Instant.parse("2026-06-01T09:30:00Z"));
+		block.setProgressVersion(3);
+		block.setReconciled(true);
+
+		ScheduledBlockResponse response = mapper.toResponse(plan).blocks().get(0);
+
+		assertThat(response.id()).isEqualTo(61L);
+		assertThat(response.revisionId()).isEqualTo(71L);
+		assertThat(response.outcome()).isEqualTo(WorkOutcome.PARTLY_DONE);
+		assertThat(response.actualMinutes()).isEqualTo(35);
+		assertThat(response.reconciled()).isTrue();
+		assertThat(response.progressVersion()).isEqualTo(3);
+		assertThat(response.displayState()).isEqualTo(BlockDisplayState.ACTIONABLE);
+	}
+
+	@Test
+	void toResponse_reportsNoProgressOnAnUnrecordedBlock() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						100,
+						false,
+						null,
+						null);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+
+		ScheduledBlockResponse response = mapper.toResponse(plan).blocks().get(0);
+
+		assertThat(response.outcome()).isNull();
+		assertThat(response.actualMinutes()).isNull();
+		assertThat(response.reconciled()).isFalse();
+		assertThat(response.progressVersion()).isZero();
+		assertThat(response.displayState()).isEqualTo(BlockDisplayState.ACTIONABLE);
+	}
+
+	@Test
+	void toResponse_marksAnUnusedSessionOfAFinishedTaskAsNoLongerNeeded() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						100,
+						false,
+						null,
+						null);
+		task.getTaskReference().setStatus(TaskStatus.DONE);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+
+		ScheduledBlockResponse response = mapper.toResponse(plan).blocks().get(0);
+
+		assertThat(response.outcome()).isNull();
+		assertThat(response.displayState()).isEqualTo(BlockDisplayState.NO_LONGER_NEEDED);
 	}
 
 	private static DailyPlan scheduledPlan() {

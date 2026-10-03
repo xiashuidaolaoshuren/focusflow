@@ -1,5 +1,6 @@
 package com.focusflow.plan;
 
+import com.focusflow.effort.WorkOutcome;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
@@ -27,10 +28,7 @@ public class DailyPlanResponseMapper {
 		Map<DailyPlanTask, Integer> sessionCounts = computeSessionCounts(sortedBlocks);
 		List<ScheduledBlockResponse> blocks =
 				sortedBlocks.stream()
-						.map(
-								block ->
-										toBlockResponse(
-												block, sessionCounts, sessionProgress))
+						.map(block -> toBlockResponse(plan, block, sessionCounts, sessionProgress))
 						.toList();
 		List<UnplacedWorkResponse> unplacedWork =
 				revision.getTasks().stream()
@@ -103,9 +101,14 @@ public class DailyPlanResponseMapper {
 	}
 
 	private ScheduledBlockResponse toBlockResponse(
+			DailyPlan plan,
 			DailyPlanBlock block,
 			Map<DailyPlanTask, Integer> sessionCounts,
 			Map<DailyPlanTask, SessionProgress> sessionProgress) {
+		Long revisionId = block.getRevision() != null ? block.getRevision().getId() : null;
+		WorkOutcome outcome =
+				block.getOutcome() != null ? WorkOutcome.valueOf(block.getOutcome()) : null;
+		BlockDisplayState displayState = BlockDisplayState.of(plan, block);
 		if (block.getKind() == BlockKind.WORK) {
 			DailyPlanTask task = block.getDailyPlanTask();
 			SessionProgress progress =
@@ -119,7 +122,14 @@ public class DailyPlanResponseMapper {
 					sessionIndex,
 					sessionCount,
 					toTaskSnapshot(task),
-					null);
+					null,
+					block.getId(),
+					revisionId,
+					outcome,
+					block.getActualMinutes(),
+					block.isReconciled(),
+					block.getProgressVersion(),
+					displayState);
 		}
 		return new ScheduledBlockResponse(
 				block.getKind(),
@@ -128,7 +138,14 @@ public class DailyPlanResponseMapper {
 				null,
 				null,
 				null,
-				block.getLabel());
+				block.getLabel(),
+				block.getId(),
+				revisionId,
+				outcome,
+				block.getActualMinutes(),
+				block.isReconciled(),
+				block.getProgressVersion(),
+				displayState);
 	}
 
 	private UnplacedWorkResponse toUnplacedWorkResponse(DailyPlanTask task) {
