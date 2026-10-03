@@ -12,7 +12,7 @@ This tracks a multi-milestone iteration aimed at making FocusFlow's planning fea
 |---|---|---|
 | 1.1.0 — Platform hardening | Implemented and merged. | [`2026-08-26-focusflow-1.1.0-platform-hardening-design.md`](specs/2026-08-26-focusflow-1.1.0-platform-hardening-design.md) |
 | 1.2.0 — The scheduled day | Implemented. | [`2026-09-07-focusflow-1.2.0-scheduled-day-design.md`](specs/2026-09-07-focusflow-1.2.0-scheduled-day-design.md); [`2026-09-07-focusflow-1.2.0-scheduled-day-plan.md`](plans/2026-09-07-focusflow-1.2.0-scheduled-day-plan.md) |
-| 1.3.0 — Progress and carry-over | Specified. | [`2026-10-02-focusflow-1.3.0-progress-carry-over-design.md`](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md) |
+| 1.3.0 — Progress and carry-over | Implementation plan written. | [`2026-10-02-focusflow-1.3.0-progress-carry-over-design.md`](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md); [`2026-10-02-focusflow-1.3.0-progress-carry-over-plan.md`](plans/2026-10-02-focusflow-1.3.0-progress-carry-over-plan.md) |
 | 1.4.0 — Dependencies and the multi-day horizon | Not started. Scope outlined below. | — |
 
 Deferred items with no milestone assigned are listed at the end.
@@ -40,7 +40,7 @@ Implemented. See the spec and ADRs rather than this outline.
 
 ## 1.3.0 — Progress and carry-over
 
-Specified. See the [1.3.0 design](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md) and ADRs [`0026`](../adr/0026-checkpointed-remaining-effort.md) and [`0027`](../adr/0027-revision-preserving-replan.md). The placement algorithm is unchanged; planning consumes current remaining effort, and re-planning appends a revision instead of replacing a plan that has outcomes.
+Implementation plan written. See the [1.3.0 design](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md), the [1.3.0 plan](plans/2026-10-02-focusflow-1.3.0-progress-carry-over-plan.md), and ADRs [`0026`](../adr/0026-checkpointed-remaining-effort.md) and [`0027`](../adr/0027-revision-preserving-replan.md). The placement algorithm is unchanged; planning consumes current remaining effort, and re-planning appends a revision instead of replacing a plan that has outcomes.
 
 ## 1.4.0 — Dependencies and the multi-day horizon
 
