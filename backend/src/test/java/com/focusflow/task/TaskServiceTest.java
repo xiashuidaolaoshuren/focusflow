@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.plan.DailyPlanBlockRepository;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
@@ -39,6 +40,9 @@ class TaskServiceTest {
 	private RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
 
 	@Mock
+	private DailyPlanBlockRepository dailyPlanBlockRepository;
+
+	@Mock
 	private UserRepository userRepository;
 
 	@Mock
@@ -54,6 +58,7 @@ class TaskServiceTest {
 				new TaskService(
 						taskRepository,
 						remainingEffortCheckpointRepository,
+						dailyPlanBlockRepository,
 						userRepository,
 						currentUser,
 						taskResponseMapper);
@@ -302,6 +307,44 @@ class TaskServiceTest {
 		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
 		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
 		assertThat(task.getEffortVersion()).isEqualTo(2);
+	}
+
+	@Test
+	void updateForCurrentUser_estimateEditWithBlockOutcomeKeepsRemainingEffort() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Open task with recorded work");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(1);
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(dailyPlanBlockRepository.existsByDailyPlanTask_TaskReference_IdAndOutcomeIsNotNull(7L))
+				.thenReturn(true);
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Open task with recorded work",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						90,
+						null,
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(60);
+		assertThat(task.getEffortVersion()).isEqualTo(1);
 	}
 
 	@Test

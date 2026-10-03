@@ -6,6 +6,7 @@ import com.focusflow.common.error.NotFoundException;
 import com.focusflow.effort.EffortAssessment;
 import com.focusflow.effort.EffortEvent;
 import com.focusflow.effort.RemainingEffortCalculator;
+import com.focusflow.plan.DailyPlanBlockRepository;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
@@ -26,6 +27,7 @@ public class TaskService {
 
 	private final TaskRepository taskRepository;
 	private final RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
+	private final DailyPlanBlockRepository dailyPlanBlockRepository;
 	private final UserRepository userRepository;
 	private final CurrentUser currentUser;
 	private final TaskResponseMapper taskResponseMapper;
@@ -33,11 +35,13 @@ public class TaskService {
 	public TaskService(
 			TaskRepository taskRepository,
 			RemainingEffortCheckpointRepository remainingEffortCheckpointRepository,
+			DailyPlanBlockRepository dailyPlanBlockRepository,
 			UserRepository userRepository,
 			CurrentUser currentUser,
 			TaskResponseMapper taskResponseMapper) {
 		this.taskRepository = taskRepository;
 		this.remainingEffortCheckpointRepository = remainingEffortCheckpointRepository;
+		this.dailyPlanBlockRepository = dailyPlanBlockRepository;
 		this.userRepository = userRepository;
 		this.currentUser = currentUser;
 		this.taskResponseMapper = taskResponseMapper;
@@ -72,6 +76,12 @@ public class TaskService {
 
 	public TaskResponse getForCurrentUser(Long taskId) {
 		return taskResponseMapper.toResponse(loadTaskForCurrentUser(taskId));
+	}
+
+	@Transactional
+	public void recordRemainingEffortCheckpoint(
+			Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
+		saveCheckpoint(task, workDate, assessedRemainingMinutes);
 	}
 
 	@Transactional
@@ -159,7 +169,9 @@ public class TaskService {
 		}
 		Long taskId = task.getId();
 		return taskId == null
-				|| !remainingEffortCheckpointRepository.existsByTaskReference_Id(taskId);
+				|| (!remainingEffortCheckpointRepository.existsByTaskReference_Id(taskId)
+						&& !dailyPlanBlockRepository
+								.existsByDailyPlanTask_TaskReference_IdAndOutcomeIsNotNull(taskId));
 	}
 
 	@Transactional
