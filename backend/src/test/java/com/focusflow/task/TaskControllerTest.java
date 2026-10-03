@@ -127,7 +127,9 @@ class TaskControllerTest {
 								com.focusflow.task.TaskPriority.HIGH,
 								com.focusflow.task.TaskStatus.OPEN,
 								null,
-								45));
+								45,
+								45,
+								0));
 
 		mockMvc.perform(
 						post("/api/tasks")
@@ -162,7 +164,9 @@ class TaskControllerTest {
 										com.focusflow.task.TaskPriority.MEDIUM,
 										com.focusflow.task.TaskStatus.OPEN,
 										null,
-										null),
+										null,
+										null,
+										0),
 								new TaskResponse(
 										2L,
 										"Task B",
@@ -170,7 +174,9 @@ class TaskControllerTest {
 										com.focusflow.task.TaskPriority.LOW,
 										com.focusflow.task.TaskStatus.DONE,
 										null,
-										30)));
+										30,
+										null,
+										0)));
 
 		mockMvc.perform(get("/api/tasks"))
 				.andExpect(status().isOk())
@@ -199,7 +205,9 @@ class TaskControllerTest {
 								com.focusflow.task.TaskPriority.HIGH,
 								com.focusflow.task.TaskStatus.OPEN,
 								null,
-								45));
+								45,
+								null,
+								0));
 
 		mockMvc.perform(get("/api/tasks/1"))
 				.andExpect(status().isOk())
@@ -310,7 +318,9 @@ class TaskControllerTest {
 								com.focusflow.task.TaskPriority.HIGH,
 								com.focusflow.task.TaskStatus.DONE,
 								null,
-								60));
+								60,
+								null,
+								0));
 
 		mockMvc.perform(
 						put("/api/tasks/1")

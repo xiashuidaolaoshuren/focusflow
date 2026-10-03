@@ -87,8 +87,9 @@ public class DailyPlanPersister {
 		dailyPlanRepository.save(plan);
 		dailyPlanRepository.flush();
 
+		DailyPlanRevision revision = plan.getLatestRevision();
 		Map<Long, DailyPlanTask> planTaskBySourceId =
-				plan.getTasks().stream()
+				revision.getTasks().stream()
 						.collect(
 								Collectors.toMap(
 										DailyPlanTask::getSourceTaskId,
@@ -105,7 +106,7 @@ public class DailyPlanPersister {
 			if (block.kind() == BlockKind.WORK && block.sourceTaskId() != null) {
 				planBlock.setDailyPlanTask(planTaskBySourceId.get(block.sourceTaskId()));
 			}
-			plan.addBlock(planBlock);
+			revision.addBlock(planBlock);
 		}
 		return responseMapper.toResponse(dailyPlanRepository.saveAndFlush(plan));
 	}
@@ -117,19 +118,24 @@ public class DailyPlanPersister {
 			Map<Long, Task> capturedById,
 			Map<Long, Task> taskById,
 			DailyPlanSchedule schedule) {
+		Instant createdAt = Instant.now();
 		DailyPlan plan = new DailyPlan();
 		plan.setOwner(owner);
 		plan.setPlanDate(planDate);
-		plan.setCreatedAt(Instant.now());
+		plan.setCreatedAt(createdAt);
 		plan.setWindowStart(schedule.windowStart());
 		plan.setWindowEnd(schedule.windowEnd());
 		plan.setPeakStart(schedule.peakStart());
 		plan.setPeakEnd(schedule.peakEnd());
-		plan.setFreeMinutes(schedule.freeMinutes());
-		plan.setScheduledWorkMinutes(schedule.scheduledWorkMinutes());
-		plan.setRequiredMinutes(schedule.requiredMinutes());
-		plan.setRequestedBufferMinutes(schedule.requestedBufferMinutes());
-		plan.setRealizedBufferMinutes(schedule.realizedBufferMinutes());
+
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(1);
+		revision.setFreeMinutes(schedule.freeMinutes());
+		revision.setScheduledWorkMinutes(schedule.scheduledWorkMinutes());
+		revision.setRequiredMinutes(schedule.requiredMinutes());
+		revision.setRequestedBufferMinutes(schedule.requestedBufferMinutes());
+		revision.setRealizedBufferMinutes(schedule.realizedBufferMinutes());
+		revision.setCreatedAt(createdAt);
 
 		Map<Long, UnplacedWork> unplacedBySourceId =
 				schedule.unplacedWork().stream()
@@ -157,9 +163,10 @@ public class DailyPlanPersister {
 				planTask.setUnplacedReason(unplaced.reason());
 				planTask.setUnplacedMinutes(unplaced.unplacedMinutes());
 			}
-			plan.addTask(planTask);
+			revision.addTask(planTask);
 		}
 
+		plan.addRevision(revision);
 		return plan;
 	}
 }

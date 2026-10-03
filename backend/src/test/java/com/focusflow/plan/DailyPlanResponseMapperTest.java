@@ -29,9 +29,10 @@ class DailyPlanResponseMapperTest {
 	@Test
 	void toResponse_mapsWorkBlocksWithSessionGroupingAndNonWorkLabels() {
 		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
 
 		DailyPlanTask task = planTask(
-				plan,
+				revision,
 				1,
 				10L,
 				10L,
@@ -43,12 +44,11 @@ class DailyPlanResponseMapperTest {
 				false,
 				null,
 				null);
-		plan.addTask(task);
 
-		planBlock(plan, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
-		planBlock(plan, task, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 30), null, 2);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 30), null, 2);
 		planBlock(
-				plan,
+				revision,
 				null,
 				BlockKind.FIXED_BREAK,
 				LocalTime.of(9, 50),
@@ -85,21 +85,21 @@ class DailyPlanResponseMapperTest {
 	@Test
 	void toResponse_mapsUnplacedWorkFromPlanTasks() {
 		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
 
-		DailyPlanTask unplaced =
-				planTask(
-						plan,
-						1,
-						20L,
-						20L,
-						"Overdue task",
-						TaskPriority.MEDIUM,
-						TaskStatus.OPEN,
-						LocalDate.of(2026, 6, 1),
-						60,
-						true,
-						UnplacedReason.OUT_OF_TIME,
-						30);
+		planTask(
+				revision,
+				1,
+				20L,
+				20L,
+				"Overdue task",
+				TaskPriority.MEDIUM,
+				TaskStatus.OPEN,
+				LocalDate.of(2026, 6, 1),
+				60,
+				true,
+				UnplacedReason.OUT_OF_TIME,
+				30);
 
 		DailyPlanResponse response = mapper.toResponse(plan);
 
@@ -115,7 +115,7 @@ class DailyPlanResponseMapperTest {
 	void toResponse_warningIsNull_whenNoMustIncludeTaskIsUnplaced() {
 		DailyPlan plan = scheduledPlan();
 		planTask(
-				plan,
+				plan.getLatestRevision(),
 				1,
 				10L,
 				10L,
@@ -134,11 +134,12 @@ class DailyPlanResponseMapperTest {
 	@Test
 	void toResponse_derivesWarningFromMustIncludeOutOfTimeTasks() {
 		DailyPlan plan = scheduledPlan();
-		plan.setFreeMinutes(300);
-		plan.setScheduledWorkMinutes(120);
-		plan.setRequiredMinutes(180L);
+		DailyPlanRevision revision = plan.getLatestRevision();
+		revision.setFreeMinutes(300);
+		revision.setScheduledWorkMinutes(120);
+		revision.setRequiredMinutes(180L);
 		planTask(
-				plan,
+				revision,
 				1,
 				20L,
 				20L,
@@ -172,7 +173,7 @@ class DailyPlanResponseMapperTest {
 	void toResponse_derivesWarningFromMustIncludeUnestimatedTasks() {
 		DailyPlan plan = scheduledPlan();
 		planTask(
-				plan,
+				plan.getLatestRevision(),
 				1,
 				30L,
 				30L,
@@ -205,16 +206,21 @@ class DailyPlanResponseMapperTest {
 		plan.setCreatedAt(Instant.parse("2026-06-01T09:00:00Z"));
 		plan.setWindowStart(LocalTime.of(9, 0));
 		plan.setWindowEnd(LocalTime.of(18, 0));
-		plan.setFreeMinutes(480);
-		plan.setScheduledWorkMinutes(80);
-		plan.setRequiredMinutes(100L);
-		plan.setRequestedBufferMinutes(0);
-		plan.setRealizedBufferMinutes(0);
+
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(1);
+		revision.setFreeMinutes(480);
+		revision.setScheduledWorkMinutes(80);
+		revision.setRequiredMinutes(100L);
+		revision.setRequestedBufferMinutes(0);
+		revision.setRealizedBufferMinutes(0);
+		revision.setCreatedAt(Instant.parse("2026-06-01T09:00:00Z"));
+		plan.addRevision(revision);
 		return plan;
 	}
 
 	private static DailyPlanTask planTask(
-			DailyPlan plan,
+			DailyPlanRevision revision,
 			int rank,
 			long sourceTaskId,
 			Long taskReferenceIdValue,
@@ -242,12 +248,12 @@ class DailyPlanResponseMapperTest {
 		task.setMustInclude(mustInclude);
 		task.setUnplacedReason(unplacedReason);
 		task.setUnplacedMinutes(unplacedMinutes);
-		plan.addTask(task);
+		revision.addTask(task);
 		return task;
 	}
 
 	private static void planBlock(
-			DailyPlan plan,
+			DailyPlanRevision revision,
 			DailyPlanTask task,
 			BlockKind kind,
 			LocalTime start,
@@ -261,6 +267,6 @@ class DailyPlanResponseMapperTest {
 		block.setLabel(label);
 		block.setPosition(position);
 		block.setDailyPlanTask(task);
-		plan.addBlock(block);
+		revision.addBlock(block);
 	}
 }

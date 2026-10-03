@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
 public class DailyPlanResponseMapper {
 
 	public DailyPlanResponse toResponse(DailyPlan plan) {
+		DailyPlanRevision revision = plan.getLatestRevision();
 		List<DailyPlanBlock> sortedBlocks =
-				plan.getBlocks().stream()
+				revision.getBlocks().stream()
 						.sorted(Comparator.comparingInt(DailyPlanBlock::getPosition))
 						.toList();
 		Map<DailyPlanTask, SessionProgress> sessionProgress = new HashMap<>();
@@ -32,7 +33,7 @@ public class DailyPlanResponseMapper {
 												block, sessionCounts, sessionProgress))
 						.toList();
 		List<UnplacedWorkResponse> unplacedWork =
-				plan.getTasks().stream()
+				revision.getTasks().stream()
 						.filter(task -> task.getUnplacedReason() != null)
 						.sorted(Comparator.comparingInt(DailyPlanTask::getRank))
 						.map(this::toUnplacedWorkResponse)
@@ -45,19 +46,19 @@ public class DailyPlanResponseMapper {
 				plan.getWindowEnd(),
 				plan.getPeakStart(),
 				plan.getPeakEnd(),
-				plan.getFreeMinutes(),
-				plan.getScheduledWorkMinutes(),
-				plan.getRequiredMinutes(),
-				plan.getRequestedBufferMinutes(),
-				plan.getRealizedBufferMinutes(),
-				deriveWarning(plan),
+				revision.getFreeMinutes(),
+				revision.getScheduledWorkMinutes(),
+				revision.getRequiredMinutes(),
+				revision.getRequestedBufferMinutes(),
+				revision.getRealizedBufferMinutes(),
+				deriveWarning(revision),
 				blocks,
 				unplacedWork);
 	}
 
-	private DailyPlanWarning deriveWarning(DailyPlan plan) {
+	private DailyPlanWarning deriveWarning(DailyPlanRevision revision) {
 		List<DailyPlanTask> mustIncludeUnplaced =
-				plan.getTasks().stream()
+				revision.getTasks().stream()
 						.filter(PlanMustIncludeRules::isShortfallContributor)
 						.toList();
 		if (mustIncludeUnplaced.isEmpty()) {
@@ -84,9 +85,9 @@ public class DailyPlanResponseMapper {
 												task.getSourceTaskId(), task.getTaskTitle()))
 						.toList();
 		return new DailyPlanWarning(
-				plan.getRequiredMinutes(),
-				plan.getFreeMinutes(),
-				plan.getScheduledWorkMinutes(),
+				revision.getRequiredMinutes(),
+				revision.getFreeMinutes(),
+				revision.getScheduledWorkMinutes(),
 				outOfTimeTasks,
 				unestimatedTasks);
 	}

@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
+import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
@@ -80,6 +81,51 @@ class DailyPlanPersisterTest {
 	}
 
 	@Test
+	void persistPlan_writesRevisionOneWithScheduleMetrics() throws Exception {
+		User owner = new User();
+		Task task = createTask(1L, "Continue work", 60, TaskStatus.IN_PROGRESS);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+		DailyPlanSchedule schedule = sampleSchedule();
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(task));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(task), schedule);
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).saveAndFlush(captor.capture());
+		DailyPlan savedPlan = captor.getValue();
+
+		Method getRevisions = DailyPlan.class.getMethod("getRevisions");
+		@SuppressWarnings("unchecked")
+		java.util.Set<Object> revisions = (java.util.Set<Object>) getRevisions.invoke(savedPlan);
+		assertThat(revisions).hasSize(1);
+		Object revision = revisions.iterator().next();
+		assertThat(revision.getClass().getMethod("getRevisionNumber").invoke(revision))
+				.isEqualTo(1);
+		assertThat(revision.getClass().getMethod("getFreeMinutes").invoke(revision))
+				.isEqualTo(480);
+		assertThat(revision.getClass().getMethod("getScheduledWorkMinutes").invoke(revision))
+				.isEqualTo(60);
+		assertThat(revision.getClass().getMethod("getRequiredMinutes").invoke(revision))
+				.isEqualTo(60L);
+		assertThat(revision.getClass().getMethod("getTasks").invoke(revision))
+				.asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.collection(Object.class))
+				.hasSize(1);
+		assertThat(revision.getClass().getMethod("getBlocks").invoke(revision))
+				.asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.collection(Object.class))
+				.hasSize(1);
+	}
+
+	@Test
 	void persistPlan_persistsScheduleFieldsBlocksAndUnplaced() {
 		User owner = new User();
 		Task task = createTask(1L, "Continue work", 60, TaskStatus.IN_PROGRESS);
@@ -107,18 +153,19 @@ class DailyPlanPersisterTest {
 		assertThat(savedPlan.getPlanDate()).isEqualTo(planDate);
 		assertThat(savedPlan.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
 		assertThat(savedPlan.getWindowEnd()).isEqualTo(LocalTime.of(18, 0));
-		assertThat(savedPlan.getFreeMinutes()).isEqualTo(480);
-		assertThat(savedPlan.getScheduledWorkMinutes()).isEqualTo(60);
-		assertThat(savedPlan.getRequiredMinutes()).isEqualTo(60L);
-		assertThat(savedPlan.getTasks()).hasSize(1);
-		DailyPlanTask savedPlanTask = savedPlan.getTasks().iterator().next();
+		DailyPlanRevision revision = savedPlan.getLatestRevision();
+		assertThat(revision.getFreeMinutes()).isEqualTo(480);
+		assertThat(revision.getScheduledWorkMinutes()).isEqualTo(60);
+		assertThat(revision.getRequiredMinutes()).isEqualTo(60L);
+		assertThat(revision.getTasks()).hasSize(1);
+		DailyPlanTask savedPlanTask = revision.getTasks().iterator().next();
 		assertThat(savedPlanTask.getTaskReference()).isSameAs(task);
 		assertThat(savedPlanTask.getRank()).isEqualTo(1);
 		assertThat(savedPlanTask.isMustInclude()).isTrue();
 		assertThat(savedPlanTask.getUnplacedReason())
 				.isEqualTo(UnplacedReason.OUT_OF_TIME);
 		assertThat(savedPlanTask.getUnplacedMinutes()).isEqualTo(30);
-		assertThat(savedPlan.getBlocks())
+		assertThat(revision.getBlocks())
 				.singleElement()
 				.satisfies(
 						block -> {
@@ -321,7 +368,7 @@ class DailyPlanPersisterTest {
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).save(captor.capture());
-		DailyPlanTask planTask = captor.getValue().getTasks().iterator().next();
+		DailyPlanTask planTask = captor.getValue().getLatestRevision().getTasks().iterator().next();
 		assertThat(planTask.getTaskTitle()).isEqualTo("Captured title");
 		assertThat(planTask.getTaskEstimatedMinutes()).isEqualTo(60);
 		assertThat(planTask.getTaskDueDate()).isEqualTo(LocalDate.of(2026, 8, 28));

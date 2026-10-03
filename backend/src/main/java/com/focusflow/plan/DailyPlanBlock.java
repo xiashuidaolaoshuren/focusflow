@@ -12,6 +12,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.time.LocalTime;
 
 @Entity
@@ -23,8 +24,8 @@ public class DailyPlanBlock {
 	private Long id;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "daily_plan_id", nullable = false)
-	private DailyPlan dailyPlan;
+	@JoinColumn(name = "revision_id", nullable = false)
+	private DailyPlanRevision revision;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "daily_plan_task_id")
@@ -46,16 +47,36 @@ public class DailyPlanBlock {
 	@Column(nullable = false)
 	private int position;
 
+	@Column
+	private String outcome;
+
+	@Column(name = "actual_minutes")
+	private Integer actualMinutes;
+
+	@Column(name = "recorded_at")
+	private Instant recordedAt;
+
+	@Column(name = "progress_version", nullable = false)
+	private int progressVersion;
+
+	@Column(nullable = false)
+	private boolean reconciled;
+
+	public DailyPlanBlock() {
+		this.progressVersion = 0;
+		this.reconciled = false;
+	}
+
 	public Long getId() {
 		return id;
 	}
 
-	public DailyPlan getDailyPlan() {
-		return dailyPlan;
+	public DailyPlanRevision getRevision() {
+		return revision;
 	}
 
-	public void setDailyPlan(DailyPlan dailyPlan) {
-		this.dailyPlan = dailyPlan;
+	public void setRevision(DailyPlanRevision revision) {
+		this.revision = revision;
 	}
 
 	public DailyPlanTask getDailyPlanTask() {
@@ -104,5 +125,45 @@ public class DailyPlanBlock {
 
 	public void setPosition(int position) {
 		this.position = position;
+	}
+
+	public String getOutcome() {
+		return outcome;
+	}
+
+	public void setOutcome(String outcome) {
+		this.outcome = outcome;
+	}
+
+	public Integer getActualMinutes() {
+		return actualMinutes;
+	}
+
+	public void setActualMinutes(Integer actualMinutes) {
+		this.actualMinutes = actualMinutes;
+	}
+
+	public Instant getRecordedAt() {
+		return recordedAt;
+	}
+
+	public void setRecordedAt(Instant recordedAt) {
+		this.recordedAt = recordedAt;
+	}
+
+	public int getProgressVersion() {
+		return progressVersion;
+	}
+
+	public void setProgressVersion(int progressVersion) {
+		this.progressVersion = progressVersion;
+	}
+
+	public boolean isReconciled() {
+		return reconciled;
+	}
+
+	public void setReconciled(boolean reconciled) {
+		this.reconciled = reconciled;
 	}
 }

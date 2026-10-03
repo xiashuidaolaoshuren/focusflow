@@ -44,6 +44,12 @@ public class Task {
 
 	private Integer estimatedMinutes;
 
+	@Column(name = "remaining_effort_minutes")
+	private Integer remainingEffortMinutes;
+
+	@Column(name = "effort_version", nullable = false)
+	private int effortVersion;
+
 	public Long getId() {
 		return id;
 	}
@@ -102,5 +108,21 @@ public class Task {
 
 	public void setEstimatedMinutes(Integer estimatedMinutes) {
 		this.estimatedMinutes = estimatedMinutes;
+	}
+
+	public Integer getRemainingEffortMinutes() {
+		return remainingEffortMinutes;
+	}
+
+	public void setRemainingEffortMinutes(Integer remainingEffortMinutes) {
+		this.remainingEffortMinutes = remainingEffortMinutes;
+	}
+
+	public int getEffortVersion() {
+		return effortVersion;
+	}
+
+	public void setEffortVersion(int effortVersion) {
+		this.effortVersion = effortVersion;
 	}
 }

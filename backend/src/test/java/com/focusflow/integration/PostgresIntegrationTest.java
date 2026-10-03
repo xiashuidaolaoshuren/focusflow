@@ -9,6 +9,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.plan.DailyPlan;
 import com.focusflow.plan.DailyPlanPersister;
+import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
 import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
@@ -157,60 +158,78 @@ class PostgresIntegrationTest {
 								.withAccountPrefix(accountPrefix)
 								.withPasswordHash(
 										"$2a$10$8888888888888888888888888888888888888888888888888888"));
-		return jdbcTemplate.queryForObject(
+		Long planId =
+				jdbcTemplate.queryForObject(
+						"""
+						INSERT INTO daily_plans (
+						    owner_id, plan_date, created_at, window_start, window_end
+						) VALUES (?, DATE '2026-10-04', NOW(), TIME '09:00', TIME '18:00')
+						RETURNING id
+						""",
+						Long.class,
+						owner.getId());
+		jdbcTemplate.update(
 				"""
-				INSERT INTO daily_plans (
-				    owner_id, plan_date, created_at, window_start, window_end,
-				    free_minutes, scheduled_work_minutes, required_minutes,
-				    requested_buffer_minutes, realized_buffer_minutes
-				) VALUES (?, DATE '2026-10-04', NOW(), TIME '09:00', TIME '18:00', 0, 0, 0, 0, 0)
-				RETURNING id
+				INSERT INTO daily_plan_revisions (
+				    daily_plan_id, revision_number, free_minutes, scheduled_work_minutes,
+				    required_minutes, requested_buffer_minutes, realized_buffer_minutes,
+				    created_at
+				) VALUES (?, 1, 0, 0, 0, 0, 0, NOW())
 				""",
+				planId);
+		return planId;
+	}
+
+	private Long revisionIdForPlan(Long planId) {
+		return jdbcTemplate.queryForObject(
+				"SELECT id FROM daily_plan_revisions WHERE daily_plan_id = ?",
 				Long.class,
-				owner.getId());
+				planId);
 	}
 
 	private Long insertBareDailyPlanTask(Long planId, long sourceTaskId) {
 		return jdbcTemplate.queryForObject(
 				"""
 				INSERT INTO daily_plan_tasks (
-				    daily_plan_id, rank, source_task_id, task_title, task_priority,
+				    revision_id, rank, source_task_id, task_title, task_priority,
 				    task_status, must_include
 				) VALUES (?, 1, ?, 'Snapshot', 'MEDIUM', 'OPEN', FALSE)
 				RETURNING id
 				""",
 				Long.class,
-				planId,
+				revisionIdForPlan(planId),
 				sourceTaskId);
 	}
 
 	@Test
 	void dailyPlanBlocks_rejectZeroDurationIntervals() {
 		Long planId = insertBareDailyPlan("block-zero-duration", 1);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'BUFFER', TIME '12:00', TIME '12:00', 'Buffer', 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
 	@Test
 	void dailyPlanBlocks_rejectWorkBlockWithoutTaskReference() {
 		Long planId = insertBareDailyPlan("block-work-no-ref", 2);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'WORK', TIME '09:00', TIME '10:00', NULL, 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -223,10 +242,10 @@ class PostgresIntegrationTest {
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, daily_plan_task_id, kind, start_time, end_time, label, position
+										    revision_id, daily_plan_task_id, kind, start_time, end_time, label, position
 										) VALUES (?, ?, 'WORK', TIME '09:00', TIME '10:00', 'Should not label work', 1)
 										""",
-										planId,
+										revisionIdForPlan(planId),
 										planTaskId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
@@ -234,15 +253,16 @@ class PostgresIntegrationTest {
 	@Test
 	void dailyPlanBlocks_rejectNonWorkBlockWithoutLabel() {
 		Long planId = insertBareDailyPlan("block-nonwork-no-label", 4);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'BUFFER', TIME '17:00', TIME '18:00', NULL, 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -255,10 +275,10 @@ class PostgresIntegrationTest {
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, daily_plan_task_id, kind, start_time, end_time, label, position
+										    revision_id, daily_plan_task_id, kind, start_time, end_time, label, position
 										) VALUES (?, ?, 'BUFFER', TIME '17:00', TIME '18:00', 'Buffer', 1)
 										""",
-										planId,
+										revisionIdForPlan(planId),
 										planTaskId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
@@ -525,13 +545,13 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getRank)
 									.containsExactly(1, 2);
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getSourceTaskId)
 									.containsExactly(savedSecond.getId(), savedFirst.getId());
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
@@ -597,10 +617,10 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getRank)
 									.containsExactly(1, 2);
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
@@ -683,11 +703,12 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						reloaded -> {
-							assertThat(reloaded.getFreeMinutes()).isEqualTo(420);
-							assertThat(reloaded.getScheduledWorkMinutes()).isEqualTo(180);
-							assertThat(reloaded.getRequiredMinutes()).isEqualTo(240L);
-							assertThat(reloaded.getRequestedBufferMinutes()).isEqualTo(15);
-assertThat(reloaded.getRealizedBufferMinutes()).isEqualTo(10);
+							DailyPlanRevision revision = reloaded.getLatestRevision();
+							assertThat(revision.getFreeMinutes()).isEqualTo(420);
+							assertThat(revision.getScheduledWorkMinutes()).isEqualTo(180);
+							assertThat(revision.getRequiredMinutes()).isEqualTo(240L);
+							assertThat(revision.getRequestedBufferMinutes()).isEqualTo(15);
+							assertThat(revision.getRealizedBufferMinutes()).isEqualTo(10);
 					});
 	}
 

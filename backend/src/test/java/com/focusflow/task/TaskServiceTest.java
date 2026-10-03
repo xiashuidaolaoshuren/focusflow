@@ -89,6 +89,37 @@ class TaskServiceTest {
 	}
 
 	@Test
+	void create_initializesRemainingEffortFromEstimate() {
+		UserContext current = new UserContext(42L, "owner@example.com", "owner");
+		when(currentUser.getCurrentUser()).thenReturn(current);
+
+		User owner = new User();
+		when(userRepository.findById(42L)).thenReturn(Optional.of(owner));
+		when(taskRepository.save(any(Task.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+		TaskResponse withEstimate =
+				taskService.create(
+						new CreateTaskRequest("Estimated", null, TaskPriority.MEDIUM, null, 45));
+		TaskResponse withoutEstimate =
+				taskService.create(new CreateTaskRequest("Unknown", null, TaskPriority.MEDIUM, null, null));
+
+		assertThat(withEstimate.remainingEffortMinutes()).isEqualTo(45);
+		assertThat(withEstimate.effortVersion()).isZero();
+		assertThat(withoutEstimate.remainingEffortMinutes()).isNull();
+		assertThat(withoutEstimate.effortVersion()).isZero();
+
+		ArgumentCaptor<Task> captor = ArgumentCaptor.forClass(Task.class);
+		verify(taskRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+		assertThat(captor.getAllValues())
+				.allSatisfy(
+						task -> {
+							assertThat(task.getEffortVersion()).isZero();
+						});
+		assertThat(captor.getAllValues().get(0).getRemainingEffortMinutes()).isEqualTo(45);
+		assertThat(captor.getAllValues().get(1).getRemainingEffortMinutes()).isNull();
+	}
+
+	@Test
 	void create_withNonPositiveEstimatedMinutes_throwsBadRequestAndDoesNotSave() {
 		assertThatThrownBy(
 						() -> taskService.create(new CreateTaskRequest("My task", null, null, null, 0)))

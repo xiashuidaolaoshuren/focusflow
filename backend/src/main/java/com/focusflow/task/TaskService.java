@@ -46,6 +46,8 @@ public class TaskService {
 		task.setStatus(TaskStatus.OPEN);
 		task.setDueDate(request.dueDate());
 		task.setEstimatedMinutes(request.estimatedMinutes());
+		task.setRemainingEffortMinutes(request.estimatedMinutes());
+		task.setEffortVersion(0);
 
 		return taskResponseMapper.toResponse(taskRepository.save(task));
 	}

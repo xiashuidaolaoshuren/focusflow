@@ -2,12 +2,11 @@ package com.focusflow.testsupport;
 
 import com.focusflow.plan.DailyPlan;
 import com.focusflow.plan.DailyPlanBlock;
+import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.task.Task;
-import com.focusflow.task.TaskPriority;
-import com.focusflow.task.TaskStatus;
 import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,7 +14,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Fluent builder for {@link DailyPlan} with V3 tasks and blocks in tests. */
+/** Fluent builder for {@link DailyPlan} with revision-scoped tasks and blocks in tests. */
 public final class DailyPlanTestBuilder {
 
 	private final User owner;
@@ -110,11 +109,16 @@ public final class DailyPlanTestBuilder {
 		plan.setWindowEnd(windowEnd);
 		plan.setPeakStart(peakStart);
 		plan.setPeakEnd(peakEnd);
-		plan.setFreeMinutes(freeMinutes);
-		plan.setScheduledWorkMinutes(scheduledWorkMinutes);
-		plan.setRequiredMinutes(requiredMinutes);
-		plan.setRequestedBufferMinutes(requestedBufferMinutes);
-		plan.setRealizedBufferMinutes(realizedBufferMinutes);
+
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(1);
+		revision.setFreeMinutes(freeMinutes);
+		revision.setScheduledWorkMinutes(scheduledWorkMinutes);
+		revision.setRequiredMinutes(requiredMinutes);
+		revision.setRequestedBufferMinutes(requestedBufferMinutes);
+		revision.setRealizedBufferMinutes(realizedBufferMinutes);
+		revision.setCreatedAt(createdAt);
+
 		List<DailyPlanTask> built = new ArrayList<>();
 		for (TaskSpec spec : tasks) {
 			DailyPlanTask planTask = new DailyPlanTask();
@@ -129,15 +133,17 @@ public final class DailyPlanTestBuilder {
 			planTask.setMustInclude(spec.mustInclude);
 			planTask.setUnplacedReason(spec.unplacedReason);
 			planTask.setUnplacedMinutes(spec.unplacedMinutes);
-			plan.addTask(planTask);
+			revision.addTask(planTask);
 			built.add(planTask);
 		}
+		plan.addRevision(revision);
 		builtTasks.clear();
 		builtTasks.addAll(built);
 		return plan;
 	}
 
 	public void attachBlocksTo(DailyPlan plan) {
+		DailyPlanRevision revision = plan.getLatestRevision();
 		for (BlockSpec spec : blocks) {
 			DailyPlanBlock block = new DailyPlanBlock();
 			block.setKind(spec.kind);
@@ -148,7 +154,7 @@ public final class DailyPlanTestBuilder {
 			if (spec.taskIndex >= 0) {
 				block.setDailyPlanTask(builtTasks.get(spec.taskIndex));
 			}
-			plan.addBlock(block);
+			revision.addBlock(block);
 		}
 	}
 

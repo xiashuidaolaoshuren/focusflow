@@ -11,4 +11,6 @@ public record TaskResponse(
 		TaskPriority priority,
 		TaskStatus status,
 		LocalDate dueDate,
-		Integer estimatedMinutes) {}
+		Integer estimatedMinutes,
+		Integer remainingEffortMinutes,
+		int effortVersion) {}

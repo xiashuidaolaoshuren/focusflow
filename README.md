@@ -49,6 +49,8 @@ The Gradle wrapper is included, so a global Gradle installation is not required.
 
    **V3 warning (backup first):** `V3__scheduled_day.sql` is destructive for Daily plans. It deletes every row in `daily_plans` and `daily_plan_items`, drops the legacy item/warning columns, and replaces them with scheduled-day tasks and clock blocks. Tasks, users, preferences, and commitments are kept. **Back up the database before upgrading any database that contains Daily plans you care about.**
 
+   **V5 note:** `V5__progress_and_revisions.sql` is non-destructive. It keeps Daily plans, tasks, preferences, and commitments. Each existing plan receives one schedule revision with its current metrics moved onto that revision. Tasks gain live remaining effort backfilled from their whole-task estimate. Nullable scheduling-snapshot columns are added but left empty for migrated plans; V5 does not invent cadence or fixed-break history from current preferences.
+
    **Existing pre-Flyway database (keep your data):**
 
    1. Back up the database before adoption:
