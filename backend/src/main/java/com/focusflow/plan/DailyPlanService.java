@@ -154,7 +154,9 @@ public class DailyPlanService {
 	@Transactional
 	public void deleteForCurrentUser(Long planId) {
 		ownerSchedulingLock.lockCurrentOwner();
-		dailyPlanRepository.delete(loadPlanForCurrentUser(planId));
+		DailyPlan plan = loadPlanForCurrentUser(planId);
+		PlanReplacePreconditions.rejectIfHasProgress(plan);
+		dailyPlanRepository.delete(plan);
 	}
 
 	private DailyPlan loadPlanForCurrentUser(Long planId) {

@@ -151,6 +151,45 @@ class DailyPlanServiceTest {
 		return plan;
 	}
 
+	private DailyPlan planWithSkippedBlock(long id, LocalDate planDate) {
+		DailyPlan plan = existingPlan(id, planDate);
+		DailyPlanRevision revision = plan.getLatestRevision();
+		com.focusflow.plan.DailyPlanBlock block = new com.focusflow.plan.DailyPlanBlock();
+		block.setKind(com.focusflow.schedule.BlockKind.WORK);
+		block.setStartTime(LocalTime.of(9, 0));
+		block.setEndTime(LocalTime.of(9, 50));
+		block.setPosition(1);
+		block.setOutcome(com.focusflow.effort.WorkOutcome.SKIPPED.name());
+		revision.addBlock(block);
+		return plan;
+	}
+
+	private DailyPlan noLongerNeededPlan(long id, LocalDate planDate) {
+		DailyPlan plan = existingPlan(id, planDate);
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask planTask = new DailyPlanTask();
+		planTask.setRank(1);
+		planTask.setSourceTaskId(10L);
+		planTask.setTaskTitle("Finished work");
+		planTask.setTaskPriority(TaskPriority.MEDIUM);
+		planTask.setTaskStatus(TaskStatus.OPEN);
+		planTask.setMustInclude(false);
+		Task reference = new Task();
+		reference.setStatus(TaskStatus.DONE);
+		ReflectionTestUtils.setField(reference, "id", 10L);
+		planTask.setTaskReference(reference);
+		revision.addTask(planTask);
+
+		com.focusflow.plan.DailyPlanBlock block = new com.focusflow.plan.DailyPlanBlock();
+		block.setKind(com.focusflow.schedule.BlockKind.WORK);
+		block.setStartTime(LocalTime.of(9, 0));
+		block.setEndTime(LocalTime.of(9, 50));
+		block.setPosition(1);
+		block.setDailyPlanTask(planTask);
+		revision.addBlock(block);
+		return plan;
+	}
+
 	private DailyPlanSchedule stubSchedule() {
 		return new DailyPlanSchedule(
 				LocalTime.of(9, 0),
@@ -345,6 +384,30 @@ class DailyPlanServiceTest {
 								assertThat(((BadRequestException) ex).getCode())
 										.isEqualTo("PLAN_CANDIDATE_LIMIT"));
 
+		verify(aiClient, never()).generate(any());
+		verify(scheduler, never()).compose(any(), any(), any(), any());
+		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void generate_whenPlanHasProgress_throwsPlanHasProgressBeforeProviderCall() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						42L, planDate))
+				.thenReturn(Optional.of(planWithSkippedBlock(5L, planDate)));
+
+		assertThatThrownBy(
+						() -> dailyPlanService.generate(new GeneratePlanRequest(planDate, 5L)))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("PLAN_HAS_PROGRESS"));
+
+		verify(taskQueryService, never()).findPlannableTasksByOwnerId(anyLong());
 		verify(aiClient, never()).generate(any());
 		verify(scheduler, never()).compose(any(), any(), any(), any());
 		verify(persister, never()).persistPlan(any(), any(), any(), any(), any(), any());
@@ -840,13 +903,45 @@ class DailyPlanServiceTest {
 		User owner = new User();
 		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
 
-		DailyPlan plan = new DailyPlan();
-		plan.setPlanDate(LocalDate.of(2026, 6, 1));
+		DailyPlan plan = existingPlan(7L, LocalDate.of(2026, 6, 1));
 		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
 
 		dailyPlanService.deleteForCurrentUser(7L);
 
 		verify(ownerSchedulingLock).lockCurrentOwner();
+		verify(dailyPlanRepository).delete(plan);
+	}
+
+	@Test
+	void deleteForCurrentUser_whenPlanHasProgress_throwsPlanHasProgress() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(new User());
+
+		DailyPlan plan = planWithSkippedBlock(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		assertThatThrownBy(() -> dailyPlanService.deleteForCurrentUser(7L))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("PLAN_HAS_PROGRESS"));
+
+		verify(dailyPlanRepository, never()).delete(any());
+	}
+
+	@Test
+	void deleteForCurrentUser_whenOnlyNoLongerNeededBlock_stillDeletes() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(new User());
+
+		DailyPlan plan = noLongerNeededPlan(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		dailyPlanService.deleteForCurrentUser(7L);
+
 		verify(dailyPlanRepository).delete(plan);
 	}
 
