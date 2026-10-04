@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.FixedBreakWindow;
@@ -57,7 +59,10 @@ class DailyPlanPersisterTest {
 
 	@BeforeEach
 	void setUp() {
-		responseMapper = new DailyPlanResponseMapper();
+		responseMapper = new DailyPlanResponseMapper(taskQueryService);
+		lenient()
+				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
 		persister =
 				new DailyPlanPersister(
 						ownerSchedulingLock,
@@ -315,10 +320,102 @@ class DailyPlanPersisterTest {
 						});
 	}
 
+	@Test
+	void appendRevision_addsNextRevisionWithCutoffAndPreservesPlanIdentity() {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", 1L);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		DailyPlan existing = existingPlanWithRevision(5L, planDate, 100L, 1);
+		existing.setWindowStart(LocalTime.of(9, 0));
+		existing.setWindowEnd(LocalTime.of(18, 0));
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(14, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						240,
+						0,
+						0L,
+						0,
+						0,
+						List.of(),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
+						List.of());
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findByOwner_IdAndId(1L, 5L)).thenReturn(Optional.of(existing));
+		when(taskQueryService.findPlannableTasksByOwnerId(1L)).thenReturn(List.of());
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		DailyPlanResponse response =
+				persister.appendRevision(
+						5L,
+						100L,
+						List.of(),
+						LocalTime.of(14, 0),
+						List.of(),
+						List.of(),
+						schedule);
+
+		assertThat(existing.getRevisions()).hasSize(2);
+		DailyPlanRevision latest = existing.getLatestRevision();
+		assertThat(latest.getRevisionNumber()).isEqualTo(2);
+		assertThat(latest.getCutoffTime()).isEqualTo(LocalTime.of(14, 0));
+		assertThat(existing.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
+		assertThat(existing.getWindowEnd()).isEqualTo(LocalTime.of(18, 0));
+		assertThat(response.id()).isEqualTo(5L);
+	}
+
+	@Test
+	void appendRevision_whenExpectedRevisionIsStale_throwsPlanChanged() {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", 1L);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		DailyPlan existing = existingPlanWithRevision(5L, planDate, 100L, 1);
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findByOwner_IdAndId(1L, 5L)).thenReturn(Optional.of(existing));
+		when(taskQueryService.findPlannableTasksByOwnerId(1L)).thenReturn(List.of());
+
+		assertThatThrownBy(
+						() ->
+								persister.appendRevision(
+										5L,
+										99L,
+										List.of(),
+										LocalTime.of(14, 0),
+										List.of(),
+										List.of(),
+										sampleSchedule()))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode()).isEqualTo("PLAN_CHANGED"));
+
+		verify(dailyPlanRepository, never()).saveAndFlush(any());
+	}
+
 	private DailyPlan existingPlan(long id, LocalDate planDate) {
 		DailyPlan plan = new DailyPlan();
 		ReflectionTestUtils.setField(plan, "id", id);
 		plan.setPlanDate(planDate);
+		return plan;
+	}
+
+	private DailyPlan existingPlanWithRevision(
+			long planId, LocalDate planDate, long revisionId, int revisionNumber) {
+		DailyPlan plan = existingPlan(planId, planDate);
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(revisionNumber);
+		ReflectionTestUtils.setField(revision, "id", revisionId);
+		plan.addRevision(revision);
 		return plan;
 	}
 

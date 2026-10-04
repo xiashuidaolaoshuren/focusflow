@@ -26,6 +26,8 @@ import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ReplanRequest;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
 import com.focusflow.plan.dto.TaskSnapshotResponse;
 import com.focusflow.schedule.BlockKind;
@@ -345,6 +347,8 @@ class DailyPlanControllerTest {
 												2,
 												1,
 												0,
+												false,
+												false,
 												false)),
 								0,
 								20,
@@ -361,6 +365,8 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.content[0].scheduledTaskCount").value(1))
 				.andExpect(jsonPath("$.content[0].unplacedWorkCount").value(0))
 				.andExpect(jsonPath("$.content[0].hasWarning").value(false))
+				.andExpect(jsonPath("$.content[0].hasProgress").value(false))
+				.andExpect(jsonPath("$.content[0].needsRefresh").value(false))
 				.andExpect(jsonPath("$.page").value(0))
 				.andExpect(jsonPath("$.size").value(20))
 				.andExpect(jsonPath("$.totalElements").value(1))
@@ -491,5 +497,65 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.status").value(404))
 				.andExpect(jsonPath("$.message").value("daily plan not found"))
 				.andExpect(jsonPath("$.path").value("/api/daily-plans/99"));
+	}
+
+	@Test
+	void replan_whenUnauthenticated_returns401() throws Exception {
+		mockMvc.perform(
+						post("/api/daily-plans/1/replan")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "currentDate": "2026-06-01",
+										  "cutoff": "14:00",
+										  "expectedRevisionId": 10,
+										  "effortVersions": []
+										}
+										"""))
+				.andExpect(status().isUnauthorized());
+
+		verify(dailyPlanService, never()).replan(any(Long.class), any(ReplanRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void replan_whenAuthenticated_returns200AndSamePlanId() throws Exception {
+		when(dailyPlanService.replan(eq(7L), any(ReplanRequest.class)))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								7L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		mockMvc.perform(
+						post("/api/daily-plans/7/replan")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "currentDate": "2026-06-01",
+										  "cutoff": "14:00",
+										  "expectedRevisionId": 10,
+										  "effortVersions": [
+										    { "taskId": 1, "effortVersion": 3 }
+										  ]
+										}
+										"""))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(7))
+				.andExpect(jsonPath("$.planDate").value("2026-06-01"));
+
+		ArgumentCaptor<ReplanRequest> captor = ArgumentCaptor.forClass(ReplanRequest.class);
+		verify(dailyPlanService).replan(eq(7L), captor.capture());
+		assertThat(captor.getValue().currentDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+		assertThat(captor.getValue().cutoff()).isEqualTo(LocalTime.of(14, 0));
+		assertThat(captor.getValue().expectedRevisionId()).isEqualTo(10L);
+		assertThat(captor.getValue().effortVersions())
+				.singleElement()
+				.isEqualTo(new TaskEffortVersion(1L, 3));
 	}
 }

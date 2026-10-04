@@ -1,5 +1,6 @@
 package com.focusflow.task;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -8,9 +9,17 @@ import org.springframework.stereotype.Service;
 public class TaskQueryService {
 
 	private final TaskRepository taskRepository;
+	private final UnplannedWorkRepository unplannedWorkRepository;
 
-	public TaskQueryService(TaskRepository taskRepository) {
+	public TaskQueryService(
+			TaskRepository taskRepository, UnplannedWorkRepository unplannedWorkRepository) {
 		this.taskRepository = taskRepository;
+		this.unplannedWorkRepository = unplannedWorkRepository;
+	}
+
+	public List<UnplannedWork> findUnplannedWorkByOwnerIdAndWorkDate(
+			Long ownerId, LocalDate workDate) {
+		return unplannedWorkRepository.findByOwner_IdAndWorkDate(ownerId, workDate);
 	}
 
 	public List<Task> findOpenTasksByOwnerId(Long ownerId) {

@@ -25,6 +25,8 @@ import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ReplanRequest;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.preferences.EffectiveSchedulingPreferences;
 import com.focusflow.preferences.SchedulingPreferencesQueryService;
 import com.focusflow.security.CurrentUser;
@@ -95,12 +97,16 @@ class DailyPlanServiceTest {
 	private DailyPlanRankingValidator rankingValidator =
 			new DailyPlanRankingValidator(new SimpleMeterRegistry());
 
-	private final DailyPlanResponseMapper responseMapper = new DailyPlanResponseMapper();
+	private DailyPlanResponseMapper responseMapper;
 
 	private DailyPlanService dailyPlanService;
 
 	@BeforeEach
 	void setUp() {
+		responseMapper = new DailyPlanResponseMapper(taskQueryService);
+		lenient()
+				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
 		dailyPlanService =
 				new DailyPlanService(
 						aiClient,
@@ -187,6 +193,19 @@ class DailyPlanServiceTest {
 		block.setPosition(1);
 		block.setDailyPlanTask(planTask);
 		revision.addBlock(block);
+		return plan;
+	}
+
+	private DailyPlan planWithCompleteSnapshot(long id, LocalDate planDate) {
+		DailyPlan plan = existingPlan(id, planDate);
+		plan.setWindowStart(LocalTime.of(9, 0));
+		plan.setWindowEnd(LocalTime.of(18, 0));
+		plan.setCadenceEnabled(true);
+		plan.setTargetFocusMinutes(50);
+		plan.setBreakMinutes(10);
+		plan.setMinSessionMinutes(15);
+		plan.setBufferMinutes(0);
+		ReflectionTestUtils.setField(plan.getLatestRevision(), "id", 100L);
 		return plan;
 	}
 
@@ -788,6 +807,16 @@ class DailyPlanServiceTest {
 					public Boolean getHasWarning() {
 						return true;
 					}
+
+					@Override
+					public Boolean getHasProgress() {
+						return true;
+					}
+
+					@Override
+					public Boolean getNeedsRefresh() {
+						return false;
+					}
 				};
 		when(dailyPlanRepository.findSummariesByOwner(eq(42L), eq(PageRequest.of(0, 20))))
 				.thenReturn(new PageImpl<>(List.of(projection), PageRequest.of(0, 20), 1));
@@ -805,6 +834,8 @@ class DailyPlanServiceTest {
 							assertThat(summary.scheduledTaskCount()).isEqualTo(2);
 							assertThat(summary.unplacedWorkCount()).isEqualTo(1);
 							assertThat(summary.hasWarning()).isTrue();
+							assertThat(summary.hasProgress()).isTrue();
+							assertThat(summary.needsRefresh()).isFalse();
 						});
 		assertThat(response.page()).isZero();
 		assertThat(response.size()).isEqualTo(20);
@@ -943,6 +974,259 @@ class DailyPlanServiceTest {
 		dailyPlanService.deleteForCurrentUser(7L);
 
 		verify(dailyPlanRepository).delete(plan);
+	}
+
+	@Test
+	void replan_whenEffortVersionsAreStale_throwsPlanChangedBeforeProviderCall() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+		Task task = plannableTasks(1).getFirst();
+		task.setEffortVersion(2);
+		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0),
+						100L,
+						List.of(new TaskEffortVersion(1L, 1)));
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode()).isEqualTo("PLAN_CHANGED"));
+
+		verify(aiClient, never()).generate(any());
+		verify(persister, never())
+				.appendRevision(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void replan_whenProviderFails_doesNotAppendRevision() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+		Task task = plannableTasks(1).getFirst();
+		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of(task));
+		when(commitmentQueryService.windowsFor(42L, LocalDate.of(2026, 6, 1)))
+				.thenReturn(List.of());
+		when(aiClient.generate(any())).thenThrow(new AiProviderException("provider unavailable"));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0),
+						100L,
+						List.of(new TaskEffortVersion(1L, 0)));
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(AiProviderException.class);
+
+		verify(persister, never())
+				.appendRevision(any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
+	void replan_whenNoPlannableTasks_stillAppendsRevisionWithoutProviderCall() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of());
+		when(commitmentQueryService.windowsFor(42L, LocalDate.of(2026, 6, 1)))
+				.thenReturn(List.of());
+		when(scheduler.compose(any(), any(), any(), any())).thenReturn(stubSchedule());
+		when(persister.appendRevision(
+						any(), any(), any(), any(), any(), any(), any()))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								7L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0),
+						100L,
+						List.of());
+
+		dailyPlanService.replan(7L, request);
+
+		verify(aiClient, never()).generate(any());
+		verify(persister)
+				.appendRevision(
+						eq(7L),
+						eq(100L),
+						eq(List.of()),
+						eq(LocalTime.of(14, 0)),
+						eq(List.of()),
+						eq(List.of()),
+						any());
+	}
+
+	@Test
+	void replan_usesCapturedSnapshotEffectiveCutoffAndReloadedCommitments() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		PlanFixedBreakSnapshot lunch = new PlanFixedBreakSnapshot();
+		lunch.setLabel("Lunch");
+		lunch.setStartTime(LocalTime.of(12, 0));
+		lunch.setEndTime(LocalTime.of(13, 0));
+		plan.addFixedBreakSnapshot(lunch);
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+		when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of());
+		List<CommitmentWindow> commitments =
+				List.of(new CommitmentWindow("Sync", LocalTime.of(15, 0), LocalTime.of(16, 0)));
+		when(commitmentQueryService.windowsFor(42L, LocalDate.of(2026, 6, 1)))
+				.thenReturn(commitments);
+		when(scheduler.compose(any(), any(), any(), any())).thenReturn(stubSchedule());
+		when(persister.appendRevision(
+						any(), any(), any(), any(), any(), any(), any()))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								7L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(8, 30),
+						100L,
+						List.of());
+
+		dailyPlanService.replan(7L, request);
+
+		ArgumentCaptor<EffectiveSchedulingPreferences> preferencesCaptor =
+				ArgumentCaptor.forClass(EffectiveSchedulingPreferences.class);
+		verify(scheduler)
+				.compose(
+						eq(LocalDate.of(2026, 6, 1)),
+						eq(List.of()),
+						preferencesCaptor.capture(),
+						eq(commitments));
+		assertThat(preferencesCaptor.getValue().workDayStart()).isEqualTo(LocalTime.of(9, 0));
+		assertThat(preferencesCaptor.getValue().workDayEnd()).isEqualTo(LocalTime.of(18, 0));
+		assertThat(preferencesCaptor.getValue().cadenceEnabled()).isTrue();
+		assertThat(preferencesCaptor.getValue().fixedBreaks()).hasSize(1);
+		verify(schedulingPreferencesQueryService, never()).effectiveFor(anyLong());
+		verify(aiClient, never()).generate(any());
+	}
+
+	@Test
+	void replan_whenCutoffIsAtOrAfterWindowEnd_throwsReplanWindowEnded() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(18, 0),
+						100L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("REPLAN_WINDOW_ENDED"));
+
+		verify(aiClient, never()).generate(any());
+	}
+
+	@Test
+	void replan_whenElapsedWorkIsUnresolved_throwsElapsedWorkUnresolved() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		DailyPlanRevision revision = plan.getLatestRevision();
+		com.focusflow.plan.DailyPlanBlock block = new com.focusflow.plan.DailyPlanBlock();
+		block.setKind(com.focusflow.schedule.BlockKind.WORK);
+		block.setStartTime(LocalTime.of(9, 0));
+		block.setEndTime(LocalTime.of(10, 0));
+		block.setPosition(1);
+		revision.addBlock(block);
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0),
+						100L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("ELAPSED_WORK_UNRESOLVED"));
+
+		verify(aiClient, never()).generate(any());
+	}
+
+	@Test
+	void replan_whenSchedulingSnapshotIsLegacy_throwsReplanLegacySnapshot() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = existingPlan(7L, LocalDate.of(2026, 6, 1));
+		plan.setWindowStart(LocalTime.of(9, 0));
+		plan.setWindowEnd(LocalTime.of(18, 0));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0),
+						1L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("REPLAN_LEGACY_SNAPSHOT"));
+
+		verify(schedulingPreferencesQueryService, never()).effectiveFor(anyLong());
+		verify(aiClient, never()).generate(any());
+	}
+
+	@Test
+	void replan_whenPlanDateDiffersFromCurrentDate_throwsReplanNotToday() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = existingPlan(7L, LocalDate.of(2026, 6, 1));
+		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 2),
+						LocalTime.of(14, 0),
+						1L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode())
+										.isEqualTo("REPLAN_NOT_TODAY"));
+
+		verify(aiClient, never()).generate(any());
+		verify(persister, never())
+				.appendRevision(any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test

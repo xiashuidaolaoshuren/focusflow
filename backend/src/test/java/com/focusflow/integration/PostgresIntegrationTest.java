@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.plan.DailyPlan;
+import com.focusflow.plan.DailyPlanBlock;
 import com.focusflow.plan.DailyPlanPersister;
 import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
@@ -839,5 +840,118 @@ class PostgresIntegrationTest {
 							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
 							assertThat(summary.getUnplacedWorkCount()).isEqualTo(2);
 						});
+	}
+
+	@Test
+	void findSummariesByOwner_countsLatestRevisionOnlyAndExposesProgressFlags() {
+		String suffix = UUID.randomUUID().toString().substring(0, 8);
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(suffix)
+								.withAccountPrefix("summary-flags-owner")
+								.withPasswordHash(
+										"$2a$10$8888888888888888888888888888888888888888888888888888888"));
+
+		Task tracked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Tracked")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(90));
+		tracked.setRemainingEffortMinutes(40);
+		taskRepository.save(tracked);
+
+		Task forward =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Forward")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+		forward.setRemainingEffortMinutes(60);
+		taskRepository.save(forward);
+
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 4))
+								.withCreatedAt(Instant.parse("2026-10-04T08:00:00Z"))
+								.withMetrics(480, 120, 90L, 0, 0)
+								.addTask(tracked, 1, false, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 0), null, 2));
+		plan.setCadenceEnabled(true);
+		plan.getLatestRevision().getTasks().iterator().next().setCapturedRemainingEffortMinutes(40);
+		DailyPlanBlock firstBlock =
+				plan.getLatestRevision().getBlocks().stream()
+						.filter(block -> block.getPosition() == 1)
+						.findFirst()
+						.orElseThrow();
+		firstBlock.setOutcome("DONE");
+		firstBlock.setActualMinutes(50);
+		dailyPlanRepository.save(plan);
+
+		DailyPlanRevision secondRevision = new DailyPlanRevision();
+		secondRevision.setRevisionNumber(2);
+		secondRevision.setCutoffTime(LocalTime.of(11, 0));
+		secondRevision.setFreeMinutes(300);
+		secondRevision.setScheduledWorkMinutes(60);
+		secondRevision.setRequiredMinutes(60L);
+		secondRevision.setRequestedBufferMinutes(0);
+		secondRevision.setRealizedBufferMinutes(0);
+		secondRevision.setCreatedAt(Instant.parse("2026-10-04T11:00:00Z"));
+		plan.addRevision(secondRevision);
+
+		DailyPlanTask forwardTask = new DailyPlanTask();
+		forwardTask.setRank(1);
+		forwardTask.setSourceTaskId(forward.getId());
+		forwardTask.setTaskReference(forward);
+		forwardTask.setTaskTitle(forward.getTitle());
+		forwardTask.setTaskPriority(forward.getPriority());
+		forwardTask.setTaskStatus(forward.getStatus());
+		forwardTask.setTaskEstimatedMinutes(forward.getEstimatedMinutes());
+		forwardTask.setCapturedRemainingEffortMinutes(60);
+		forwardTask.setMustInclude(false);
+		secondRevision.addTask(forwardTask);
+
+		DailyPlanBlock forwardBlock = new DailyPlanBlock();
+		forwardBlock.setKind(BlockKind.WORK);
+		forwardBlock.setStartTime(LocalTime.of(11, 0));
+		forwardBlock.setEndTime(LocalTime.of(12, 0));
+		forwardBlock.setPosition(1);
+		forwardBlock.setDailyPlanTask(forwardTask);
+		secondRevision.addBlock(forwardBlock);
+
+		dailyPlanRepository.save(plan);
+		dailyPlanRepository.flush();
+
+		assertThat(
+						dailyPlanRepository
+								.findSummariesByOwner(owner.getId(), PageRequest.of(0, 20))
+								.getContent())
+				.singleElement()
+				.satisfies(
+						summary -> {
+							assertThat(summary.getScheduledWorkMinutes()).isEqualTo(60);
+							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
+							assertThat(summary.getHasProgress()).isTrue();
+							assertThat(summary.getNeedsRefresh()).isFalse();
+						});
+
+		forward.setRemainingEffortMinutes(30);
+		taskRepository.save(forward);
+		taskRepository.flush();
+
+		assertThat(
+						dailyPlanRepository
+								.findSummariesByOwner(owner.getId(), PageRequest.of(0, 20))
+								.getContent())
+				.singleElement()
+				.satisfies(summary -> assertThat(summary.getNeedsRefresh()).isTrue());
 	}
 }

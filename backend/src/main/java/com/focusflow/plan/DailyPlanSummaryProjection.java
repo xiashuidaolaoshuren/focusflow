@@ -20,4 +20,8 @@ public interface DailyPlanSummaryProjection {
 	Integer getUnplacedWorkCount();
 
 	Boolean getHasWarning();
+
+	Boolean getHasProgress();
+
+	Boolean getNeedsRefresh();
 }

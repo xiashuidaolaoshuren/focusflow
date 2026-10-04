@@ -4,6 +4,7 @@ import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
 import com.focusflow.plan.dto.UnplacedWorkResponse;
+import com.focusflow.task.dto.UnplannedWorkResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -33,7 +34,11 @@ public final class DailyPlanResponseTestSupport {
 				List.of(),
 				false,
 				0,
-				0);
+				0,
+				List.of(),
+				List.of(),
+				List.of(),
+				List.of());
 	}
 
 	public static DailyPlanResponse withBlocksAndUnplaced(
@@ -60,6 +65,10 @@ public final class DailyPlanResponseTestSupport {
 				unplacedWork,
 				false,
 				0,
-				0);
+				0,
+				List.of(),
+				List.of(),
+				List.of(),
+				List.of());
 	}
 }

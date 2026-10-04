@@ -6,6 +6,7 @@ import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ReplanRequest;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
@@ -79,5 +80,11 @@ public class DailyPlanController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public DailyPlanResponse generate(@Valid @RequestBody GeneratePlanRequest request) {
 		return dailyPlanService.generate(request);
+	}
+
+	@PostMapping("/{id}/replan")
+	public DailyPlanResponse replan(
+			@PathVariable Long id, @Valid @RequestBody ReplanRequest request) {
+		return dailyPlanService.replan(id, request);
 	}
 }

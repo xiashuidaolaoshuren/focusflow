@@ -11,21 +11,39 @@ import com.focusflow.plan.dto.UnplacedWorkResponse;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.task.TaskPriority;
+import com.focusflow.task.TaskQueryService;
 import com.focusflow.task.TaskStatus;
+import com.focusflow.task.UnplannedWork;
+import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
 class DailyPlanResponseMapperTest {
+
+	@Mock private TaskQueryService taskQueryService;
 
 	private DailyPlanResponseMapper mapper;
 
 	@BeforeEach
 	void setUp() {
-		mapper = new DailyPlanResponseMapper();
+		mapper = new DailyPlanResponseMapper(taskQueryService);
+		lenient()
+				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
 	}
 
 	@Test
@@ -393,7 +411,7 @@ class DailyPlanResponseMapperTest {
 	}
 
 	@Test
-	void toResponse_ignoresEarlierRevisionBlocksWhenCountingActuals() {
+	void toResponse_countsDayWideActualsFromAllRevisionsViaComposedDay() {
 		DailyPlan plan = scheduledPlan();
 		DailyPlanRevision first = plan.getLatestRevision();
 		DailyPlanTask firstTask =
@@ -411,10 +429,10 @@ class DailyPlanResponseMapperTest {
 						null,
 						null);
 		firstTask.getTaskReference().setStatus(TaskStatus.OPEN);
-		DailyPlanBlock superseded =
+		DailyPlanBlock elapsedDone =
 				planBlock(first, firstTask, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
-		superseded.setActualMinutes(35);
-		superseded.setOutcome("DONE");
+		elapsedDone.setActualMinutes(35);
+		elapsedDone.setOutcome("DONE");
 
 		DailyPlanRevision second = new DailyPlanRevision();
 		second.setRevisionNumber(2);
@@ -424,8 +442,132 @@ class DailyPlanResponseMapperTest {
 
 		DailyPlanResponse response = mapper.toResponse(plan);
 
-		assertThat(response.knownActualMinutes()).isZero();
+		assertThat(response.knownActualMinutes()).isEqualTo(35);
 		assertThat(response.missingActualCount()).isZero();
+	}
+
+	@Test
+	void toResponse_withMultipleRevisions_exposesRevisionHistoryAndComposedRail() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision first = plan.getLatestRevision();
+		DailyPlanTask elapsedTask =
+				planTask(
+						first,
+						1,
+						10L,
+						10L,
+						"Elapsed",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						60,
+						false,
+						null,
+						null);
+		DailyPlanBlock elapsedDone =
+				planBlock(
+						first,
+						elapsedTask,
+						BlockKind.WORK,
+						LocalTime.of(9, 0),
+						LocalTime.of(10, 0),
+						null,
+						1);
+		elapsedDone.setOutcome("DONE");
+		elapsedDone.setActualMinutes(50);
+		planBlock(
+				first,
+				planTask(
+						first,
+						2,
+						11L,
+						11L,
+						"Superseded",
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						false,
+						null,
+						null),
+				BlockKind.WORK,
+				LocalTime.of(15, 0),
+				LocalTime.of(16, 0),
+				null,
+				2);
+
+		DailyPlanRevision second = new DailyPlanRevision();
+		second.setRevisionNumber(2);
+		second.setCutoffTime(LocalTime.of(14, 0));
+		second.setFreeMinutes(300);
+		second.setScheduledWorkMinutes(60);
+		second.setRequiredMinutes(60L);
+		second.setCreatedAt(Instant.parse("2026-06-01T10:00:00Z"));
+		plan.addRevision(second);
+		DailyPlanTask forwardTask =
+				planTask(
+						second,
+						1,
+						12L,
+						12L,
+						"Forward",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						60,
+						false,
+						null,
+						null);
+		planBlock(
+				second,
+				forwardTask,
+				BlockKind.WORK,
+				LocalTime.of(14, 0),
+				LocalTime.of(15, 0),
+				null,
+				1);
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.revisions()).hasSize(2);
+		assertThat(response.revisions().get(0).revisionNumber()).isEqualTo(1);
+		assertThat(response.revisions().get(1).revisionNumber()).isEqualTo(2);
+		assertThat(response.blocks()).singleElement().satisfies(
+				block -> assertThat(block.taskSnapshot().sourceTaskId()).isEqualTo(12L));
+		assertThat(response.composedRail())
+				.extracting(
+						ScheduledBlockResponse::startTime,
+						ScheduledBlockResponse::endTime,
+						block -> block.taskSnapshot().sourceTaskId())
+				.containsExactly(
+						org.assertj.core.groups.Tuple.tuple(
+								LocalTime.of(9, 0), LocalTime.of(10, 0), 10L),
+						org.assertj.core.groups.Tuple.tuple(
+								LocalTime.of(14, 0), LocalTime.of(15, 0), 12L));
+		assertThat(response.offRailEarlyCompletions()).isEmpty();
+	}
+
+	@Test
+	void toResponse_includesUnplannedWorkInDayWideActuals() {
+		DailyPlan plan = scheduledPlan();
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", 99L);
+		plan.setOwner(owner);
+
+		UnplannedWork unplanned = new UnplannedWork();
+		ReflectionTestUtils.setField(unplanned, "id", 5L);
+		unplanned.setSourceTaskId(77L);
+		unplanned.setWorkDate(plan.getPlanDate());
+		unplanned.setActualMinutes(20);
+		unplanned.setRecordedAt(Instant.parse("2026-06-01T12:00:00Z"));
+		when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(eq(99L), eq(plan.getPlanDate())))
+				.thenReturn(List.of(unplanned));
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.unplannedWork()).hasSize(1);
+		assertThat(response.unplannedWork().get(0).actualMinutes()).isEqualTo(20);
+		assertThat(response.knownActualMinutes()).isEqualTo(20);
 	}
 
 	@Test

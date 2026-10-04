@@ -7,19 +7,27 @@ import com.focusflow.ai.AiPlanTask;
 import com.focusflow.ai.DailyPlanAiClient;
 import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ReplanRequest;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.preferences.EffectiveSchedulingPreferences;
 import com.focusflow.preferences.SchedulingPreferencesQueryService;
 import com.focusflow.schedule.CommitmentWindow;
+import com.focusflow.schedule.CutoffDecision;
+import com.focusflow.schedule.ElapsedWork;
+import com.focusflow.schedule.ElapsedWorkRules;
+import com.focusflow.schedule.ReplanWindow;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
 import com.focusflow.user.OwnerSchedulingLock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,6 +76,71 @@ public class DailyPlanService {
 		this.ownerSchedulingLock = ownerSchedulingLock;
 		this.schedulingPreferencesQueryService = schedulingPreferencesQueryService;
 		this.commitmentQueryService = commitmentQueryService;
+	}
+
+	public DailyPlanResponse replan(Long planId, ReplanRequest request) {
+		DailyPlan plan = loadPlanForCurrentUser(planId);
+		if (!plan.getPlanDate().equals(request.currentDate())) {
+			throw new ConflictException("REPLAN_NOT_TODAY", "plan date is not the client current date");
+		}
+		if (!PlanSchedulingSnapshot.isComplete(plan)) {
+			throw new ConflictException(
+					"REPLAN_LEGACY_SNAPSHOT", "plan has no complete scheduling snapshot");
+		}
+		CutoffDecision cutoffDecision =
+				ReplanWindow.decide(
+						plan.getWindowStart(), plan.getWindowEnd(), request.cutoff());
+		if (cutoffDecision instanceof CutoffDecision.Rejected) {
+			throw new ConflictException("REPLAN_WINDOW_ENDED", "cutoff is at or after the window end");
+		}
+		LocalTime effectiveCutoff = ((CutoffDecision.Accepted) cutoffDecision).effectiveCutoff();
+		DailyPlanRevision latestRevision = plan.getLatestRevision();
+		ElapsedWork elapsedWork =
+				ElapsedWorkRules.classify(
+						PlanRevisionBlocks.fromRevision(latestRevision), effectiveCutoff);
+		if (!elapsedWork.unresolvedElapsed().isEmpty()
+				|| !elapsedWork.unreconciledCrossing().isEmpty()) {
+			throw new ConflictException(
+					"ELAPSED_WORK_UNRESOLVED", "elapsed work must be resolved before re-planning");
+		}
+		Long ownerId = currentUser.getCurrentUser().id();
+		List<Task> plannableTasks = taskQueryService.findPlannableTasksByOwnerId(ownerId);
+		PlanReplanFreshness.validate(
+				request.expectedRevisionId(),
+				request.effortVersions(),
+				latestRevision,
+				plannableTasks);
+		if (plannableTasks.size() > 100) {
+			throw new BadRequestException("PLAN_CANDIDATE_LIMIT", "too many candidates");
+		}
+		LocalDate planDate = plan.getPlanDate();
+		List<CommitmentWindow> commitments =
+				commitmentQueryService.windowsFor(ownerId, planDate);
+		EffectiveSchedulingPreferences preferences =
+				CapturedSchedulingPreferences.fromPlan(plan, effectiveCutoff);
+		List<AiPlanItem> aiItems;
+		List<Task> rankedTasks;
+		if (plannableTasks.isEmpty()) {
+			aiItems = List.of();
+			rankedTasks = List.of();
+		} else {
+			List<AiPlanTask> aiTasks = plannableTasks.stream().map(this::toAiPlanTask).toList();
+			AiDailyPlanResponse aiResponse =
+					aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
+			rankingValidator.validateOrder(plannableTasks, planDate, aiResponse.taskIds());
+			rankedTasks = orderTasksByAiRanking(plannableTasks, aiResponse.taskIds());
+			aiItems = toPositionedPlanItems(aiResponse.taskIds());
+		}
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, rankedTasks, preferences, commitments);
+		return persister.appendRevision(
+				planId,
+				request.expectedRevisionId(),
+				request.effortVersions(),
+				effectiveCutoff,
+				aiItems,
+				rankedTasks,
+				schedule);
 	}
 
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
@@ -175,7 +248,9 @@ public class DailyPlanService {
 				projection.getWorkSessionCount() != null ? projection.getWorkSessionCount() : 0,
 				projection.getScheduledTaskCount() != null ? projection.getScheduledTaskCount() : 0,
 				projection.getUnplacedWorkCount() != null ? projection.getUnplacedWorkCount() : 0,
-				Boolean.TRUE.equals(projection.getHasWarning()));
+				Boolean.TRUE.equals(projection.getHasWarning()),
+				Boolean.TRUE.equals(projection.getHasProgress()),
+				Boolean.TRUE.equals(projection.getNeedsRefresh()));
 	}
 
 	private AiPlanTask toAiPlanTask(Task task) {

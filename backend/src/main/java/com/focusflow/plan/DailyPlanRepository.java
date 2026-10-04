@@ -61,7 +61,37 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
 					                     WHERE r2.dailyPlan.id = p.id)
 					                 AND t.mustInclude = true
-					                 AND t.unplacedReason IS NOT NULL) AS hasWarning
+					                 AND t.unplacedReason IS NOT NULL) AS hasWarning,
+					       EXISTS (SELECT b FROM DailyPlanBlock b
+					               JOIN b.revision r
+					               WHERE r.dailyPlan.id = p.id
+					                 AND b.outcome IS NOT NULL) AS hasProgress,
+					       EXISTS (SELECT t FROM DailyPlanTask t
+					               JOIN t.revision r
+					               LEFT JOIN t.taskReference live
+					               WHERE r.dailyPlan.id = p.id
+					                 AND r.revisionNumber = (
+					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					                     WHERE r2.dailyPlan.id = p.id)
+					                 AND (
+					                   live IS NULL
+					                   OR live.status NOT IN (
+					                       com.focusflow.task.TaskStatus.OPEN,
+					                       com.focusflow.task.TaskStatus.IN_PROGRESS)
+					                   OR NOT (
+					                     (CASE
+					                        WHEN p.cadenceEnabled IS NULL
+					                             AND t.capturedRemainingEffortMinutes IS NULL
+					                        THEN t.taskEstimatedMinutes
+					                        ELSE t.capturedRemainingEffortMinutes
+					                      END IS NULL
+					                      AND live.remainingEffortMinutes IS NULL)
+					                     OR CASE
+					                          WHEN p.cadenceEnabled IS NULL
+					                               AND t.capturedRemainingEffortMinutes IS NULL
+					                          THEN t.taskEstimatedMinutes
+					                          ELSE t.capturedRemainingEffortMinutes
+					                        END = live.remainingEffortMinutes))) AS needsRefresh
 					FROM DailyPlan p
 					WHERE p.owner.id = :ownerId
 					ORDER BY p.createdAt DESC, p.id DESC

@@ -3,6 +3,7 @@ package com.focusflow.plan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -26,6 +27,7 @@ import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,9 +49,10 @@ class BlockProgressServiceTest {
 	@Mock private DailyPlanRepository dailyPlanRepository;
 	@Mock private OwnerSchedulingLock ownerSchedulingLock;
 	@Mock private TaskService taskService;
+	@Mock private com.focusflow.task.TaskQueryService taskQueryService;
 
 	private final TaskResponseMapper taskResponseMapper = new TaskResponseMapper();
-	private final DailyPlanResponseMapper dailyPlanResponseMapper = new DailyPlanResponseMapper();
+	private DailyPlanResponseMapper dailyPlanResponseMapper;
 
 	private BlockProgressService service;
 	private User owner;
@@ -58,6 +61,10 @@ class BlockProgressServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		dailyPlanResponseMapper = new DailyPlanResponseMapper(taskQueryService);
+		lenient()
+				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
 		service =
 				new BlockProgressService(
 						currentUser,
