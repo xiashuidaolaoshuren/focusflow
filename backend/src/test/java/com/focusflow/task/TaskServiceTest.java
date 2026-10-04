@@ -44,6 +44,9 @@ class TaskServiceTest {
 	private DailyPlanBlockRepository dailyPlanBlockRepository;
 
 	@Mock
+	private UnplannedWorkRepository unplannedWorkRepository;
+
+	@Mock
 	private UserRepository userRepository;
 
 	@Mock
@@ -60,6 +63,7 @@ class TaskServiceTest {
 						taskRepository,
 						remainingEffortCheckpointRepository,
 						dailyPlanBlockRepository,
+						unplannedWorkRepository,
 						userRepository,
 						currentUser,
 						taskResponseMapper);
@@ -693,6 +697,71 @@ class TaskServiceTest {
 
 		taskService.deleteForCurrentUser(7L);
 
+		verify(taskRepository).delete(task);
+	}
+
+	@Test
+	void updateForCurrentUser_estimateEditAfterUnplannedWorkKeepsRemainingEffort() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Open task with unplanned work");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(45);
+		task.setEffortVersion(2);
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(unplannedWorkRepository.existsByTaskReference_Id(7L)).thenReturn(true);
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Open task with unplanned work",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						90,
+						null,
+						null,
+						null);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		assertThat(task.getEstimatedMinutes()).isEqualTo(90);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
+		assertThat(task.getEffortVersion()).isEqualTo(2);
+	}
+
+	@Test
+	void deleteForCurrentUser_clearsUnplannedWorkTaskReference() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("To delete");
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+
+		UnplannedWork entry = new UnplannedWork();
+		entry.setSourceTaskId(7L);
+		entry.setTaskReference(task);
+		when(unplannedWorkRepository.findByTaskReference_Id(7L)).thenReturn(List.of(entry));
+		when(unplannedWorkRepository.save(entry))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		taskService.deleteForCurrentUser(7L);
+
+		assertThat(entry.getTaskReference()).isNull();
+		assertThat(entry.getSourceTaskId()).isEqualTo(7L);
+		verify(unplannedWorkRepository).save(entry);
+		verify(unplannedWorkRepository, never()).delete(any(UnplannedWork.class));
 		verify(taskRepository).delete(task);
 	}
 

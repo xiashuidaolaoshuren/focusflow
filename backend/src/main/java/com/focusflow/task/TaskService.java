@@ -28,6 +28,7 @@ public class TaskService {
 	private final TaskRepository taskRepository;
 	private final RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
 	private final DailyPlanBlockRepository dailyPlanBlockRepository;
+	private final UnplannedWorkRepository unplannedWorkRepository;
 	private final UserRepository userRepository;
 	private final CurrentUser currentUser;
 	private final TaskResponseMapper taskResponseMapper;
@@ -36,12 +37,14 @@ public class TaskService {
 			TaskRepository taskRepository,
 			RemainingEffortCheckpointRepository remainingEffortCheckpointRepository,
 			DailyPlanBlockRepository dailyPlanBlockRepository,
+			UnplannedWorkRepository unplannedWorkRepository,
 			UserRepository userRepository,
 			CurrentUser currentUser,
 			TaskResponseMapper taskResponseMapper) {
 		this.taskRepository = taskRepository;
 		this.remainingEffortCheckpointRepository = remainingEffortCheckpointRepository;
 		this.dailyPlanBlockRepository = dailyPlanBlockRepository;
+		this.unplannedWorkRepository = unplannedWorkRepository;
 		this.userRepository = userRepository;
 		this.currentUser = currentUser;
 		this.taskResponseMapper = taskResponseMapper;
@@ -182,6 +185,7 @@ public class TaskService {
 		Long taskId = task.getId();
 		return taskId == null
 				|| (!remainingEffortCheckpointRepository.existsByTaskReference_Id(taskId)
+						&& !unplannedWorkRepository.existsByTaskReference_Id(taskId)
 						&& !dailyPlanBlockRepository
 								.existsByDailyPlanTask_TaskReference_IdAndOutcomeIsNotNull(taskId));
 	}
@@ -200,6 +204,7 @@ public class TaskService {
 	public void deleteForCurrentUser(Long taskId) {
 		Task task = loadTaskForCurrentUser(taskId);
 		detachCheckpointReferences(task);
+		detachUnplannedWorkReferences(task);
 		taskRepository.delete(task);
 	}
 
@@ -212,6 +217,17 @@ public class TaskService {
 				remainingEffortCheckpointRepository.findByTaskReference_Id(taskId)) {
 			checkpoint.setTaskReference(null);
 			remainingEffortCheckpointRepository.save(checkpoint);
+		}
+	}
+
+	private void detachUnplannedWorkReferences(Task task) {
+		Long taskId = task.getId();
+		if (taskId == null) {
+			return;
+		}
+		for (UnplannedWork entry : unplannedWorkRepository.findByTaskReference_Id(taskId)) {
+			entry.setTaskReference(null);
+			unplannedWorkRepository.save(entry);
 		}
 	}
 
