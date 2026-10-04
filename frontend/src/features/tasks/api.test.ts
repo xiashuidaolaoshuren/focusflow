@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { TaskResponse } from '@/types/api'
 
-import { createTask, deleteTask, listTasks, updateTask } from '@/features/tasks/api'
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  reassessRemainingEffort,
+  updateTask,
+} from '@/features/tasks/api'
 
 describe('listTasks', () => {
   afterEach(() => {
@@ -19,6 +25,8 @@ describe('listTasks', () => {
         status: 'OPEN',
         dueDate: '2026-06-15',
         estimatedMinutes: 30,
+        remainingEffortMinutes: 30,
+        effortVersion: 0,
       },
       {
         id: 2,
@@ -28,6 +36,8 @@ describe('listTasks', () => {
         status: 'IN_PROGRESS',
         dueDate: '2026-06-20',
         estimatedMinutes: 45,
+        remainingEffortMinutes: 45,
+        effortVersion: 1,
       },
     ]
     const fetchMock = vi.fn().mockResolvedValue(
@@ -97,6 +107,8 @@ describe('createTask', () => {
       status: 'OPEN',
       dueDate: '2026-06-01',
       estimatedMinutes: 45,
+      remainingEffortMinutes: 45,
+      effortVersion: 0,
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(created), {
@@ -194,6 +206,8 @@ describe('updateTask', () => {
       status: 'IN_PROGRESS',
       dueDate: '2026-06-10',
       estimatedMinutes: 60,
+      remainingEffortMinutes: 25,
+      effortVersion: 2,
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(updated), {
@@ -225,6 +239,54 @@ describe('updateTask', () => {
           status: 'IN_PROGRESS',
           dueDate: '2026-06-10',
           estimatedMinutes: 60,
+        }),
+      }),
+    )
+  })
+})
+
+describe('reassessRemainingEffort', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts RemainingEffortRequest to the remaining-effort route', async () => {
+    const response: TaskResponse = {
+      id: 1,
+      title: 'Write report',
+      description: null,
+      priority: 'HIGH',
+      status: 'IN_PROGRESS',
+      dueDate: '2026-06-15',
+      estimatedMinutes: 60,
+      remainingEffortMinutes: 40,
+      effortVersion: 3,
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      reassessRemainingEffort(1, {
+        remainingEffortMinutes: 40,
+        currentDate: '2026-06-15',
+        effortVersion: 2,
+      }),
+    ).resolves.toEqual(response)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/tasks/1/remaining-effort'),
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          remainingEffortMinutes: 40,
+          currentDate: '2026-06-15',
+          effortVersion: 2,
         }),
       }),
     )

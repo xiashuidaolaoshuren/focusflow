@@ -41,6 +41,8 @@ export type TaskResponse = {
   status: TaskStatus
   dueDate: string | null
   estimatedMinutes: number | null
+  remainingEffortMinutes: number | null
+  effortVersion: number
 }
 
 export type CreateTaskRequest = {
@@ -58,6 +60,15 @@ export type UpdateTaskRequest = {
   status?: TaskStatus
   dueDate?: string | null
   estimatedMinutes?: number | null
+  currentDate?: string | null
+  remainingEffortMinutes?: number | null
+  effortVersion?: number | null
+}
+
+export type RemainingEffortRequest = {
+  remainingEffortMinutes: number | null
+  currentDate: string
+  effortVersion: number
 }
 
 export type GeneratePlanRequest = {

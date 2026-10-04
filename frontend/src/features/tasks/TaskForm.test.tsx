@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider, useIsMutating } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { TaskForm, TaskFormSubmitButton } from '@/features/tasks/TaskForm'
+import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
 import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
+import type { UseUpdateTaskOptions } from '@/features/tasks/hooks'
 
 vi.mock('@tanstack/react-query', async () => {
   const actual = await vi.importActual<typeof import('@tanstack/react-query')>(
@@ -31,7 +33,11 @@ const mockedUseCreateTask = vi.mocked(useCreateTask)
 const mockedUseUpdateTask = vi.mocked(useUpdateTask)
 const mockedUseIsMutating = vi.mocked(useIsMutating)
 
-function renderTaskForm(onSuccess = vi.fn(), task?: TaskResponse) {
+function renderTaskForm(
+  onSuccess = vi.fn(),
+  task?: TaskResponse,
+  onEffortConflict = vi.fn(),
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
@@ -41,7 +47,11 @@ function renderTaskForm(onSuccess = vi.fn(), task?: TaskResponse) {
 
   const view = render(
     <QueryClientProvider client={queryClient}>
-      <TaskForm onSuccess={onSuccess} task={task} />
+      <TaskForm
+        onSuccess={onSuccess}
+        onEffortConflict={onEffortConflict}
+        task={task}
+      />
       <TaskFormSubmitButton isEditMode={task != null} />
     </QueryClientProvider>,
   )
@@ -49,10 +59,18 @@ function renderTaskForm(onSuccess = vi.fn(), task?: TaskResponse) {
   return {
     ...view,
     onSuccess,
-    rerenderForm: (nextOnSuccess = onSuccess, nextTask = task) =>
+    rerenderForm: (
+      nextOnSuccess = onSuccess,
+      nextTask = task,
+      nextOnEffortConflict = onEffortConflict,
+    ) =>
       view.rerender(
         <QueryClientProvider client={queryClient}>
-          <TaskForm onSuccess={nextOnSuccess} task={nextTask} />
+          <TaskForm
+            onSuccess={nextOnSuccess}
+            onEffortConflict={nextOnEffortConflict}
+            task={nextTask}
+          />
           <TaskFormSubmitButton isEditMode={nextTask != null} />
         </QueryClientProvider>,
       ),
@@ -67,6 +85,8 @@ const sampleTask: TaskResponse = {
   status: 'OPEN',
   dueDate: '2026-06-15',
   estimatedMinutes: 60,
+  remainingEffortMinutes: 25,
+  effortVersion: 0,
 }
 
 describe('TaskForm', () => {
@@ -218,6 +238,129 @@ describe('TaskForm', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Unexpected error')
   })
 
+  it('shows read-only remaining effort separately from the estimate in edit mode', () => {
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(vi.fn(), sampleTask)
+
+    expect(screen.getByText('25 min remaining')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/remaining effort/i)).not.toBeInTheDocument()
+  })
+
+  it('shows unknown remaining effort as Unknown in edit mode', () => {
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(vi.fn(), { ...sampleTask, remainingEffortMinutes: null })
+
+    expect(screen.getByText('Unknown remaining')).toBeInTheDocument()
+  })
+
+  it('shows estimate lock copy and sends effortVersion after visible progress', async () => {
+    const mutate = vi.fn()
+    mockedUseUpdateTask.mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(
+      vi.fn(),
+      { ...sampleTask, status: 'IN_PROGRESS', effortVersion: 2 },
+    )
+
+    expect(
+      screen.getByText(/editing the estimate does not change remaining effort/i),
+    ).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText(/estimated minutes/i), {
+      target: { value: '90' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /save task/i }))
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        id: 1,
+        request: expect.objectContaining({
+          estimatedMinutes: 90,
+          effortVersion: 2,
+        }),
+      },
+      expect.any(Object),
+    )
+    expect(mutate.mock.calls[0]?.[0].request).not.toHaveProperty(
+      'remainingEffortMinutes',
+    )
+  })
+
+  it('shows estimate lock copy when remaining effort differs from the estimate on an open task', () => {
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(
+      vi.fn(),
+      { ...sampleTask, status: 'OPEN', remainingEffortMinutes: 40 },
+    )
+
+    expect(
+      screen.getByText(/editing the estimate does not change remaining effort/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows conflict explanation and notifies parent on PROGRESS_CONFLICT', () => {
+    const onEffortConflict = vi.fn()
+    let hookOptions: UseUpdateTaskOptions | undefined
+    mockedUseUpdateTask.mockImplementation((options) => {
+      hookOptions = options
+      return {
+        mutate: vi.fn(),
+        isPending: false,
+        isError: false,
+        error: null,
+      } as unknown as ReturnType<typeof useUpdateTask>
+    })
+
+    renderTaskForm(vi.fn(), sampleTask, onEffortConflict)
+
+    act(() => {
+      hookOptions?.onEffortConflict?.()
+    })
+
+    expect(screen.getByText(PROGRESS_CONFLICT_MESSAGE)).toBeInTheDocument()
+    expect(onEffortConflict).toHaveBeenCalled()
+  })
+
+  it('limits edit form status options to Open and In progress', async () => {
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(vi.fn(), sampleTask)
+
+    fireEvent.click(screen.getByRole('combobox', { name: /status/i }))
+    expect(await screen.findByRole('option', { name: /^open$/i })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /in progress/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^done$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^cancelled$/i })).not.toBeInTheDocument()
+  })
+
   it('prefills fields in edit mode and submits update mutation with task id', async () => {
     const mutate = vi.fn()
     mockedUseUpdateTask.mockReturnValue({
@@ -262,6 +405,7 @@ describe('TaskForm', () => {
           status: 'IN_PROGRESS',
           dueDate: '2026-06-15',
           estimatedMinutes: 60,
+          effortVersion: 0,
         },
       },
       expect.objectContaining({

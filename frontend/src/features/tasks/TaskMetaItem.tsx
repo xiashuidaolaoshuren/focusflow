@@ -5,6 +5,7 @@ type TaskMetaCategory =
   | 'status'
   | 'dueDate'
   | 'estimatedMinutes'
+  | 'remainingEffortMinutes'
 
 type TaskMetaItemProps = {
   category: TaskMetaCategory

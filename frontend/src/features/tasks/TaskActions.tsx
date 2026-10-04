@@ -18,8 +18,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { TaskResponse, TaskStatus } from '@/types/api'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { useUpdateTask } from '@/features/tasks/hooks'
 import { STATUS_LABELS } from '@/features/tasks/labels'
+import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
+import { buildTaskUpdateRequest } from '@/features/tasks/taskUpdate'
+import { getLocalDateString } from '@/lib/planningDate'
+import type { TaskResponse, TaskStatus } from '@/types/api'
 
 const TASK_STATUSES: TaskStatus[] = [
   'OPEN',
@@ -31,27 +38,111 @@ const TASK_STATUSES: TaskStatus[] = [
 type TaskActionsProps = {
   task: TaskResponse
   onEdit: (task: TaskResponse) => void
-  onStatusChange: (task: TaskResponse, status: TaskStatus) => void
   onDelete: (task: TaskResponse) => void
-  isUpdating?: boolean
+  onEffortConflict?: () => void
   isDeleting?: boolean
+}
+
+function isReopen(from: TaskStatus, to: TaskStatus): boolean {
+  if (to !== 'OPEN' && to !== 'IN_PROGRESS') {
+    return false
+  }
+  return from === 'DONE' || from === 'CANCELLED'
 }
 
 export function TaskActions({
   task,
   onEdit,
-  onStatusChange,
   onDelete,
-  isUpdating = false,
+  onEffortConflict,
   isDeleting = false,
 }: TaskActionsProps) {
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null)
+  const { mutate, isPending: isUpdating } = useUpdateTask({
+    onEffortConflict: () => {
+      setConflictMessage(PROGRESS_CONFLICT_MESSAGE)
+      setIsFinishDialogOpen(false)
+      setIsReopenDialogOpen(false)
+      setReopenStatus(null)
+      onEffortConflict?.()
+    },
+  })
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isFinishDialogOpen, setIsFinishDialogOpen] = useState(false)
+  const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false)
+  const [reopenStatus, setReopenStatus] = useState<TaskStatus | null>(null)
+  const [reopenMinutes, setReopenMinutes] = useState('')
+  const [reopenUnknown, setReopenUnknown] = useState(false)
   const isDisabled = isUpdating || isDeleting
 
   function handleStatusChange(nextStatus: TaskStatus) {
-    if (nextStatus !== task.status) {
-      onStatusChange(task, nextStatus)
+    if (nextStatus === task.status) {
+      return
     }
+
+    if (nextStatus === 'DONE') {
+      setIsFinishDialogOpen(true)
+      return
+    }
+
+    if (nextStatus === 'CANCELLED') {
+      mutate({
+        id: task.id,
+        request: buildTaskUpdateRequest(task, { status: 'CANCELLED' }),
+      })
+      return
+    }
+
+    if (isReopen(task.status, nextStatus)) {
+      setReopenStatus(nextStatus)
+      setReopenMinutes('')
+      setReopenUnknown(false)
+      setIsReopenDialogOpen(true)
+      return
+    }
+
+    mutate({
+      id: task.id,
+      request: buildTaskUpdateRequest(task, { status: nextStatus }),
+    })
+  }
+
+  function handleFinishConfirm() {
+    mutate({
+      id: task.id,
+      request: buildTaskUpdateRequest(task, {
+        status: 'DONE',
+        currentDate: getLocalDateString(),
+      }),
+    })
+    setIsFinishDialogOpen(false)
+  }
+
+  function canSubmitReopen(): boolean {
+    if (reopenUnknown) {
+      return true
+    }
+    const minutes = Number.parseInt(reopenMinutes, 10)
+    return Number.isFinite(minutes) && minutes > 0
+  }
+
+  function handleReopenConfirm() {
+    if (reopenStatus == null || !canSubmitReopen()) {
+      return
+    }
+
+    mutate({
+      id: task.id,
+      request: buildTaskUpdateRequest(task, {
+        status: reopenStatus,
+        currentDate: getLocalDateString(),
+        remainingEffortMinutes: reopenUnknown
+          ? null
+          : Number.parseInt(reopenMinutes, 10),
+      }),
+    })
+    setIsReopenDialogOpen(false)
+    setReopenStatus(null)
   }
 
   function handleDeleteConfirm() {
@@ -60,7 +151,13 @@ export function TaskActions({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col items-end gap-2">
+      {conflictMessage ? (
+        <Alert className="max-w-xs">
+          <AlertDescription>{conflictMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+      <div className="flex items-center gap-2">
       <select
         aria-label={`Change status for ${task.title}`}
         value={task.status}
@@ -102,6 +199,80 @@ export function TaskActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
+      <AlertDialog open={isFinishDialogOpen} onOpenChange={setIsFinishDialogOpen}>
+        <AlertDialogContent aria-label="Finish task">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finish task</AlertDialogTitle>
+            <AlertDialogDescription>
+              Mark &quot;{task.title}&quot; as done and set remaining effort to
+              zero.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUpdating}
+              onClick={handleFinishConfirm}
+            >
+              Finish task
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={isReopenDialogOpen}
+        onOpenChange={(open) => {
+          setIsReopenDialogOpen(open)
+          if (!open) {
+            setReopenStatus(null)
+          }
+        }}
+      >
+        <AlertDialogContent aria-label="Reopen task">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen task</AlertDialogTitle>
+            <AlertDialogDescription>
+              Reopening &quot;{task.title}&quot; requires a fresh remaining
+              effort assessment.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex flex-col gap-3 px-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`reopen-minutes-${task.id}`}>
+                Remaining effort minutes
+              </Label>
+              <Input
+                id={`reopen-minutes-${task.id}`}
+                type="number"
+                min={1}
+                value={reopenMinutes}
+                disabled={reopenUnknown}
+                onChange={(event) => setReopenMinutes(event.target.value)}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                aria-label="Remaining effort is unknown"
+                checked={reopenUnknown}
+                onChange={(event) => setReopenUnknown(event.target.checked)}
+              />
+              Remaining effort is unknown
+            </label>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUpdating || !canSubmitReopen()}
+              onClick={handleReopenConfirm}
+            >
+              Reopen task
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent aria-label="Delete task">
           <AlertDialogHeader>
@@ -123,6 +294,7 @@ export function TaskActions({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </div>
     </div>
   )
 }

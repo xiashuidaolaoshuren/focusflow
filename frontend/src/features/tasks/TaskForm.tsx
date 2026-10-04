@@ -19,6 +19,8 @@ import {
   useCreateTask,
   useUpdateTask,
 } from '@/features/tasks/hooks'
+import { ESTIMATE_LOCK_COPY, hasVisibleProgress } from '@/features/tasks/taskEffort'
+import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
 import { ApiError } from '@/lib/api'
 import type { TaskPriority, TaskResponse, TaskStatus } from '@/types/api'
 
@@ -28,11 +30,16 @@ const PRIORITY_ITEMS: { value: TaskPriority; label: string }[] = [
   { value: 'HIGH', label: 'High' },
 ]
 
-const STATUS_ITEMS: { value: TaskStatus; label: string }[] = [
+function formatRemainingEffort(minutes: number | null): string {
+  if (minutes == null) {
+    return 'Unknown remaining'
+  }
+  return `${minutes} min remaining`
+}
+
+const FORM_STATUS_ITEMS: { value: TaskStatus; label: string }[] = [
   { value: 'OPEN', label: 'Open' },
   { value: 'IN_PROGRESS', label: 'In progress' },
-  { value: 'DONE', label: 'Done' },
-  { value: 'CANCELLED', label: 'Cancelled' },
 ]
 
 function getFieldError(
@@ -49,6 +56,7 @@ export const TASK_FORM_ID = 'task-form'
 
 type TaskFormProps = {
   onSuccess?: () => void
+  onEffortConflict?: () => void
   task?: TaskResponse
 }
 
@@ -68,8 +76,9 @@ export function TaskFormSubmitButton({ isEditMode }: TaskFormSubmitButtonProps) 
   )
 }
 
-export function TaskForm({ onSuccess, task }: TaskFormProps) {
+export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
   const isEditMode = task != null
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null)
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM')
@@ -79,9 +88,19 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
     task?.estimatedMinutes != null ? String(task.estimatedMinutes) : '',
   )
   const createMutation = useCreateTask()
-  const updateMutation = useUpdateTask({ mutationKey: formUpdateTaskMutationKey })
+  const updateMutation = useUpdateTask({
+    mutationKey: formUpdateTaskMutationKey,
+    onEffortConflict: () => {
+      setConflictMessage(PROGRESS_CONFLICT_MESSAGE)
+      onEffortConflict?.()
+    },
+  })
   const isError = isEditMode ? updateMutation.isError : createMutation.isError
   const error = isEditMode ? updateMutation.error : createMutation.error
+  const showMutationError =
+    isError &&
+    error instanceof Error &&
+    !(error instanceof ApiError && error.code === 'PROGRESS_CONFLICT')
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -97,16 +116,14 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
     }
 
     if (isEditMode && task) {
-      updateMutation.mutate(
-        {
-          id: task.id,
-          request: {
-            ...payload,
-            status,
-          },
-        },
-        { onSuccess },
-      )
+      const request = {
+        ...payload,
+        status,
+        ...(hasVisibleProgress(task)
+          ? { effortVersion: task.effortVersion }
+          : {}),
+      }
+      updateMutation.mutate({ id: task.id, request }, { onSuccess })
       return
     }
 
@@ -120,7 +137,12 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
       className="flex min-h-0 flex-1 flex-col"
     >
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
-      {isError && error instanceof Error ? (
+      {conflictMessage ? (
+        <Alert>
+          <AlertDescription>{conflictMessage}</AlertDescription>
+        </Alert>
+      ) : null}
+      {showMutationError ? (
         <Alert variant="destructive">
           <AlertDescription>{error.message}</AlertDescription>
         </Alert>
@@ -194,7 +216,7 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                {STATUS_ITEMS.map((item) => (
+                {FORM_STATUS_ITEMS.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
                   </SelectItem>
@@ -223,6 +245,14 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
           </p>
         ) : null}
       </div>
+      {isEditMode && task ? (
+        <div className="flex flex-col gap-1">
+          <Label>Remaining effort</Label>
+          <p className="text-sm text-muted-foreground">
+            {formatRemainingEffort(task.remainingEffortMinutes)}
+          </p>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-2">
         <Label htmlFor="estimatedMinutes">Estimated minutes</Label>
         <Input
@@ -243,6 +273,9 @@ export function TaskForm({ onSuccess, task }: TaskFormProps) {
           <p id="estimatedMinutes-error" className="text-sm text-destructive">
             {getFieldError(error, 'estimatedMinutes')}
           </p>
+        ) : null}
+        {isEditMode && task && hasVisibleProgress(task) ? (
+          <p className="text-sm text-muted-foreground">{ESTIMATE_LOCK_COPY}</p>
         ) : null}
       </div>
       </div>

@@ -9,12 +9,13 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { RemainingEffortControl } from '@/features/tasks/RemainingEffortControl'
 import { TaskActions } from '@/features/tasks/TaskActions'
 import { PriorityBadge } from '@/features/tasks/PriorityBadge'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { TaskMetaItem } from '@/features/tasks/TaskMetaItem'
-import { useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
-import type { TaskResponse, TaskStatus, UpdateTaskRequest } from '@/types/api'
+import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
+import type { TaskResponse } from '@/types/api'
 
 function formatDueDate(dueDate: string | null): string {
   return dueDate ?? 'No due date'
@@ -24,36 +25,24 @@ function formatEstimatedMinutes(minutes: number | null): string {
   return minutes != null ? `${minutes} min` : 'No estimate'
 }
 
-function toUpdateRequest(
-  task: TaskResponse,
-  overrides: Partial<UpdateTaskRequest> = {},
-): UpdateTaskRequest {
-  return {
-    title: task.title,
-    description: task.description,
-    priority: task.priority,
-    status: task.status,
-    dueDate: task.dueDate,
-    estimatedMinutes: task.estimatedMinutes,
-    ...overrides,
+function formatRemainingEffort(minutes: number | null): string {
+  if (minutes == null) {
+    return 'Unknown remaining'
   }
+  return `${minutes} min remaining`
 }
 
 type TaskRowProps = {
   task: TaskResponse
   onEditTask: (task: TaskResponse) => void
-  onStatusChange: (task: TaskResponse, status: TaskStatus) => void
   onDelete: (task: TaskResponse) => void
-  isUpdating: boolean
   isDeleting: boolean
 }
 
 function TaskRow({
   task,
   onEditTask,
-  onStatusChange,
   onDelete,
-  isUpdating,
   isDeleting,
 }: TaskRowProps) {
   return (
@@ -64,9 +53,7 @@ function TaskRow({
           <TaskActions
             task={task}
             onEdit={onEditTask}
-            onStatusChange={onStatusChange}
             onDelete={onDelete}
-            isUpdating={isUpdating}
             isDeleting={isDeleting}
           />
         </div>
@@ -83,6 +70,10 @@ function TaskRow({
           <TaskMetaItem category="estimatedMinutes" icon={ClockIcon}>
             {formatEstimatedMinutes(task.estimatedMinutes)}
           </TaskMetaItem>
+          <TaskMetaItem category="remainingEffortMinutes" icon={ClockIcon}>
+            {formatRemainingEffort(task.remainingEffortMinutes)}
+          </TaskMetaItem>
+          <RemainingEffortControl task={task} />
         </div>
       </CardContent>
     </Card>
@@ -134,15 +125,7 @@ export function TaskList({
   onCreateTask = () => undefined,
 }: TaskListProps) {
   const { isPending, isError, isEmpty, tasks, error, refetch } = useTasks()
-  const { mutate: updateTask, isPending: isUpdating } = useUpdateTask()
   const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask()
-
-  function handleStatusChange(task: TaskResponse, status: TaskStatus) {
-    updateTask({
-      id: task.id,
-      request: toUpdateRequest(task, { status }),
-    })
-  }
 
   function handleDelete(task: TaskResponse) {
     deleteTask(task.id)
@@ -179,9 +162,7 @@ export function TaskList({
           key={task.id}
           task={task}
           onEditTask={onEditTask}
-          onStatusChange={handleStatusChange}
           onDelete={handleDelete}
-          isUpdating={isUpdating}
           isDeleting={isDeleting}
         />
       ))}

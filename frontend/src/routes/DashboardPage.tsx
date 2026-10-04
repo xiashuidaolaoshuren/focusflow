@@ -100,7 +100,11 @@ export function DashboardPage() {
             </SheetDescription>
           </SheetHeader>
           {isEditMode ? (
-            <TaskForm task={editingTask} onSuccess={closeTaskSheet} />
+            <TaskForm
+              task={editingTask}
+              onSuccess={closeTaskSheet}
+              onEffortConflict={closeTaskSheet}
+            />
           ) : (
             <TaskForm onSuccess={closeTaskSheet} />
           )}

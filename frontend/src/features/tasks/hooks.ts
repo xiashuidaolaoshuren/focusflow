@@ -1,16 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
-import { createTask, deleteTask, listTasks, updateTask } from '@/features/tasks/api'
-import type { CreateTaskRequest, UpdateTaskRequest } from '@/types/api'
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  reassessRemainingEffort,
+  updateTask,
+} from '@/features/tasks/api'
+import { isProgressConflict } from '@/features/tasks/taskEffortConflict'
+import type {
+  CreateTaskRequest,
+  RemainingEffortRequest,
+  UpdateTaskRequest,
+} from '@/types/api'
 
 export const tasksQueryKey = ['tasks', 'list'] as const
 export const createTaskMutationKey = ['tasks', 'create'] as const
 export const updateTaskMutationKey = ['tasks', 'update'] as const
 export const formUpdateTaskMutationKey = ['tasks', 'form-update'] as const
+export const reassessRemainingEffortMutationKey = [
+  'tasks',
+  'reassess-remaining-effort',
+] as const
 
-type UseUpdateTaskOptions = {
+export type UseUpdateTaskOptions = {
   mutationKey?: readonly string[]
+  onEffortConflict?: () => void
+}
+
+export type UseReassessRemainingEffortOptions = {
+  onEffortConflict?: () => void
 }
 
 export function useTasks() {
@@ -55,6 +75,12 @@ export function useUpdateTask(options?: UseUpdateTaskOptions) {
       markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
     },
+    onError: async (error) => {
+      if (isProgressConflict(error)) {
+        await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+        options?.onEffortConflict?.()
+      }
+    },
   })
 }
 
@@ -66,6 +92,33 @@ export function useDeleteTask() {
     onSuccess: async () => {
       markRegeneratePromptNeeded()
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+  })
+}
+
+export function useReassessRemainingEffort(
+  options?: UseReassessRemainingEffortOptions,
+) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationKey: reassessRemainingEffortMutationKey,
+    mutationFn: ({
+      id,
+      request,
+    }: {
+      id: number
+      request: RemainingEffortRequest
+    }) => reassessRemainingEffort(id, request),
+    onSuccess: async () => {
+      markRegeneratePromptNeeded()
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+    onError: async (error) => {
+      if (isProgressConflict(error)) {
+        await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+        options?.onEffortConflict?.()
+      }
     },
   })
 }

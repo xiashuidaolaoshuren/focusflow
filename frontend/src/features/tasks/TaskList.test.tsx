@@ -6,11 +6,27 @@ import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
 import { TaskList } from '@/features/tasks/TaskList'
 
-vi.mock('@/features/tasks/hooks', () => ({
-  useTasks: vi.fn(),
-  useUpdateTask: vi.fn(),
-  useDeleteTask: vi.fn(),
-}))
+vi.mock('@/lib/planningDate', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/planningDate')>()
+  return {
+    ...actual,
+    getLocalDateString: vi.fn(() => '2026-06-15'),
+  }
+})
+
+vi.mock('@/features/tasks/hooks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/tasks/hooks')>()
+  return {
+    ...actual,
+    useTasks: vi.fn(),
+    useUpdateTask: vi.fn(),
+    useDeleteTask: vi.fn(),
+    useReassessRemainingEffort: vi.fn(() => ({
+      mutate: vi.fn(),
+      isPending: false,
+    })),
+  }
+})
 
 import { useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
 
@@ -42,6 +58,8 @@ const sampleTask: TaskResponse = {
   status: 'OPEN',
   dueDate: '2026-06-15',
   estimatedMinutes: 60,
+  remainingEffortMinutes: 25,
+  effortVersion: 0,
 }
 
 describe('TaskList', () => {
@@ -156,7 +174,40 @@ describe('TaskList', () => {
     expect(document.querySelector('[data-meta="estimatedMinutes"]')).toBeInTheDocument()
   })
 
-  it('calls update mutation when quick status changes', () => {
+  it('shows remaining effort separately from the whole-task estimate', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [sampleTask],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(screen.getByText('60 min')).toBeInTheDocument()
+    expect(screen.getByText('25 min remaining')).toBeInTheDocument()
+    expect(document.querySelector('[data-meta="remainingEffortMinutes"]')).toBeInTheDocument()
+  })
+
+  it('shows unknown remaining effort as Unknown, not zero', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [{ ...sampleTask, remainingEffortMinutes: null }],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(screen.getByText('Unknown remaining')).toBeInTheDocument()
+    expect(screen.queryByText('0 min remaining')).not.toBeInTheDocument()
+  })
+
+  it('sends effortVersion without remainingEffortMinutes when status changes to In progress', () => {
     const updateMutate = vi.fn()
     mockedUseUpdateTask.mockReturnValue({
       mutate: updateMutate,
@@ -186,8 +237,80 @@ describe('TaskList', () => {
         status: 'IN_PROGRESS',
         dueDate: '2026-06-15',
         estimatedMinutes: 60,
+        effortVersion: 0,
       },
     })
+    expect(updateMutate.mock.calls[0]?.[0].request).not.toHaveProperty(
+      'remainingEffortMinutes',
+    )
+  })
+
+  it('sends finish update with currentDate when status changes to Done', async () => {
+    const updateMutate = vi.fn()
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: updateMutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [sampleTask],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    fireEvent.change(screen.getByLabelText(/change status for write report/i), {
+      target: { value: 'DONE' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: /^finish task$/i }))
+
+    expect(updateMutate).toHaveBeenCalledWith({
+      id: 1,
+      request: expect.objectContaining({
+        status: 'DONE',
+        currentDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        effortVersion: 0,
+      }),
+    })
+    expect(updateMutate.mock.calls[0]?.[0].request).not.toHaveProperty(
+      'remainingEffortMinutes',
+    )
+  })
+
+  it('sends effortVersion without remainingEffortMinutes when status changes to Cancelled', () => {
+    const updateMutate = vi.fn()
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: updateMutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [sampleTask],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    fireEvent.change(screen.getByLabelText(/change status for write report/i), {
+      target: { value: 'CANCELLED' },
+    })
+
+    expect(updateMutate).toHaveBeenCalledWith({
+      id: 1,
+      request: expect.objectContaining({
+        status: 'CANCELLED',
+        effortVersion: 0,
+      }),
+    })
+    expect(updateMutate.mock.calls[0]?.[0].request).not.toHaveProperty(
+      'remainingEffortMinutes',
+    )
   })
 
   it('calls onEditTask when edit action is clicked', async () => {

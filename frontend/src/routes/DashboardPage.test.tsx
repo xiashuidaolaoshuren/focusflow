@@ -77,6 +77,8 @@ const sampleTask = {
   status: 'OPEN' as const,
   dueDate: '2026-06-15',
   estimatedMinutes: 60,
+  remainingEffortMinutes: 25,
+  effortVersion: 0,
 }
 
 const dashboardSamplePlan = samplePlan
@@ -386,6 +388,7 @@ describe('DashboardPage', () => {
         status: 'IN_PROGRESS',
         dueDate: '2026-06-15',
         estimatedMinutes: 60,
+        effortVersion: 0,
       },
     })
   })
