@@ -174,6 +174,7 @@ class DailyPlanControllerTest {
 														TaskStatus.OPEN,
 														null,
 														45,
+														null,
 														false),
 												null,
 												null,

@@ -14,6 +14,7 @@ import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.schedule.BlockKind;
+import com.focusflow.schedule.FixedBreakWindow;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.schedule.UnplacedWork;
@@ -339,7 +340,13 @@ class DailyPlanPersisterTest {
 								LocalTime.of(10, 0),
 								1L,
 								null)),
-				List.of(new UnplacedWork(1L, UnplacedReason.OUT_OF_TIME, 30)));
+				List.of(new UnplacedWork(1L, UnplacedReason.OUT_OF_TIME, 30)),
+				true,
+				50,
+				10,
+				15,
+				0,
+				List.of());
 	}
 
 	@Test
@@ -376,6 +383,102 @@ class DailyPlanPersisterTest {
 		assertThat(planTask.getTaskPriority()).isEqualTo(TaskPriority.MEDIUM);
 		assertThat(planTask.isMustInclude()).isTrue();
 		assertThat(planTask.getTaskReference()).isSameAs(reloaded);
+	}
+
+	@Test
+	void persistPlan_storesTheCapturedRemainingEffortEvenWhenReloadedTaskChanged() {
+		User owner = new User();
+		LocalDate planDate = LocalDate.of(2026, 9, 1);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+
+		Task captured = createTask(1L, "Captured", 90, TaskStatus.OPEN);
+		captured.setRemainingEffortMinutes(40);
+		Task reloaded = createTask(1L, "Reloaded later", 90, TaskStatus.OPEN);
+		reloaded.setRemainingEffortMinutes(15);
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(reloaded));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), sampleSchedule());
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).save(captor.capture());
+		DailyPlanTask planTask = captor.getValue().getLatestRevision().getTasks().iterator().next();
+		assertThat(planTask.getCapturedRemainingEffortMinutes()).isEqualTo(40);
+		assertThat(captured.getRemainingEffortMinutes()).isEqualTo(40);
+		assertThat(reloaded.getRemainingEffortMinutes()).isEqualTo(15);
+	}
+
+	@Test
+	void persistPlan_writesTheCapturedSchedulingPolicyAndFixedBreaks() {
+		User owner = new User();
+		LocalDate planDate = LocalDate.of(2026, 9, 2);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+		Task captured = createTask(1L, "Captured", 60, TaskStatus.OPEN);
+
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(9, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						480,
+						60,
+						60L,
+						0,
+						0,
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(9, 0),
+										LocalTime.of(10, 0),
+										1L,
+										null)),
+						List.of(),
+						false,
+						45,
+						7,
+						20,
+						12,
+						List.of(
+								new FixedBreakWindow(
+										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(captured));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), schedule);
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).save(captor.capture());
+		DailyPlan plan = captor.getValue();
+		assertThat(plan.getCadenceEnabled()).isFalse();
+		assertThat(plan.getTargetFocusMinutes()).isEqualTo(45);
+		assertThat(plan.getBreakMinutes()).isEqualTo(7);
+		assertThat(plan.getMinSessionMinutes()).isEqualTo(20);
+		assertThat(plan.getBufferMinutes()).isEqualTo(12);
+		assertThat(plan.getFixedBreakSnapshots())
+				.singleElement()
+				.satisfies(
+						snapshot -> {
+							assertThat(snapshot.getLabel()).isEqualTo("Lunch");
+							assertThat(snapshot.getStartTime()).isEqualTo(LocalTime.of(12, 0));
+							assertThat(snapshot.getEndTime()).isEqualTo(LocalTime.of(13, 0));
+						});
 	}
 
 	private Task createTask(Long id, String title, Integer estimatedMinutes, TaskStatus status) {

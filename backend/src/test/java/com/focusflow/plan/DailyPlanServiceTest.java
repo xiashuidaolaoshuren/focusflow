@@ -140,6 +140,14 @@ class DailyPlanServiceTest {
 		ReflectionTestUtils.setField(plan, "id", id);
 		plan.setPlanDate(planDate);
 		plan.setCreatedAt(Instant.parse("2026-06-01T09:00:00Z"));
+		return withRevision(plan);
+	}
+
+	private static DailyPlan withRevision(DailyPlan plan) {
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(1);
+		revision.setCreatedAt(Instant.parse("2026-06-01T09:00:00Z"));
+		plan.addRevision(revision);
 		return plan;
 	}
 
@@ -155,6 +163,12 @@ class DailyPlanServiceTest {
 				0,
 				0,
 				List.of(),
+				List.of(),
+				true,
+				50,
+				10,
+				15,
+				0,
 				List.of());
 	}
 
@@ -754,6 +768,7 @@ class DailyPlanServiceTest {
 		newer.setCreatedAt(Instant.parse("2026-06-01T14:00:00Z"));
 		newer.setWindowStart(java.time.LocalTime.of(9, 0));
 		newer.setWindowEnd(java.time.LocalTime.of(18, 0));
+		withRevision(newer);
 
 		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 						42L, planDate))
@@ -796,6 +811,7 @@ class DailyPlanServiceTest {
 		plan.setCreatedAt(Instant.parse("2026-06-01T09:00:00Z"));
 		plan.setWindowStart(java.time.LocalTime.of(9, 0));
 		plan.setWindowEnd(java.time.LocalTime.of(18, 0));
+		withRevision(plan);
 		when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(plan));
 
 		DailyPlanResponse response = dailyPlanService.getForCurrentUser(7L);

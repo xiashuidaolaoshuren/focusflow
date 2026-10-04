@@ -4,6 +4,7 @@ import com.focusflow.ai.AiPlanItem;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.schedule.BlockKind;
+import com.focusflow.schedule.FixedBreakWindow;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.schedule.UnplacedWork;
@@ -127,6 +128,18 @@ public class DailyPlanPersister {
 		plan.setWindowEnd(schedule.windowEnd());
 		plan.setPeakStart(schedule.peakStart());
 		plan.setPeakEnd(schedule.peakEnd());
+		plan.setCadenceEnabled(schedule.cadenceEnabled());
+		plan.setTargetFocusMinutes(schedule.targetFocusMinutes());
+		plan.setBreakMinutes(schedule.breakMinutes());
+		plan.setMinSessionMinutes(schedule.minSessionMinutes());
+		plan.setBufferMinutes(schedule.bufferMinutes());
+		for (FixedBreakWindow fixedBreak : schedule.fixedBreaks()) {
+			PlanFixedBreakSnapshot snapshot = new PlanFixedBreakSnapshot();
+			snapshot.setLabel(fixedBreak.label());
+			snapshot.setStartTime(fixedBreak.start());
+			snapshot.setEndTime(fixedBreak.end());
+			plan.addFixedBreakSnapshot(snapshot);
+		}
 
 		DailyPlanRevision revision = new DailyPlanRevision();
 		revision.setRevisionNumber(1);
@@ -157,6 +170,7 @@ public class DailyPlanPersister {
 			planTask.setTaskStatus(captured.getStatus());
 			planTask.setTaskDueDate(captured.getDueDate());
 			planTask.setTaskEstimatedMinutes(captured.getEstimatedMinutes());
+			planTask.setCapturedRemainingEffortMinutes(captured.getRemainingEffortMinutes());
 			planTask.setMustInclude(PlanMustIncludeRules.isMustInclude(captured, planDate));
 			UnplacedWork unplaced = unplacedBySourceId.get(planTask.getSourceTaskId());
 			if (unplaced != null) {

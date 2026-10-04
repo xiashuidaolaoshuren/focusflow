@@ -10,6 +10,52 @@ import org.junit.jupiter.api.Test;
 
 class DailyPlanPromptBuilderTest {
 
+	@Test
+	void build_includesRemainingEffortBesideTheWholeTaskEstimate() {
+		AiDailyPlanRequest request =
+				new AiDailyPlanRequest(
+						List.of(
+								new AiPlanTask(
+										1L,
+										"Write tests",
+										null,
+										TaskPriority.HIGH,
+										LocalDate.of(2026, 6, 1),
+										90,
+										40,
+										TaskStatus.OPEN)),
+						LocalDate.of(2026, 6, 1));
+
+		String prompt = promptBuilder.build(request);
+
+		assertThat(prompt).contains("estimatedMinutes=90");
+		assertThat(prompt).contains("remainingEffortMinutes=40");
+		assertThat(prompt).contains("must-continue");
+		assertThat(prompt).contains("due-or-overdue");
+	}
+
+	@Test
+	void build_omitsRemainingEffortWhenUnknown() {
+		AiDailyPlanRequest request =
+				new AiDailyPlanRequest(
+						List.of(
+								new AiPlanTask(
+										2L,
+										"Unknown remainder",
+										null,
+										TaskPriority.MEDIUM,
+										null,
+										30,
+										null,
+										TaskStatus.OPEN)),
+						LocalDate.of(2026, 6, 1));
+
+		String prompt = promptBuilder.build(request);
+
+		assertThat(prompt).contains("estimatedMinutes=30");
+		assertThat(prompt).doesNotContain("remainingEffortMinutes");
+	}
+
 	private final DailyPlanPromptBuilder promptBuilder = new DailyPlanPromptBuilder();
 
 	@Test

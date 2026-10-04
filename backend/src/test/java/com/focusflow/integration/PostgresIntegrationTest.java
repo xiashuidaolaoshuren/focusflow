@@ -764,6 +764,12 @@ class PostgresIntegrationTest {
 										LocalTime.of(10, 0),
 										task.getId(),
 										null)),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
 						List.of());
 
 		DailyPlanResponse response =

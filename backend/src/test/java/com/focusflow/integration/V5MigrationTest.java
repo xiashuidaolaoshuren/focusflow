@@ -156,6 +156,13 @@ class V5MigrationTest {
 					.isFalse();
 
 			assertThat(columnExists(connection, "daily_plans", "cadence_enabled")).isTrue();
+			assertThat(queryObject(connection, "SELECT cadence_enabled FROM daily_plans")).isNull();
+			assertThat(queryObject(connection, "SELECT target_focus_minutes FROM daily_plans"))
+					.isNull();
+			assertThat(queryObject(connection, "SELECT break_minutes FROM daily_plans")).isNull();
+			assertThat(queryObject(connection, "SELECT min_session_minutes FROM daily_plans"))
+					.isNull();
+			assertThat(queryObject(connection, "SELECT buffer_minutes FROM daily_plans")).isNull();
 			assertThat(
 							queryLong(connection, "SELECT COUNT(*) FROM plan_fixed_break_snapshots"))
 					.isZero();

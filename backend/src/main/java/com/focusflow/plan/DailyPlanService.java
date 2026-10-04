@@ -184,6 +184,7 @@ public class DailyPlanService {
 				task.getPriority(),
 				task.getDueDate(),
 				task.getEstimatedMinutes(),
+				task.getRemainingEffortMinutes(),
 				task.getStatus());
 	}
 }

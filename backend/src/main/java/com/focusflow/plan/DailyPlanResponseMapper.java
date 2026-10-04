@@ -51,7 +51,41 @@ public class DailyPlanResponseMapper {
 				revision.getRealizedBufferMinutes(),
 				deriveWarning(revision),
 				blocks,
-				unplacedWork);
+				unplacedWork,
+				PlanFreshness.needsRefresh(plan),
+				knownActualMinutes(revision),
+				missingActualCount(revision));
+	}
+
+	/**
+	 * Day-wide known actual minutes on the latest revision. A reconciled zero counts as a known
+	 * value; an omitted actual is unknown and contributes nothing.
+	 */
+	private static int knownActualMinutes(DailyPlanRevision revision) {
+		int total = 0;
+		for (DailyPlanBlock block : revision.getBlocks()) {
+			if (block.getKind() == BlockKind.WORK && block.getActualMinutes() != null) {
+				total += block.getActualMinutes();
+			}
+		}
+		return total;
+	}
+
+	/**
+	 * Done blocks whose actual minutes were omitted. They are missing, not zero, and a skipped or
+	 * superseded block does not contribute.
+	 */
+	private static int missingActualCount(DailyPlanRevision revision) {
+		int count = 0;
+		for (DailyPlanBlock block : revision.getBlocks()) {
+			if (block.getKind() == BlockKind.WORK
+					&& block.getActualMinutes() == null
+					&& block.getOutcome() != null
+					&& WorkOutcome.valueOf(block.getOutcome()) == WorkOutcome.DONE) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	private DailyPlanWarning deriveWarning(DailyPlanRevision revision) {
@@ -162,6 +196,7 @@ public class DailyPlanResponseMapper {
 				task.getTaskStatus(),
 				task.getTaskDueDate(),
 				task.getTaskEstimatedMinutes(),
+				task.getCapturedRemainingEffortMinutes(),
 				task.isMustInclude());
 	}
 

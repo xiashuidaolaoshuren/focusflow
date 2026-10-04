@@ -7,7 +7,10 @@ import com.focusflow.preferences.EffectiveSchedulingPreferences;
 import com.focusflow.preferences.SchedulingPreferenceDefaults;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.CommitmentWindow;
+import com.focusflow.schedule.FixedBreakWindow;
 import com.focusflow.schedule.ScheduledBlock;
+import com.focusflow.schedule.UnplacedReason;
+import com.focusflow.schedule.UnplacedWork;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskPriority;
 import com.focusflow.task.TaskStatus;
@@ -78,6 +81,98 @@ class DailyPlanSchedulerTest {
 				.anyMatch(block -> block.kind() == BlockKind.WORK);
 	}
 
+	@Test
+	void compose_placesCapturedRemainingEffortInsteadOfTheWholeTaskEstimate() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task task = createTask(7L, 200, 40, TaskStatus.OPEN);
+
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, List.of(task), defaultPreferences(), List.of());
+
+		assertThat(schedule.scheduledWorkMinutes()).isEqualTo(40);
+		assertThat(schedule.unplacedWork()).isEmpty();
+	}
+
+	@Test
+	void compose_whenRemainingEffortUnknown_leavesOneNoEstimateRowAndNoWorkBlock() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task task = createTask(7L, 30, null, TaskStatus.OPEN);
+
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, List.of(task), defaultPreferences(), List.of());
+
+		assertThat(schedule.blocks())
+				.noneMatch(block -> block.kind() == BlockKind.WORK && block.sourceTaskId() == 7L);
+		assertThat(schedule.unplacedWork())
+				.containsExactly(new UnplacedWork(7L, UnplacedReason.NO_ESTIMATE, null));
+	}
+
+	@Test
+	void compose_whenRemainingEffortExceedsTheWindow_conservesItAsScheduledPlusOutOfTime() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task task = createTask(7L, 1000, 600, TaskStatus.OPEN);
+
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, List.of(task), defaultPreferences(), List.of());
+
+		int outOfTime =
+				schedule.unplacedWork().stream()
+						.filter(unplaced -> unplaced.sourceTaskId() == 7L)
+						.mapToInt(UnplacedWork::unplacedMinutes)
+						.sum();
+		assertThat(schedule.scheduledWorkMinutes() + outOfTime).isEqualTo(600);
+	}
+
+	@Test
+	void compose_requiredMinutes_sumsKnownRemainingEffortOnMustIncludeCandidates() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task inProgress = createTask(7L, 90, 40, TaskStatus.IN_PROGRESS);
+		Task unknownRemainder = createTask(8L, 30, null, TaskStatus.IN_PROGRESS);
+		Task futureDue = createTask(9L, 25, 25, TaskStatus.OPEN);
+		futureDue.setDueDate(LocalDate.of(2026, 6, 5));
+
+		DailyPlanSchedule schedule =
+				scheduler.compose(
+						planDate,
+						List.of(inProgress, unknownRemainder, futureDue),
+						defaultPreferences(),
+						List.of());
+
+		assertThat(schedule.requiredMinutes()).isEqualTo(40L);
+	}
+
+	@Test
+	void compose_carriesTheSchedulingPolicyItUsed() {
+		LocalDate planDate = LocalDate.of(2026, 6, 1);
+		Task task = createTask(7L, 30, 30, TaskStatus.OPEN);
+		EffectiveSchedulingPreferences preferences =
+				new EffectiveSchedulingPreferences(
+						LocalTime.of(9, 0),
+						LocalTime.of(18, 0),
+						false,
+						45,
+						7,
+						20,
+						12,
+						null,
+						null,
+						List.of(
+								new EffectiveFixedBreak(
+										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, List.of(task), preferences, List.of());
+
+		assertThat(schedule.cadenceEnabled()).isFalse();
+		assertThat(schedule.targetFocusMinutes()).isEqualTo(45);
+		assertThat(schedule.breakMinutes()).isEqualTo(7);
+		assertThat(schedule.minSessionMinutes()).isEqualTo(20);
+		assertThat(schedule.bufferMinutes()).isEqualTo(12);
+		assertThat(schedule.fixedBreaks())
+				.containsExactly(
+						new FixedBreakWindow("Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0)));
+	}
+
 	private final DailyPlanScheduler scheduler = new DailyPlanScheduler();
 
 	private EffectiveSchedulingPreferences defaultPreferences() {
@@ -95,10 +190,16 @@ class DailyPlanSchedulerTest {
 	}
 
 	private Task createTask(long id, int estimatedMinutes, TaskStatus status) {
+		return createTask(id, estimatedMinutes, estimatedMinutes, status);
+	}
+
+	private Task createTask(
+			long id, Integer estimatedMinutes, Integer remainingEffortMinutes, TaskStatus status) {
 		Task task = new Task();
 		ReflectionTestUtils.setField(task, "id", id);
 		task.setTitle("Task " + id);
 		task.setEstimatedMinutes(estimatedMinutes);
+		task.setRemainingEffortMinutes(remainingEffortMinutes);
 		task.setStatus(status);
 		task.setPriority(TaskPriority.MEDIUM);
 		return task;

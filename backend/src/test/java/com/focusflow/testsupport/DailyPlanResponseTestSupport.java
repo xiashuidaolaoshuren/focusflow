@@ -30,7 +30,10 @@ public final class DailyPlanResponseTestSupport {
 				0,
 				warning,
 				List.of(),
-				List.of());
+				List.of(),
+				false,
+				0,
+				0);
 	}
 
 	public static DailyPlanResponse withBlocksAndUnplaced(
@@ -54,6 +57,9 @@ public final class DailyPlanResponseTestSupport {
 				0,
 				null,
 				blocks,
-				unplacedWork);
+				unplacedWork,
+				false,
+				0,
+				0);
 	}
 }

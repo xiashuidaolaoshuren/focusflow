@@ -20,4 +20,7 @@ public record DailyPlanResponse(
 		int realizedBufferMinutes,
 		DailyPlanWarning warning,
 		List<ScheduledBlockResponse> blocks,
-		List<UnplacedWorkResponse> unplacedWork) {}
+		List<UnplacedWorkResponse> unplacedWork,
+		boolean needsRefresh,
+		int knownActualMinutes,
+		int missingActualCount) {}

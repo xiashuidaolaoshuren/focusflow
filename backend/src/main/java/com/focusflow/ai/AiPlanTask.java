@@ -11,4 +11,17 @@ public record AiPlanTask(
 		TaskPriority priority,
 		LocalDate dueDate,
 		Integer estimatedMinutes,
-		TaskStatus status) {}
+		Integer remainingEffortMinutes,
+		TaskStatus status) {
+
+	public AiPlanTask(
+			long id,
+			String title,
+			String description,
+			TaskPriority priority,
+			LocalDate dueDate,
+			Integer estimatedMinutes,
+			TaskStatus status) {
+		this(id, title, description, priority, dueDate, estimatedMinutes, null, status);
+	}
+}

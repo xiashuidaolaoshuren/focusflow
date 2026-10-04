@@ -6,6 +6,7 @@ import com.focusflow.effort.WorkOutcome;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
 import com.focusflow.plan.dto.ScheduledBlockResponse;
+import com.focusflow.plan.dto.TaskSnapshotResponse;
 import com.focusflow.plan.dto.UnplacedWorkResponse;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.UnplacedReason;
@@ -295,6 +296,167 @@ class DailyPlanResponseMapperTest {
 		assertThat(response.displayState()).isEqualTo(BlockDisplayState.NO_LONGER_NEEDED);
 	}
 
+	@Test
+	void toResponse_reportsNeedsRefreshWhenCapturedRemainingEffortDisagrees() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						90,
+						false,
+						null,
+						null);
+		task.setCapturedRemainingEffortMinutes(40);
+		task.getTaskReference().setStatus(TaskStatus.OPEN);
+		task.getTaskReference().setRemainingEffortMinutes(15);
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.needsRefresh()).isTrue();
+	}
+
+	@Test
+	void toResponse_doesNotReportNeedsRefreshWhenCapturedRemainingEffortMatches() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						90,
+						false,
+						null,
+						null);
+		task.setCapturedRemainingEffortMinutes(40);
+		task.getTaskReference().setStatus(TaskStatus.OPEN);
+		task.getTaskReference().setRemainingEffortMinutes(40);
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.needsRefresh()).isFalse();
+	}
+
+	@Test
+	void toResponse_countsKnownActualMinutesAndMissingActualsSeparately() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.IN_PROGRESS,
+						null,
+						90,
+						false,
+						null,
+						null);
+		task.getTaskReference().setStatus(TaskStatus.IN_PROGRESS);
+		task.getTaskReference().setRemainingEffortMinutes(40);
+
+		DailyPlanBlock partlyDone =
+				planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+		partlyDone.setOutcome("PARTLY_DONE");
+		partlyDone.setActualMinutes(35);
+		DailyPlanBlock reconciled =
+				planBlock(revision, task, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 50), null, 2);
+		reconciled.setReconciled(true);
+		reconciled.setActualMinutes(0);
+		DailyPlanBlock doneWithOmittedActuals =
+				planBlock(revision, task, BlockKind.WORK, LocalTime.of(11, 0), LocalTime.of(11, 50), null, 3);
+		doneWithOmittedActuals.setOutcome("DONE");
+		DailyPlanBlock skipped =
+				planBlock(revision, task, BlockKind.WORK, LocalTime.of(12, 0), LocalTime.of(12, 50), null, 4);
+		skipped.setOutcome("SKIPPED");
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.knownActualMinutes()).isEqualTo(35);
+		assertThat(response.missingActualCount()).isEqualTo(1);
+	}
+
+	@Test
+	void toResponse_ignoresEarlierRevisionBlocksWhenCountingActuals() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision first = plan.getLatestRevision();
+		DailyPlanTask firstTask =
+				planTask(
+						first,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						90,
+						false,
+						null,
+						null);
+		firstTask.getTaskReference().setStatus(TaskStatus.OPEN);
+		DailyPlanBlock superseded =
+				planBlock(first, firstTask, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+		superseded.setActualMinutes(35);
+		superseded.setOutcome("DONE");
+
+		DailyPlanRevision second = new DailyPlanRevision();
+		second.setRevisionNumber(2);
+		second.setCutoffTime(LocalTime.of(9, 30));
+		second.setCreatedAt(Instant.parse("2026-06-01T10:00:00Z"));
+		plan.addRevision(second);
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		assertThat(response.knownActualMinutes()).isZero();
+		assertThat(response.missingActualCount()).isZero();
+	}
+
+	@Test
+	void toResponse_exposesCapturedRemainingEffortOnTheTaskSnapshot() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+		DailyPlanTask task =
+				planTask(
+						revision,
+						1,
+						10L,
+						10L,
+						"Deep work",
+						TaskPriority.HIGH,
+						TaskStatus.OPEN,
+						null,
+						90,
+						true,
+						null,
+						null);
+		task.setCapturedRemainingEffortMinutes(40);
+		task.getTaskReference().setStatus(TaskStatus.OPEN);
+		task.getTaskReference().setRemainingEffortMinutes(40);
+		planBlock(revision, task, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 50), null, 1);
+
+		TaskSnapshotResponse snapshot = mapper.toResponse(plan).blocks().get(0).taskSnapshot();
+
+		assertThat(snapshot.estimatedMinutes()).isEqualTo(90);
+		assertThat(snapshot.capturedRemainingEffortMinutes()).isEqualTo(40);
+	}
+
 	private static DailyPlan scheduledPlan() {
 		DailyPlan plan = new DailyPlan();
 		ReflectionTestUtils.setField(plan, "id", 1L);
@@ -348,7 +510,7 @@ class DailyPlanResponseMapperTest {
 		return task;
 	}
 
-	private static void planBlock(
+	private static DailyPlanBlock planBlock(
 			DailyPlanRevision revision,
 			DailyPlanTask task,
 			BlockKind kind,
@@ -364,5 +526,6 @@ class DailyPlanResponseMapperTest {
 		block.setPosition(position);
 		block.setDailyPlanTask(task);
 		revision.addBlock(block);
+		return block;
 	}
 }
