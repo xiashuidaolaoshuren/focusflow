@@ -1064,4 +1064,78 @@ class PostgresIntegrationTest {
 									});
 				});
 	}
+
+	@Test
+	void wallClockTimes_areStoredAsEnteredAndInstantsStayUtc() {
+		String suffix = UUID.randomUUID().toString().substring(0, 8);
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(suffix)
+								.withAccountPrefix("wall-clock-owner")
+								.withPasswordHash(
+										"$2a$10$1111111111111111111111111111111111111111111111111111111"));
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Wall clock")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+		Instant createdAt = Instant.parse("2026-10-05T03:00:00Z");
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 5))
+								.withCreatedAt(createdAt)
+								.withWindow(LocalTime.of(9, 0), LocalTime.of(18, 0))
+								.withMetrics(480, 60, 60L, 0, 0)
+								.addTask(task, 1, false, null, null)
+								.addBlock(
+										0,
+										BlockKind.WORK,
+										LocalTime.of(11, 0),
+										LocalTime.of(12, 0),
+										null,
+										1));
+
+		assertThat(storedTime("window_start", "daily_plans", plan.getId())).isEqualTo("09:00:00");
+		assertThat(storedBlockStart(plan.getId())).isEqualTo("11:00:00");
+		assertThat(storedEpochSeconds("created_at", "daily_plans", plan.getId()))
+				.isEqualTo(createdAt.getEpochSecond());
+
+		DailyPlan reloaded =
+				dailyPlanRepository.findByOwner_IdAndId(owner.getId(), plan.getId()).orElseThrow();
+		assertThat(reloaded.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
+		assertThat(reloaded.getCreatedAt()).isEqualTo(createdAt);
+		assertThat(reloaded.getLatestRevision().getBlocks())
+				.singleElement()
+				.satisfies(block -> assertThat(block.getStartTime()).isEqualTo(LocalTime.of(11, 0)));
+	}
+
+	private String storedTime(String column, String table, Long id) {
+		return jdbcTemplate.queryForObject(
+				"SELECT " + column + "::text FROM " + table + " WHERE id = ?", String.class, id);
+	}
+
+	private String storedBlockStart(Long planId) {
+		return jdbcTemplate.queryForObject(
+				"""
+				SELECT b.start_time::text
+				FROM daily_plan_blocks b
+				JOIN daily_plan_revisions r ON r.id = b.revision_id
+				WHERE r.daily_plan_id = ?
+				""",
+				String.class,
+				planId);
+	}
+
+	private long storedEpochSeconds(String column, String table, Long id) {
+		return jdbcTemplate.queryForObject(
+				"SELECT EXTRACT(EPOCH FROM " + column + ") FROM " + table + " WHERE id = ?",
+				Long.class,
+				id);
+	}
 }

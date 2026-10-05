@@ -16,6 +16,10 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+        # LocalTime and LocalDate are wall-clock values (ADR 0009). The JDBC time
+        # zone above is for instants; without direct binding it also shifts TIME columns.
+        type:
+          java_time_use_direct_jdbc: true
 
 focusflow:
   openai:
