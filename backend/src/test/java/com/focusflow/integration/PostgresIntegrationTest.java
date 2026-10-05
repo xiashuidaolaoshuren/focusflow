@@ -16,6 +16,7 @@ import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
 import com.focusflow.plan.DailyPlanSummaryProjection;
 import com.focusflow.plan.dto.DailyPlanResponse;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
@@ -885,50 +886,64 @@ class PostgresIntegrationTest {
 								.addTask(tracked, 1, false, null, null)
 								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1)
 								.addBlock(0, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 0), null, 2));
-		plan.setCadenceEnabled(true);
-		plan.getLatestRevision().getTasks().iterator().next().setCapturedRemainingEffortMinutes(40);
-		DailyPlanBlock firstBlock =
-				plan.getLatestRevision().getBlocks().stream()
-						.filter(block -> block.getPosition() == 1)
-						.findFirst()
-						.orElseThrow();
-		firstBlock.setOutcome("DONE");
-		firstBlock.setActualMinutes(50);
-		dailyPlanRepository.save(plan);
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan managed = dailyPlanRepository.findById(plan.getId()).orElseThrow();
+					managed.setCadenceEnabled(true);
+					managed.getLatestRevision()
+							.getTasks()
+							.iterator()
+							.next()
+							.setCapturedRemainingEffortMinutes(40);
+					DailyPlanBlock firstBlock =
+							managed.getLatestRevision().getBlocks().stream()
+									.filter(block -> block.getPosition() == 1)
+									.findFirst()
+									.orElseThrow();
+					firstBlock.setOutcome("DONE");
+					firstBlock.setActualMinutes(50);
 
-		DailyPlanRevision secondRevision = new DailyPlanRevision();
-		secondRevision.setRevisionNumber(2);
-		secondRevision.setCutoffTime(LocalTime.of(11, 0));
-		secondRevision.setFreeMinutes(300);
-		secondRevision.setScheduledWorkMinutes(60);
-		secondRevision.setRequiredMinutes(60L);
-		secondRevision.setRequestedBufferMinutes(0);
-		secondRevision.setRealizedBufferMinutes(0);
-		secondRevision.setCreatedAt(Instant.parse("2026-10-04T11:00:00Z"));
-		plan.addRevision(secondRevision);
+					DailyPlanRevision secondRevision = new DailyPlanRevision();
+					secondRevision.setRevisionNumber(2);
+					secondRevision.setCutoffTime(LocalTime.of(11, 0));
+					secondRevision.setFreeMinutes(300);
+					secondRevision.setScheduledWorkMinutes(60);
+					secondRevision.setRequiredMinutes(60L);
+					secondRevision.setRequestedBufferMinutes(0);
+					secondRevision.setRealizedBufferMinutes(0);
+					secondRevision.setCreatedAt(Instant.parse("2026-10-04T11:00:00Z"));
+					managed.addRevision(secondRevision);
 
-		DailyPlanTask forwardTask = new DailyPlanTask();
-		forwardTask.setRank(1);
-		forwardTask.setSourceTaskId(forward.getId());
-		forwardTask.setTaskReference(forward);
-		forwardTask.setTaskTitle(forward.getTitle());
-		forwardTask.setTaskPriority(forward.getPriority());
-		forwardTask.setTaskStatus(forward.getStatus());
-		forwardTask.setTaskEstimatedMinutes(forward.getEstimatedMinutes());
-		forwardTask.setCapturedRemainingEffortMinutes(60);
-		forwardTask.setMustInclude(false);
-		secondRevision.addTask(forwardTask);
+					DailyPlanTask forwardTask = new DailyPlanTask();
+					forwardTask.setRank(1);
+					forwardTask.setSourceTaskId(forward.getId());
+					forwardTask.setTaskReference(forward);
+					forwardTask.setTaskTitle(forward.getTitle());
+					forwardTask.setTaskPriority(forward.getPriority());
+					forwardTask.setTaskStatus(forward.getStatus());
+					forwardTask.setTaskEstimatedMinutes(forward.getEstimatedMinutes());
+					forwardTask.setCapturedRemainingEffortMinutes(60);
+					forwardTask.setMustInclude(false);
+					secondRevision.addTask(forwardTask);
 
-		DailyPlanBlock forwardBlock = new DailyPlanBlock();
-		forwardBlock.setKind(BlockKind.WORK);
-		forwardBlock.setStartTime(LocalTime.of(11, 0));
-		forwardBlock.setEndTime(LocalTime.of(12, 0));
-		forwardBlock.setPosition(1);
-		forwardBlock.setDailyPlanTask(forwardTask);
-		secondRevision.addBlock(forwardBlock);
+					dailyPlanRepository.saveAndFlush(managed);
+				});
 
-		dailyPlanRepository.save(plan);
-		dailyPlanRepository.flush();
+		// The appended blocks reference the new revision's task snapshots, so attach them
+		// once those snapshots exist, the same order the re-plan writer uses.
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan persisted = dailyPlanRepository.findById(plan.getId()).orElseThrow();
+					DailyPlanRevision appended = persisted.getLatestRevision();
+					DailyPlanBlock forwardBlock = new DailyPlanBlock();
+					forwardBlock.setKind(BlockKind.WORK);
+					forwardBlock.setStartTime(LocalTime.of(11, 0));
+					forwardBlock.setEndTime(LocalTime.of(12, 0));
+					forwardBlock.setPosition(1);
+					forwardBlock.setDailyPlanTask(appended.getTasks().iterator().next());
+					appended.addBlock(forwardBlock);
+					dailyPlanRepository.saveAndFlush(persisted);
+				});
 
 		assertThat(
 						dailyPlanRepository
@@ -953,5 +968,100 @@ class PostgresIntegrationTest {
 								.getContent())
 				.singleElement()
 				.satisfies(summary -> assertThat(summary.getNeedsRefresh()).isTrue());
+	}
+
+	@Test
+	@WithMockUser(username = "replan-append-owner")
+	void appendRevision_persistsNewWorkBlocksLinkedToTheirRevisionTasks() {
+		User owner =
+				userRepository
+						.findByUsername("replan-append-owner")
+						.orElseGet(
+								() ->
+										userRepository.save(
+												UserTestBuilder.user()
+														.withUsername("replan-append-owner")
+														.withEmail("replan-append-owner@example.com")
+														.withPasswordHash(
+																"$2a$10$9999999999999999999999999999999999999999999999999999999")
+														.build()));
+
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Replan work")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+
+		LocalDate planDate = LocalDate.of(2026, 10, 5);
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, planDate)
+								.withCreatedAt(Instant.parse("2026-10-05T08:00:00Z"))
+								.withMetrics(480, 60, 60L, 0, 0)
+								.addTask(task, 1, false, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1));
+
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(9, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						420,
+						60,
+						60L,
+						0,
+						0,
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(11, 0),
+										LocalTime.of(12, 0),
+										task.getId(),
+										null)),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
+						List.of());
+
+		DailyPlanResponse response =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanPersister.appendRevision(
+										plan.getId(),
+										plan.getLatestRevision().getId(),
+										List.of(new TaskEffortVersion(task.getId(), task.getEffortVersion())),
+										LocalTime.of(11, 0),
+										List.of(new AiPlanItem(task.getId(), 1)),
+										List.of(task),
+										schedule));
+
+		assertThat(response.id()).isEqualTo(plan.getId());
+		assertThat(response.revisions()).hasSize(2);
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlanRevision latest =
+							dailyPlanRepository
+									.findByOwner_IdAndId(owner.getId(), plan.getId())
+									.orElseThrow()
+									.getLatestRevision();
+					assertThat(latest.getRevisionNumber()).isEqualTo(2);
+					assertThat(latest.getBlocks())
+							.singleElement()
+							.satisfies(
+									block -> {
+										assertThat(block.getKind()).isEqualTo(BlockKind.WORK);
+										assertThat(block.getDailyPlanTask()).isNotNull();
+										assertThat(block.getDailyPlanTask().getSourceTaskId())
+												.isEqualTo(task.getId());
+									});
+				});
 	}
 }

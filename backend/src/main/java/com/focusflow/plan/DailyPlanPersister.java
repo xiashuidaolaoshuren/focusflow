@@ -228,12 +228,43 @@ public class DailyPlanPersister {
 			capturedById.put(captured.getId() != null ? captured.getId() : 0L, captured);
 		}
 
-		appendRevisionFromSchedule(
-				plan, effectiveCutoff, aiItems, capturedById, taskById, schedule);
-		return responseMapper.toResponse(dailyPlanRepository.saveAndFlush(plan));
+		DailyPlanRevision revision =
+				buildAppendedRevision(
+						plan, effectiveCutoff, aiItems, capturedById, taskById, schedule);
+		plan.addRevision(revision);
+		dailyPlanRepository.saveAndFlush(plan);
+
+		// Persist the revision and its task snapshots first, then read them back so the
+		// blocks reference rows that already exist. The kind-shape constraint rejects a
+		// WORK block whose task is null, and Hibernate does not order a nullable
+		// association's insert ahead of its target.
+		DailyPlan persisted =
+				dailyPlanRepository.findByOwner_IdAndId(ownerId, planId).orElseThrow();
+		DailyPlanRevision appended = persisted.getLatestRevision();
+		Map<Long, DailyPlanTask> planTaskBySourceId =
+				appended.getTasks().stream()
+						.collect(
+								Collectors.toMap(
+										DailyPlanTask::getSourceTaskId,
+										Function.identity(),
+										(first, second) -> first));
+		int position = 1;
+		for (ScheduledBlock block : schedule.blocks()) {
+			DailyPlanBlock planBlock = new DailyPlanBlock();
+			planBlock.setKind(block.kind());
+			planBlock.setStartTime(block.start());
+			planBlock.setEndTime(block.end());
+			planBlock.setLabel(block.label());
+			planBlock.setPosition(position++);
+			if (block.kind() == BlockKind.WORK && block.sourceTaskId() != null) {
+				planBlock.setDailyPlanTask(planTaskBySourceId.get(block.sourceTaskId()));
+			}
+			appended.addBlock(planBlock);
+		}
+		return responseMapper.toResponse(dailyPlanRepository.saveAndFlush(persisted));
 	}
 
-	private void appendRevisionFromSchedule(
+	private DailyPlanRevision buildAppendedRevision(
 			DailyPlan plan,
 			LocalTime effectiveCutoff,
 			List<AiPlanItem> aiItems,
@@ -283,26 +314,6 @@ public class DailyPlanPersister {
 			revision.addTask(planTask);
 		}
 
-		plan.addRevision(revision);
-		Map<Long, DailyPlanTask> planTaskBySourceId =
-				revision.getTasks().stream()
-						.collect(
-								Collectors.toMap(
-										DailyPlanTask::getSourceTaskId,
-										Function.identity(),
-										(first, second) -> first));
-		int position = 1;
-		for (ScheduledBlock block : schedule.blocks()) {
-			DailyPlanBlock planBlock = new DailyPlanBlock();
-			planBlock.setKind(block.kind());
-			planBlock.setStartTime(block.start());
-			planBlock.setEndTime(block.end());
-			planBlock.setLabel(block.label());
-			planBlock.setPosition(position++);
-			if (block.kind() == BlockKind.WORK && block.sourceTaskId() != null) {
-				planBlock.setDailyPlanTask(planTaskBySourceId.get(block.sourceTaskId()));
-			}
-			revision.addBlock(planBlock);
-		}
+		return revision;
 	}
 }
