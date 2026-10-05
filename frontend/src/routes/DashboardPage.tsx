@@ -141,7 +141,7 @@ export function DashboardPage() {
           </Alert>
         ) : null}
 
-        <GeneratePlanCard planDate={planningDate} />
+        <GeneratePlanCard planDate={planningDate} plan={plan} />
         <CommitmentList planDate={planningDate} />
         <DailyPlanView
           plan={plan}

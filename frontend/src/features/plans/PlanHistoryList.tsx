@@ -126,6 +126,12 @@ export function PlanHistoryList({
                 {plan.hasWarning ? (
                   <Badge variant="secondary">Shortfall</Badge>
                 ) : null}
+                {plan.hasProgress ? (
+                  <Badge variant="secondary">Progress</Badge>
+                ) : null}
+                {plan.needsRefresh ? (
+                  <Badge variant="secondary">Needs refresh</Badge>
+                ) : null}
                 {formatSummaryCounts(plan)}
               </span>
             </Link>

@@ -1,6 +1,7 @@
 import type {
   DailyPlanResponse,
   DailyPlanSummaryResponse,
+  PlanRevisionResponse,
   TaskSnapshotResponse,
   WorkBlockResponse,
 } from '@/types/api'
@@ -13,6 +14,7 @@ export const sampleTaskSnapshot: TaskSnapshotResponse = {
   status: 'OPEN',
   dueDate: '2026-06-15',
   estimatedMinutes: 45,
+  capturedRemainingEffortMinutes: 45,
   mustInclude: true,
 }
 
@@ -24,6 +26,26 @@ export const sampleWorkBlock: WorkBlockResponse = {
   sessionCount: 1,
   taskSnapshot: sampleTaskSnapshot,
   label: null,
+  id: 100,
+  revisionId: 1,
+  outcome: null,
+  actualMinutes: null,
+  reconciled: false,
+  progressVersion: 0,
+  displayState: 'ACTIONABLE',
+}
+
+export const sampleRevision: PlanRevisionResponse = {
+  id: 1,
+  revisionNumber: 1,
+  cutoff: null,
+  freeMinutes: 480,
+  scheduledWorkMinutes: 45,
+  requiredMinutes: 45,
+  requestedBufferMinutes: 15,
+  realizedBufferMinutes: 15,
+  blocks: [sampleWorkBlock],
+  unplacedWork: [],
 }
 
 export const samplePlan: DailyPlanResponse = {
@@ -42,6 +64,54 @@ export const samplePlan: DailyPlanResponse = {
   warning: null,
   blocks: [sampleWorkBlock],
   unplacedWork: [],
+  needsRefresh: false,
+  knownActualMinutes: 0,
+  missingActualCount: 0,
+  revisions: [sampleRevision],
+  composedRail: [sampleWorkBlock],
+  offRailEarlyCompletions: [],
+  unplannedWork: [],
+}
+
+export const progressPlan: DailyPlanResponse = {
+  ...samplePlan,
+  id: 5,
+  planDate: '2026-06-17',
+  createdAt: '2026-06-17T09:00:00Z',
+  needsRefresh: true,
+  knownActualMinutes: 35,
+  missingActualCount: 1,
+  blocks: [{ ...sampleWorkBlock, outcome: 'DONE', actualMinutes: 35, progressVersion: 1 }],
+  revisions: [
+    {
+      ...sampleRevision,
+      blocks: [{ ...sampleWorkBlock, outcome: 'DONE', actualMinutes: 35, progressVersion: 1 }],
+    },
+  ],
+  composedRail: [
+    { ...sampleWorkBlock, outcome: 'DONE', actualMinutes: 35, progressVersion: 1 },
+  ],
+  offRailEarlyCompletions: [
+    {
+      ...sampleWorkBlock,
+      startTime: '15:00:00',
+      endTime: '15:30:00',
+      outcome: 'DONE',
+      actualMinutes: null,
+      progressVersion: 1,
+      displayState: 'HISTORICAL',
+    },
+  ],
+  unplannedWork: [
+    {
+      id: 900,
+      sourceTaskId: 10,
+      taskReferenceId: 10,
+      workDate: '2026-06-17',
+      actualMinutes: 20,
+      recordedAt: '2026-06-17T11:00:00Z',
+    },
+  ],
 }
 
 export const warningPlan: DailyPlanResponse = {
@@ -115,4 +185,6 @@ export const samplePlanSummary: DailyPlanSummaryResponse = {
   scheduledTaskCount: 2,
   unplacedWorkCount: 1,
   hasWarning: true,
+  hasProgress: false,
+  needsRefresh: false,
 }

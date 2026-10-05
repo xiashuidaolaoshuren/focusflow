@@ -1,14 +1,28 @@
 import { apiRequest } from '@/lib/api'
 import { parseScheduledBlock } from '@/features/plans/blocks'
 import type {
+  BlockProgressRequest,
+  BlockProgressResponse,
   DailyPlanResponse,
   DailyPlanSummaryResponse,
   GeneratePlanRequest,
   PageResponse,
+  ReplanRequest,
+  UnplannedWorkRequest,
+  UnplannedWorkResponse,
 } from '@/types/api'
 
 function parsePlan(plan: DailyPlanResponse): DailyPlanResponse {
-  return { ...plan, blocks: plan.blocks.map(parseScheduledBlock) }
+  return {
+    ...plan,
+    blocks: plan.blocks.map(parseScheduledBlock),
+    composedRail: plan.composedRail.map(parseScheduledBlock),
+    offRailEarlyCompletions: plan.offRailEarlyCompletions.map(parseScheduledBlock),
+    revisions: plan.revisions.map((revision) => ({
+      ...revision,
+      blocks: revision.blocks.map(parseScheduledBlock),
+    })),
+  }
 }
 
 export async function listPlans(
@@ -46,6 +60,53 @@ export async function generateDailyPlan(
       body: request,
     }),
   )
+}
+
+export async function recordBlockProgress(
+  planId: number,
+  blockId: number,
+  request: BlockProgressRequest,
+): Promise<BlockProgressResponse> {
+  const response = await apiRequest<BlockProgressResponse>(
+    `/api/daily-plans/${planId}/blocks/${blockId}/progress`,
+    {
+      method: 'PUT',
+      body: request,
+    },
+  )
+  return { ...response, plan: parsePlan(response.plan) }
+}
+
+export async function replanDailyPlan(
+  id: number,
+  request: ReplanRequest,
+): Promise<DailyPlanResponse> {
+  return parsePlan(
+    await apiRequest<DailyPlanResponse>(`/api/daily-plans/${id}/replan`, {
+      method: 'POST',
+      body: request,
+    }),
+  )
+}
+
+export async function createUnplannedWork(
+  request: UnplannedWorkRequest,
+): Promise<UnplannedWorkResponse> {
+  return apiRequest<UnplannedWorkResponse>('/api/unplanned-work', {
+    method: 'POST',
+    body: request,
+  })
+}
+
+export async function deleteUnplannedWork(
+  id: number,
+  effortVersion: number | null,
+): Promise<void> {
+  const query =
+    effortVersion != null ? `?effortVersion=${effortVersion}` : ''
+  return apiRequest<void>(`/api/unplanned-work/${id}${query}`, {
+    method: 'DELETE',
+  })
 }
 
 export async function deletePlan(id: number): Promise<void> {

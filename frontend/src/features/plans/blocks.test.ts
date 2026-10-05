@@ -12,6 +12,13 @@ const workBlock: ScheduledBlockResponse = {
   sessionCount: 1,
   taskSnapshot: sampleTaskSnapshot,
   label: null,
+  id: 1,
+  revisionId: 1,
+  outcome: null,
+  actualMinutes: null,
+  reconciled: false,
+  progressVersion: 0,
+  displayState: 'ACTIONABLE',
 }
 
 const labelledBlock: ScheduledBlockResponse = {
@@ -22,6 +29,13 @@ const labelledBlock: ScheduledBlockResponse = {
   sessionCount: null,
   taskSnapshot: null,
   label: 'Buffer',
+  id: 2,
+  revisionId: 1,
+  outcome: null,
+  actualMinutes: null,
+  reconciled: false,
+  progressVersion: 0,
+  displayState: 'ACTIONABLE',
 }
 
 describe('parseScheduledBlock', () => {

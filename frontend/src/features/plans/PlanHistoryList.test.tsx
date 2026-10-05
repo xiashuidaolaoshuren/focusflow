@@ -27,6 +27,8 @@ const samplePlans: DailyPlanSummaryResponse[] = [
     scheduledTaskCount: 0,
     unplacedWorkCount: 0,
     hasWarning: false,
+    hasProgress: false,
+    needsRefresh: false,
   },
 ]
 
@@ -79,6 +81,21 @@ describe('PlanHistoryList', () => {
     expect(links[0]).toHaveTextContent('2 tasks')
     expect(links[0]).toHaveTextContent('1 unplaced')
     expect(links[0]).not.toHaveTextContent(/block/i)
+  })
+
+  it('marks plans with recorded progress and plans that need a refresh', () => {
+    renderPlanHistoryList({
+      plans: [
+        { ...samplePlanSummary, hasProgress: true, needsRefresh: true },
+        { ...samplePlanSummary, id: 3, hasProgress: false, needsRefresh: false },
+      ],
+    })
+
+    const links = screen.getAllByRole('link')
+    expect(links[0]).toHaveTextContent(/progress/i)
+    expect(links[0]).toHaveTextContent(/needs refresh/i)
+    expect(links[1]).not.toHaveTextContent(/progress/i)
+    expect(links[1]).not.toHaveTextContent(/needs refresh/i)
   })
 
   it('shows a Shortfall indicator only for plans with hasWarning', () => {

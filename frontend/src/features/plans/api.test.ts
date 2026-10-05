@@ -9,10 +9,13 @@ import type {
 import { ApiError } from '@/lib/api'
 import {
   deletePlan,
+  deleteUnplannedWork,
   generateDailyPlan,
   getPlanByDate,
   getPlanById,
   listPlans,
+  recordBlockProgress,
+  replanDailyPlan,
 } from '@/features/plans/api'
 import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
 
@@ -182,9 +185,146 @@ describe('listPlans', () => {
   })
 })
 
+describe('replanDailyPlan', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('POSTs the re-plan request to the plan replan route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(samplePlan), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      replanDailyPlan(1, {
+        currentDate: '2026-06-15',
+        cutoff: '09:45:00',
+        expectedRevisionId: 1,
+        effortVersions: [{ taskId: 10, effortVersion: 2 }],
+      }),
+    ).resolves.toMatchObject({ id: samplePlan.id })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/daily-plans/1/replan'),
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({
+          currentDate: '2026-06-15',
+          cutoff: '09:45:00',
+          expectedRevisionId: 1,
+          effortVersions: [{ taskId: 10, effortVersion: 2 }],
+        }),
+      }),
+    )
+  })
+})
+
+describe('deleteUnplannedWork', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('deletes the entry and passes the expected effort version', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(deleteUnplannedWork(900, 2)).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/unplanned-work/900'),
+      expect.objectContaining({
+        method: 'DELETE',
+        credentials: 'include',
+      }),
+    )
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('effortVersion=2')
+  })
+})
+
+describe('recordBlockProgress', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('PUTs the progress request and parses the returned plan', async () => {
+    const response = { task: { id: 10 }, plan: samplePlan }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      recordBlockProgress(1, 100, {
+        outcome: 'DONE',
+        actualMinutes: 35,
+        currentDate: '2026-06-15',
+        expectedProgressVersion: 0,
+        finish: false,
+        checkpoint: null,
+      }),
+    ).resolves.toMatchObject({ plan: { id: samplePlan.id } })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/daily-plans/1/blocks/100/progress'),
+      expect.objectContaining({
+        method: 'PUT',
+        credentials: 'include',
+        body: JSON.stringify({
+          outcome: 'DONE',
+          actualMinutes: 35,
+          currentDate: '2026-06-15',
+          expectedProgressVersion: 0,
+          finish: false,
+          checkpoint: null,
+        }),
+      }),
+    )
+  })
+})
+
 describe('getPlanById', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('validates the composed rail, off-rail completions, and revision blocks', async () => {
+    const plan = {
+      ...samplePlan,
+      composedRail: [
+        {
+          kind: 'BUFFER',
+          startTime: '17:45:00',
+          endTime: '18:00:00',
+          sessionIndex: null,
+          sessionCount: null,
+          taskSnapshot: null,
+          label: null,
+        },
+      ],
+    } as unknown as DailyPlanResponse
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(plan), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await expect(getPlanById(42)).rejects.toThrow(/non-work block/i)
   })
 
   it('returns a plan from GET /api/daily-plans/{id}', async () => {

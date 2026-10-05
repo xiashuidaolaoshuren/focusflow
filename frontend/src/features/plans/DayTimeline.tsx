@@ -1,10 +1,48 @@
-import type { DailyPlanResponse, ScheduledBlockResponse } from '@/types/api'
+import type {
+  DailyPlanResponse,
+  ScheduledBlockResponse,
+  WorkBlockResponse,
+  WorkOutcome,
+} from '@/types/api'
 
 type DayTimelineProps = {
   plan: Pick<
     DailyPlanResponse,
     'windowStart' | 'windowEnd' | 'peakStart' | 'peakEnd' | 'blocks'
   >
+  onBlockClick?: (block: WorkBlockResponse) => void
+}
+
+function isRecordable(block: ScheduledBlockResponse): block is WorkBlockResponse {
+  return (
+    block.kind === 'WORK' &&
+    (block.displayState === 'ACTIONABLE' || block.displayState === 'HISTORICAL')
+  )
+}
+
+const OUTCOME_LABELS: Record<WorkOutcome, string> = {
+  DONE: 'Done',
+  PARTLY_DONE: 'Partly done',
+  SKIPPED: 'Skipped',
+}
+
+function buildOutcomeAnnotation(block: ScheduledBlockResponse): string | null {
+  if (block.displayState === 'NO_LONGER_NEEDED') {
+    return 'No longer needed'
+  }
+
+  const parts: string[] = []
+  if (block.outcome != null) {
+    parts.push(OUTCOME_LABELS[block.outcome])
+  }
+  if (block.reconciled) {
+    parts.push('reconciled')
+  }
+  if (block.actualMinutes != null) {
+    parts.push(`${block.actualMinutes} min actual`)
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 const KIND_LABELS: Record<ScheduledBlockResponse['kind'], string> = {
@@ -39,16 +77,18 @@ function formatTimeRange(startTime: string, endTime: string): string {
 function buildBlockLabel(block: ScheduledBlockResponse): string {
   const timeRange = formatTimeRange(block.startTime, block.endTime)
   const kindLabel = KIND_LABELS[block.kind]
+  const annotation = buildOutcomeAnnotation(block)
+  const annotationSuffix = annotation != null ? ` · ${annotation}` : ''
 
   if (block.kind === 'WORK' && block.taskSnapshot != null) {
     const sessionLabel =
       block.sessionIndex != null && block.sessionCount != null
         ? `, session ${block.sessionIndex} of ${block.sessionCount}`
         : ''
-    return `${kindLabel}: ${block.taskSnapshot.title}${sessionLabel}, ${timeRange}`
+    return `${kindLabel}: ${block.taskSnapshot.title}${sessionLabel}, ${timeRange}${annotationSuffix}`
   }
 
-  return `${kindLabel}: ${block.label ?? kindLabel}, ${timeRange}`
+  return `${kindLabel}: ${block.label ?? kindLabel}, ${timeRange}${annotationSuffix}`
 }
 
 function listHourLabels(windowStart: string, windowEnd: string): string[] {
@@ -63,7 +103,7 @@ function listHourLabels(windowStart: string, windowEnd: string): string[] {
   return labels
 }
 
-export function DayTimeline({ plan }: DayTimelineProps) {
+export function DayTimeline({ plan, onBlockClick }: DayTimelineProps) {
   const windowStartMinutes = timeToMinutes(plan.windowStart)
   const windowEndMinutes = timeToMinutes(plan.windowEnd)
   const windowDurationMinutes = Math.max(windowEndMinutes - windowStartMinutes, 1)
@@ -109,25 +149,44 @@ export function DayTimeline({ plan }: DayTimelineProps) {
           />
         ) : null}
 
-        {plan.blocks.map((block, index) => (
-          <div
-            key={`${block.kind}-${block.startTime}-${index}`}
-            role="button"
-            tabIndex={0}
-            data-kind={block.kind}
-            aria-label={buildBlockLabel(block)}
-            title={buildBlockLabel(block)}
-            className={`absolute inset-x-1 z-10 overflow-hidden rounded-sm border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring ${KIND_STYLES[block.kind]}`}
-            style={{
-              top: percentFromWindowStart(timeToMinutes(block.startTime) - windowStartMinutes),
-              height: percentFromWindowStart(
-                Math.max(timeToMinutes(block.endTime) - timeToMinutes(block.startTime), 0),
-              ),
-            }}
-          >
-            <span className="sr-only">{buildBlockLabel(block)}</span>
-          </div>
-        ))}
+        {plan.blocks.map((block, index) => {
+          const annotation = buildOutcomeAnnotation(block)
+          const interactive = onBlockClick != null && isRecordable(block)
+          return (
+            <div
+              key={`${block.kind}-${block.startTime}-${index}`}
+              {...(interactive
+                ? {
+                    role: 'button',
+                    tabIndex: 0,
+                    onClick: () => onBlockClick(block),
+                    onKeyDown: (event: React.KeyboardEvent) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        onBlockClick(block)
+                      }
+                    },
+                  }
+                : {})}
+              data-kind={block.kind}
+              aria-label={buildBlockLabel(block)}
+              title={buildBlockLabel(block)}
+              className={`absolute inset-x-1 z-10 overflow-hidden rounded-sm border px-2 py-1 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring ${KIND_STYLES[block.kind]}`}
+              style={{
+                top: percentFromWindowStart(timeToMinutes(block.startTime) - windowStartMinutes),
+                height: percentFromWindowStart(
+                  Math.max(timeToMinutes(block.endTime) - timeToMinutes(block.startTime), 0),
+                ),
+              }}
+            >
+              {annotation != null ? (
+                <span className="block truncate text-[10px] leading-tight">
+                  {annotation}
+                </span>
+              ) : null}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
