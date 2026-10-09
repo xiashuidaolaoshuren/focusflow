@@ -70,6 +70,9 @@ public class BlockProgressService {
 		}
 		requireMatchingProgressVersion(block, request.expectedProgressVersion());
 		boolean correction = block.getOutcome() != null;
+		if (!correction) {
+			block.setRecordedAt(Instant.now());
+		}
 
 		if (request.finish()) {
 			applyRemainingEffort(task, plan.getPlanDate(), 0, true);
@@ -96,9 +99,6 @@ public class BlockProgressService {
 
 		block.setOutcome(request.outcome().name());
 		block.setActualMinutes(request.actualMinutes());
-		if (!correction) {
-			block.setRecordedAt(Instant.now());
-		}
 		block.setProgressVersion(block.getProgressVersion() + 1);
 
 		return new BlockProgressResponse(

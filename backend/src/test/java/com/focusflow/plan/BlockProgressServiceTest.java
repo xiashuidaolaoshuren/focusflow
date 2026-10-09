@@ -3,8 +3,10 @@ package com.focusflow.plan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -545,6 +547,32 @@ class BlockProgressServiceTest {
 	}
 
 	@Test
+	void record_sameSaveFinishCheckpoint_shieldsLaterCorrection() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		stubCheckpointRecordedAtFromBlockRecordedAt();
+		service.record(
+				PLAN_ID,
+				BLOCK_ID,
+				new BlockProgressRequest(WorkOutcome.DONE, null, PLAN_DATE, 0, true, null));
+
+		BlockProgressResponse response =
+				service.record(
+						PLAN_ID,
+						BLOCK_ID,
+						new BlockProgressRequest(
+								WorkOutcome.SKIPPED,
+								null,
+								PLAN_DATE,
+								block.getProgressVersion(),
+								false,
+								null));
+
+		assertThat(response.task().remainingEffortMinutes()).isZero();
+		assertThat(block.getOutcome()).isEqualTo("SKIPPED");
+		verify(taskService, times(1)).recordRemainingEffortCheckpoint(task, PLAN_DATE, 0);
+	}
+
+	@Test
 	void record_correctionAfterALaterCheckpoint_updatesHistoryOnly() {
 		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
 		service.record(
@@ -802,6 +830,20 @@ class BlockProgressServiceTest {
 		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
 		when(dailyPlanRepository.findByOwner_IdAndId(OWNER_ID, PLAN_ID))
 				.thenReturn(Optional.of(plan));
+	}
+
+	private void stubCheckpointRecordedAtFromBlockRecordedAt() {
+		doAnswer(
+						invocation -> {
+							Instant checkpointAt =
+									block.getRecordedAt() != null
+											? block.getRecordedAt()
+											: Instant.parse("2026-10-05T08:00:00Z");
+							when(taskService.latestCheckpointRecordedAt(task)).thenReturn(checkpointAt);
+							return null;
+						})
+				.when(taskService)
+				.recordRemainingEffortCheckpoint(any(), any(), any());
 	}
 
 	private DailyPlan planWithWorkBlock(LocalTime start, LocalTime end) {

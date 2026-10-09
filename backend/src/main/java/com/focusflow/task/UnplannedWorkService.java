@@ -79,6 +79,8 @@ public class UnplannedWorkService {
 		requireMatchingEffortVersion(task, request.effortVersion());
 		requireResolvableRemainder(task, request);
 
+		UnplannedWork entry = newEntry(owner, task, request);
+
 		if (request.finish()) {
 			applyRemainingEffort(task, request.workDate(), 0, true);
 			task.setStatus(TaskStatus.DONE);
@@ -96,7 +98,6 @@ public class UnplannedWorkService {
 			task.setStatus(TaskStatus.IN_PROGRESS);
 		}
 
-		UnplannedWork entry = newEntry(owner, task, request);
 		taskRepository.save(task);
 		UnplannedWork saved = unplannedWorkRepository.save(entry);
 		return toResponse(saved);

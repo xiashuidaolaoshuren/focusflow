@@ -4,6 +4,7 @@ import static com.focusflow.testsupport.PersistenceFixtures.savedPlan;
 import static com.focusflow.testsupport.PersistenceFixtures.savedTask;
 import static com.focusflow.testsupport.PersistenceFixtures.savedUser;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.focusflow.ai.AiPlanItem;
@@ -14,7 +15,9 @@ import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
 import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
+import com.focusflow.plan.DailyPlanService;
 import com.focusflow.plan.DailyPlanSummaryProjection;
+import com.focusflow.plan.PlanFixedBreakSnapshot;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.schedule.BlockKind;
@@ -34,6 +37,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,6 +62,8 @@ class PostgresIntegrationTest {
 	@Autowired DailyPlanRepository dailyPlanRepository;
 
 	@Autowired DailyPlanPersister dailyPlanPersister;
+
+	@Autowired DailyPlanService dailyPlanService;
 
 	@Autowired TransactionTemplate transactionTemplate;
 
@@ -1113,6 +1119,102 @@ class PostgresIntegrationTest {
 		assertThat(reloaded.getLatestRevision().getBlocks())
 				.singleElement()
 				.satisfies(block -> assertThat(block.getStartTime()).isEqualTo(LocalTime.of(11, 0)));
+	}
+
+	@Test
+	@WithMockUser(username = "plan-detached-load-owner")
+	void planFinders_initializeAssociationsForUseOutsideRepositoryTransaction() {
+		User owner =
+				userRepository
+						.findByUsername("plan-detached-load-owner")
+						.orElseGet(
+								() ->
+										userRepository.save(
+												UserTestBuilder.user()
+														.withUsername("plan-detached-load-owner")
+														.withEmail("plan-detached-load-owner@example.com")
+														.withPasswordHash(
+																"$2a$10$9999999999999999999999999999999999999999999999999999999")
+														.build()));
+
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Detached load")
+								.withStatus(TaskStatus.IN_PROGRESS)
+								.withEstimatedMinutes(60));
+		task.setRemainingEffortMinutes(60);
+		taskRepository.saveAndFlush(task);
+
+		LocalDate planDate = LocalDate.of(2026, 10, 6);
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, planDate)
+								.withMetrics(420, 60, 60L, 0, 0)
+								.addTask(task, 1, true, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1));
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan managed =
+							dailyPlanRepository.findByOwner_IdAndId(owner.getId(), plan.getId()).orElseThrow();
+					managed.setCadenceEnabled(true);
+					managed.setTargetFocusMinutes(50);
+					managed.setBreakMinutes(10);
+					managed.setMinSessionMinutes(15);
+					managed.setBufferMinutes(0);
+					PlanFixedBreakSnapshot lunch = new PlanFixedBreakSnapshot();
+					lunch.setLabel("Lunch");
+					lunch.setStartTime(LocalTime.of(12, 0));
+					lunch.setEndTime(LocalTime.of(13, 0));
+					managed.addFixedBreakSnapshot(lunch);
+					dailyPlanRepository.saveAndFlush(managed);
+				});
+
+		Long ownerId = owner.getId();
+		Long planId = plan.getId();
+
+		DailyPlan loadedById =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanRepository
+										.findByOwner_IdAndId(ownerId, planId)
+										.orElseThrow());
+		assertDetachedPlanAssociations(loadedById, task);
+
+		DailyPlan loadedByDate =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanRepository
+										.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+												ownerId, planDate)
+										.orElseThrow());
+		assertDetachedPlanAssociations(loadedByDate, task);
+
+		DailyPlanResponse byId = dailyPlanService.getForCurrentUser(planId);
+		assertThat(byId.id()).isEqualTo(planId);
+		assertThat(byId.needsRefresh()).isFalse();
+
+		Optional<DailyPlanResponse> byDate = dailyPlanService.byDateForCurrentUser(planDate);
+		assertThat(byDate).isPresent();
+		assertThat(byDate.orElseThrow().id()).isEqualTo(planId);
+	}
+
+	private static void assertDetachedPlanAssociations(DailyPlan plan, Task task) {
+		assertThatCode(
+						() -> {
+							Task live =
+									plan.getLatestRevision().getTasks().iterator().next().getTaskReference();
+							assertThat(live.getStatus()).isEqualTo(task.getStatus());
+							assertThat(live.getRemainingEffortMinutes())
+									.isEqualTo(task.getRemainingEffortMinutes());
+							assertThat(plan.getFixedBreakSnapshots())
+									.singleElement()
+									.extracting(PlanFixedBreakSnapshot::getLabel)
+									.isEqualTo("Lunch");
+						})
+				.doesNotThrowAnyException();
 	}
 
 	private String storedTime(String column, String table, Long id) {

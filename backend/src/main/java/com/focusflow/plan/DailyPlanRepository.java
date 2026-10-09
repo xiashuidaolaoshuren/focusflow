@@ -15,8 +15,11 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 			attributePaths = {
 				"revisions",
 				"revisions.tasks",
+				"revisions.tasks.taskReference",
 				"revisions.blocks",
-				"revisions.blocks.dailyPlanTask"
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findByOwner_IdAndId(Long ownerId, Long planId);
 
@@ -104,8 +107,11 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 			attributePaths = {
 				"revisions",
 				"revisions.tasks",
+				"revisions.tasks.taskReference",
 				"revisions.blocks",
-				"revisions.blocks.dailyPlanTask"
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 			Long ownerId, LocalDate planDate);

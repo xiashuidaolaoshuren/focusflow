@@ -3,6 +3,7 @@ package com.focusflow.task;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,6 +22,7 @@ import com.focusflow.user.User;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -314,6 +316,35 @@ class UnplannedWorkServiceTest {
 
 		assertThat(entry.getActualMinutes()).isEqualTo(35);
 		assertThat(task.getRemainingEffortMinutes()).isEqualTo(65);
+	}
+
+	@Test
+	void create_withFinish_stampsRecordedAtBeforeCheckpointWrite() {
+		stubOwnerAndTask();
+		AtomicReference<Instant> checkpointAt = new AtomicReference<>();
+		AtomicReference<Instant> entryRecordedAt = new AtomicReference<>();
+		doAnswer(
+						invocation -> {
+							checkpointAt.set(Instant.now());
+							return null;
+						})
+				.when(taskService)
+				.recordRemainingEffortCheckpoint(any(), any(), any());
+		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
+				.thenAnswer(
+						invocation -> {
+							UnplannedWork entry = invocation.getArgument(0);
+							entryRecordedAt.set(entry.getRecordedAt());
+							return entry;
+						});
+
+		service.create(
+				new UnplannedWorkRequest(
+						TASK_ID, WORK_DATE, 30, WORK_DATE, 0, true, null));
+
+		assertThat(entryRecordedAt.get()).isNotNull();
+		assertThat(checkpointAt.get()).isNotNull();
+		assertThat(entryRecordedAt.get().isAfter(checkpointAt.get())).isFalse();
 	}
 
 	@Test
