@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useUpdateTask } from '@/features/tasks/hooks'
 import { STATUS_LABELS } from '@/features/tasks/labels'
+import { canReturnToOpen } from '@/features/tasks/taskEffort'
 import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
 import { buildTaskUpdateRequest } from '@/features/tasks/taskUpdate'
 import { getLocalDateString } from '@/lib/planningDate'
@@ -168,7 +169,11 @@ export function TaskActions({
         className="h-8 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {TASK_STATUSES.map((status) => (
-          <option key={status} value={status}>
+          <option
+            key={status}
+            value={status}
+            disabled={status === 'OPEN' && !canReturnToOpen(task)}
+          >
             {STATUS_LABELS[status]}
           </option>
         ))}

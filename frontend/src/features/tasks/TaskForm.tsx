@@ -19,7 +19,7 @@ import {
   useCreateTask,
   useUpdateTask,
 } from '@/features/tasks/hooks'
-import { ESTIMATE_LOCK_COPY, hasVisibleProgress } from '@/features/tasks/taskEffort'
+import { ESTIMATE_LOCK_COPY, canReturnToOpen, hasVisibleProgress } from '@/features/tasks/taskEffort'
 import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
 import { ApiError } from '@/lib/api'
 import type { TaskPriority, TaskResponse, TaskStatus } from '@/types/api'
@@ -217,7 +217,15 @@ export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
             <SelectContent>
               <SelectGroup>
                 {FORM_STATUS_ITEMS.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
+                  <SelectItem
+                    key={item.value}
+                    value={item.value}
+                    disabled={
+                      item.value === 'OPEN' &&
+                      task != null &&
+                      !canReturnToOpen(task)
+                    }
+                  >
                     {item.label}
                   </SelectItem>
                 ))}

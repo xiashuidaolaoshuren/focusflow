@@ -13,6 +13,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
+import java.util.Objects;
 
 @Entity
 @Table(name = "tasks")
@@ -116,6 +117,17 @@ public class Task {
 
 	public void setRemainingEffortMinutes(Integer remainingEffortMinutes) {
 		this.remainingEffortMinutes = remainingEffortMinutes;
+	}
+
+	/**
+	 * Applies an assessed remainder, advancing the effort version only when the value actually
+	 * changes. The remainder and version always move together.
+	 */
+	public void applyRemainingEffort(Integer remainingEffortMinutes) {
+		if (!Objects.equals(remainingEffortMinutes, this.remainingEffortMinutes)) {
+			this.remainingEffortMinutes = remainingEffortMinutes;
+			this.effortVersion++;
+		}
 	}
 
 	public int getEffortVersion() {

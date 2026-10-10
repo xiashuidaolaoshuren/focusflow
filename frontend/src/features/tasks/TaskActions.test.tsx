@@ -245,6 +245,18 @@ describe('TaskActions', () => {
     expect(screen.getByText(PROGRESS_CONFLICT_MESSAGE)).toBeInTheDocument()
   })
 
+  it('disables the Open option once work is recorded', () => {
+    renderTaskActions({ ...sampleTask, status: 'IN_PROGRESS', effortVersion: 2 })
+
+    expect(screen.getByRole('option', { name: /^open$/i })).toBeDisabled()
+  })
+
+  it('keeps the Open option available for an in-progress task without recorded work', () => {
+    renderTaskActions({ ...sampleTask, status: 'IN_PROGRESS', effortVersion: 0 })
+
+    expect(screen.getByRole('option', { name: /^open$/i })).not.toBeDisabled()
+  })
+
   it('allows reopen with explicit unknown remaining effort', async () => {
     const mutate = vi.fn()
     mockedUseUpdateTask.mockReturnValue({

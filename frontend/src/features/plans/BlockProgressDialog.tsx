@@ -101,6 +101,7 @@ export function BlockProgressDialog({
   const [reconcile, setReconcile] = useState(false)
   const [unknownRemainder, setUnknownRemainder] = useState(false)
   const isCrossing = isCrossingNow(block, getLocalTimeString())
+  const hidesActualMinutes = outcome === 'SKIPPED' && !reconcile
 
   function parsedActualMinutes(): number | null {
     if (actualMinutes.trim() === '') {
@@ -181,7 +182,7 @@ export function BlockProgressDialog({
         blockId: block.id,
         request: {
           outcome,
-          actualMinutes: parsedActualMinutes(),
+          actualMinutes: hidesActualMinutes ? null : parsedActualMinutes(),
           currentDate: getLocalDateString(),
           expectedProgressVersion: block.progressVersion,
           finish: reconcile ? false : finish,
@@ -240,16 +241,18 @@ export function BlockProgressDialog({
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`actual-minutes-${block.id}`}>Actual minutes</Label>
-            <Input
-              id={`actual-minutes-${block.id}`}
-              type="number"
-              min={1}
-              value={actualMinutes}
-              onChange={(event) => setActualMinutes(event.target.value)}
-            />
-          </div>
+          {hidesActualMinutes ? null : (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor={`actual-minutes-${block.id}`}>Actual minutes</Label>
+              <Input
+                id={`actual-minutes-${block.id}`}
+                type="number"
+                min={1}
+                value={actualMinutes}
+                onChange={(event) => setActualMinutes(event.target.value)}
+              />
+            </div>
+          )}
           {isCrossing ? (
             <label className="flex items-center gap-2 text-sm">
               <input

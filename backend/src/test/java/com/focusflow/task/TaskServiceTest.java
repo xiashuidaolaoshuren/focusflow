@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,13 +12,14 @@ import static org.mockito.Mockito.when;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
-import com.focusflow.plan.DailyPlanBlockRepository;
+import com.focusflow.plan.PlanProgressQueryService;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
 import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
+import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
 import com.focusflow.user.UserRepository;
 import java.time.Instant;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -41,10 +44,13 @@ class TaskServiceTest {
 	private RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
 
 	@Mock
-	private DailyPlanBlockRepository dailyPlanBlockRepository;
+	private PlanProgressQueryService planProgressQueryService;
 
 	@Mock
 	private UnplannedWorkRepository unplannedWorkRepository;
+
+	@Mock
+	private OwnerSchedulingLock ownerSchedulingLock;
 
 	@Mock
 	private UserRepository userRepository;
@@ -62,8 +68,9 @@ class TaskServiceTest {
 				new TaskService(
 						taskRepository,
 						remainingEffortCheckpointRepository,
-						dailyPlanBlockRepository,
+						planProgressQueryService,
 						unplannedWorkRepository,
+						ownerSchedulingLock,
 						userRepository,
 						currentUser,
 						taskResponseMapper);
@@ -329,8 +336,7 @@ class TaskServiceTest {
 		idField.setAccessible(true);
 		idField.set(task, 7L);
 		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
-		when(dailyPlanBlockRepository.existsByDailyPlanTask_TaskReference_IdAndOutcomeIsNotNull(7L))
-				.thenReturn(true);
+		when(planProgressQueryService.hasRecordedOutcome(7L)).thenReturn(true);
 		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
 
 		UpdateTaskRequest request =
@@ -384,6 +390,77 @@ class TaskServiceTest {
 		assertThat(task.getRemainingEffortMinutes()).isEqualTo(45);
 		assertThat(task.getEffortVersion()).isEqualTo(3);
 		verify(remainingEffortCheckpointRepository, never()).save(any(RemainingEffortCheckpoint.class));
+	}
+
+	@Test
+	void updateForCurrentUser_whenBlockOutcomeExists_doesNotReturnToOpen() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Worked task");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(45);
+		task.setEffortVersion(2);
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(planProgressQueryService.hasRecordedOutcome(7L)).thenReturn(true);
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Worked task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						null,
+						null,
+						null);
+
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("status cannot return to Open once work is recorded");
+
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.IN_PROGRESS);
+		verify(taskRepository, never()).save(any(Task.class));
+	}
+
+	@Test
+	void updateForCurrentUser_whenUnplannedWorkExists_doesNotReturnToOpen() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Off-plan worked task");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(45);
+		task.setEffortVersion(2);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(unplannedWorkRepository.existsByTaskReference_Id(7L)).thenReturn(true);
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Off-plan worked task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						null,
+						null,
+						null);
+
+		assertThatThrownBy(() -> taskService.updateForCurrentUser(7L, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("status cannot return to Open once work is recorded");
+
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.IN_PROGRESS);
+		verify(taskRepository, never()).save(any(Task.class));
 	}
 
 	@Test
@@ -635,26 +712,88 @@ class TaskServiceTest {
 	}
 
 	@Test
-	void latestCheckpointRecordedAt_returnsMostRecentCheckpointInstant() {
-		Task task = new Task();
-		Instant recordedAt = Instant.parse("2026-10-03T10:00:00Z");
-		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
-		checkpoint.setRecordedAt(recordedAt);
-		when(remainingEffortCheckpointRepository
-						.findFirstByTaskReference_IdOrderByRecordedAtDesc(task))
-				.thenReturn(Optional.of(checkpoint));
+	void updateForCurrentUser_locksTheOwnerBeforeReadingTheTask() throws Exception {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
 
-		assertThat(taskService.latestCheckpointRecordedAt(task)).isEqualTo(recordedAt);
+		Task task = new Task();
+		task.setTitle("Locked task");
+		task.setStatus(TaskStatus.OPEN);
+		task.setEstimatedMinutes(60);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(0);
+		var idField = Task.class.getDeclaredField("id");
+		idField.setAccessible(true);
+		idField.set(task, 7L);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+
+		UpdateTaskRequest request =
+				new UpdateTaskRequest(
+						"Locked task",
+						null,
+						TaskPriority.MEDIUM,
+						TaskStatus.OPEN,
+						null,
+						60,
+						null,
+						null,
+						0);
+
+		taskService.updateForCurrentUser(7L, request);
+
+		InOrder order = inOrder(ownerSchedulingLock, taskRepository);
+		order.verify(ownerSchedulingLock).lockCurrentOwner();
+		order.verify(taskRepository).findByOwner_IdAndId(42L, 7L);
 	}
 
 	@Test
-	void latestCheckpointRecordedAt_whenNoCheckpointExists_returnsNull() {
+	void reassessRemainingEffortForCurrentUser_locksTheOwnerBeforeReadingTheTask() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		Task task = new Task();
+		task.setTitle("Locked reassessment");
+		task.setStatus(TaskStatus.IN_PROGRESS);
+		task.setRemainingEffortMinutes(60);
+		task.setEffortVersion(2);
+		when(taskRepository.findByOwner_IdAndId(42L, 7L)).thenReturn(Optional.of(task));
+		when(taskRepository.save(task)).thenAnswer(invocation -> invocation.getArgument(0));
+		when(remainingEffortCheckpointRepository.save(any(RemainingEffortCheckpoint.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		taskService.reassessRemainingEffortForCurrentUser(
+				7L, new RemainingEffortRequest(45, LocalDate.of(2026, 10, 3), 2));
+
+		InOrder order = inOrder(ownerSchedulingLock, taskRepository);
+		order.verify(ownerSchedulingLock).lockCurrentOwner();
+		order.verify(taskRepository).findByOwner_IdAndId(42L, 7L);
+	}
+
+	@Test
+	void latestCheckpointOrder_returnsTheLastEventOrderedCheckpoint() {
+		Task task = new Task();
+		LocalDate workDate = LocalDate.of(2026, 10, 3);
+		Instant recordedAt = Instant.parse("2026-10-03T10:00:00Z");
+		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
+		checkpoint.setWorkDate(workDate);
+		checkpoint.setRecordedAt(recordedAt);
+		when(remainingEffortCheckpointRepository
+						.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task))
+				.thenReturn(Optional.of(checkpoint));
+
+		assertThat(taskService.latestCheckpointOrder(task))
+				.contains(new CheckpointOrder(workDate, recordedAt));
+	}
+
+	@Test
+	void latestCheckpointOrder_whenNoCheckpointExists_isEmpty() {
 		Task task = new Task();
 		when(remainingEffortCheckpointRepository
-						.findFirstByTaskReference_IdOrderByRecordedAtDesc(task))
+						.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task))
 				.thenReturn(Optional.empty());
 
-		assertThat(taskService.latestCheckpointRecordedAt(task)).isNull();
+		assertThat(taskService.latestCheckpointOrder(task)).isEmpty();
 	}
 
 	@Test

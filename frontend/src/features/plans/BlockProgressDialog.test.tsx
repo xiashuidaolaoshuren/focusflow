@@ -101,6 +101,36 @@ describe('BlockProgressDialog save', () => {
     )
   })
 
+  it('records no actual minutes for an ordinary skipped session', async () => {
+    const mutate = vi.fn()
+    mockedUseRecordBlockProgress.mockReturnValue({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useRecordBlockProgress>)
+
+    renderDialog()
+    fireEvent.change(screen.getByLabelText(/^actual minutes$/i), {
+      target: { value: '25' },
+    })
+    await selectOutcome(/^skipped$/i)
+
+    expect(screen.queryByLabelText(/^actual minutes$/i)).not.toBeInTheDocument()
+
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      {
+        planId: 1,
+        blockId: 100,
+        request: expect.objectContaining({
+          outcome: 'SKIPPED',
+          actualMinutes: null,
+        }),
+      },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+  })
+
   it('posts the cutoff and the explicit remainder when reconciling an elapsed session', async () => {
     const mutate = vi.fn()
     mockedUseRecordBlockProgress.mockReturnValue({

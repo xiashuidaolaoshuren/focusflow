@@ -1164,6 +1164,8 @@ class PostgresIntegrationTest {
 					managed.setBreakMinutes(10);
 					managed.setMinSessionMinutes(15);
 					managed.setBufferMinutes(0);
+					managed.getLatestRevision().getTasks().iterator().next()
+							.setCapturedRemainingEffortMinutes(60);
 					PlanFixedBreakSnapshot lunch = new PlanFixedBreakSnapshot();
 					lunch.setLabel("Lunch");
 					lunch.setStartTime(LocalTime.of(12, 0));

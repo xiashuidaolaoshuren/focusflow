@@ -9,7 +9,7 @@ import com.focusflow.task.dto.UnplannedWorkResponse;
 import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
 import java.time.Instant;
-import java.util.Objects;
+import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -77,9 +77,9 @@ public class UnplannedWorkService {
 		Task task = loadTask(ownerId, request.taskId());
 		requireValidCreate(request);
 		requireMatchingEffortVersion(task, request.effortVersion());
-		requireResolvableRemainder(task, request);
 
 		UnplannedWork entry = newEntry(owner, task, request);
+		boolean shieldedByLaterCheckpoint = isShieldedByLaterCheckpoint(entry, task);
 
 		if (request.finish()) {
 			applyRemainingEffort(task, request.workDate(), 0, true);
@@ -90,7 +90,8 @@ public class UnplannedWorkService {
 					request.workDate(),
 					request.checkpoint().remainingEffortMinutes(),
 					true);
-		} else {
+		} else if (!shieldedByLaterCheckpoint) {
+			requireResolvableRemainder(task, request);
 			Integer credited = provisionalRemaining(task, request);
 			applyRemainingEffort(task, request.workDate(), credited, false);
 		}
@@ -112,11 +113,8 @@ public class UnplannedWorkService {
 	}
 
 	private void applyRemainingEffort(
-			Task task, java.time.LocalDate workDate, Integer remainingMinutes, boolean checkpoint) {
-		if (!Objects.equals(remainingMinutes, task.getRemainingEffortMinutes())) {
-			task.setRemainingEffortMinutes(remainingMinutes);
-			task.setEffortVersion(task.getEffortVersion() + 1);
-		}
+			Task task, LocalDate workDate, Integer remainingMinutes, boolean checkpoint) {
+		task.applyRemainingEffort(remainingMinutes);
 		if (checkpoint) {
 			taskService.recordRemainingEffortCheckpoint(task, workDate, remainingMinutes);
 		}
@@ -179,11 +177,10 @@ public class UnplannedWorkService {
 	}
 
 	private boolean isShieldedByLaterCheckpoint(UnplannedWork entry, Task task) {
-		Instant latestCheckpointAt = taskService.latestCheckpointRecordedAt(task);
-		Instant recordedAt = entry.getRecordedAt();
-		return latestCheckpointAt != null
-				&& recordedAt != null
-				&& !latestCheckpointAt.isBefore(recordedAt);
+		return taskService
+				.latestCheckpointOrder(task)
+				.map(order -> order.shields(entry.getWorkDate(), entry.getRecordedAt()))
+				.orElse(false);
 	}
 
 	private static void requireStoredWorkDate(UnplannedWork entry, UnplannedWorkRequest request) {

@@ -18,6 +18,7 @@ import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
+import com.focusflow.task.CheckpointOrder;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskResponseMapper;
 import com.focusflow.task.TaskService;
@@ -172,6 +173,45 @@ class BlockProgressServiceTest {
 		assertThat(response.task().status()).isEqualTo(TaskStatus.OPEN);
 		assertThat(block.getOutcome()).isEqualTo("SKIPPED");
 		assertThat(block.getActualMinutes()).isNull();
+	}
+
+	@Test
+	void record_skippedWithActualMinutes_throwsBadRequestAndWritesNothing() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		BlockProgressRequest request =
+				new BlockProgressRequest(WorkOutcome.SKIPPED, 25, PLAN_DATE, 0, false, null);
+
+		assertThatThrownBy(() -> service.record(PLAN_ID, BLOCK_ID, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("skipped work records no actual minutes");
+
+		assertThat(block.getOutcome()).isNull();
+		assertThat(block.getActualMinutes()).isNull();
+		assertThat(block.getProgressVersion()).isZero();
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+	}
+
+	@Test
+	void record_doneOnABackdatedPlanAfterALaterCheckpoint_updatesHistoryOnly() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										PLAN_DATE.plusDays(1),
+										Instant.parse("2026-10-06T10:00:00Z"))));
+
+		BlockProgressResponse response =
+				service.record(
+						PLAN_ID,
+						BLOCK_ID,
+						new BlockProgressRequest(WorkOutcome.DONE, null, PLAN_DATE, 0, false, null));
+
+		assertThat(response.task().remainingEffortMinutes()).isEqualTo(100);
+		assertThat(block.getOutcome()).isEqualTo("DONE");
+		assertThat(block.getActualMinutes()).isNull();
+		assertThat(block.getProgressVersion()).isEqualTo(1);
+		verify(taskService, never()).recordRemainingEffortCheckpoint(any(), any(), any());
 	}
 
 	@Test
@@ -579,8 +619,11 @@ class BlockProgressServiceTest {
 				PLAN_ID,
 				BLOCK_ID,
 				new BlockProgressRequest(WorkOutcome.DONE, null, PLAN_DATE, 0, false, null));
-		when(taskService.latestCheckpointRecordedAt(task))
-				.thenReturn(block.getRecordedAt().plusSeconds(60));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										PLAN_DATE, block.getRecordedAt().plusSeconds(60))));
 
 		BlockProgressResponse response =
 				service.record(
@@ -608,8 +651,11 @@ class BlockProgressServiceTest {
 				PLAN_ID,
 				BLOCK_ID,
 				new BlockProgressRequest(WorkOutcome.DONE, null, PLAN_DATE, 0, false, null));
-		when(taskService.latestCheckpointRecordedAt(task))
-				.thenReturn(block.getRecordedAt().minusSeconds(60));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										PLAN_DATE, block.getRecordedAt().minusSeconds(60))));
 
 		BlockProgressResponse response =
 				service.record(
@@ -636,8 +682,11 @@ class BlockProgressServiceTest {
 				new BlockProgressRequest(WorkOutcome.DONE, null, PLAN_DATE, 0, false, null));
 		task.setStatus(TaskStatus.DONE);
 		task.setRemainingEffortMinutes(0);
-		when(taskService.latestCheckpointRecordedAt(task))
-				.thenReturn(block.getRecordedAt().plusSeconds(60));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										PLAN_DATE, block.getRecordedAt().plusSeconds(60))));
 
 		BlockProgressResponse response =
 				service.record(
@@ -839,7 +888,10 @@ class BlockProgressServiceTest {
 									block.getRecordedAt() != null
 											? block.getRecordedAt()
 											: Instant.parse("2026-10-05T08:00:00Z");
-							when(taskService.latestCheckpointRecordedAt(task)).thenReturn(checkpointAt);
+							when(taskService.latestCheckpointOrder(task))
+									.thenReturn(
+											Optional.of(
+													new CheckpointOrder(PLAN_DATE, checkpointAt)));
 							return null;
 						})
 				.when(taskService)

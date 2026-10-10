@@ -20,7 +20,6 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
-import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,7 +83,8 @@ public class BlockProgressService {
 					task, plan.getPlanDate(), request.checkpoint().remainingEffortMinutes(), true);
 		} else if (correction) {
 			applyCorrection(plan, block, task, request);
-		} else {
+		} else if (!isShieldedByLaterCheckpoint(
+				plan.getPlanDate(), block.getRecordedAt(), task)) {
 			Integer credited = provisionalRemaining(plan, block, task, request);
 			if (credited != null && credited <= 0) {
 				throw new BadRequestException(
@@ -107,10 +107,7 @@ public class BlockProgressService {
 
 	private void applyRemainingEffort(
 			Task task, LocalDate workDate, Integer remainingMinutes, boolean checkpoint) {
-		if (!Objects.equals(remainingMinutes, task.getRemainingEffortMinutes())) {
-			task.setRemainingEffortMinutes(remainingMinutes);
-			task.setEffortVersion(task.getEffortVersion() + 1);
-		}
+		task.applyRemainingEffort(remainingMinutes);
 		if (checkpoint) {
 			taskService.recordRemainingEffortCheckpoint(task, workDate, remainingMinutes);
 		}
@@ -180,7 +177,7 @@ public class BlockProgressService {
 	 */
 	private void applyCorrection(
 			DailyPlan plan, DailyPlanBlock block, Task task, BlockProgressRequest request) {
-		if (isShieldedByLaterCheckpoint(block, task)) {
+		if (isShieldedByLaterCheckpoint(plan.getPlanDate(), block.getRecordedAt(), task)) {
 			return;
 		}
 		Integer adjustment = correctionAdjustment(plan, block, task, request);
@@ -196,12 +193,18 @@ public class BlockProgressService {
 		applyRemainingEffort(task, plan.getPlanDate(), adjusted, false);
 	}
 
-	private boolean isShieldedByLaterCheckpoint(DailyPlanBlock block, Task task) {
-		Instant latestCheckpointAt = taskService.latestCheckpointRecordedAt(task);
-		Instant recordedAt = block.getRecordedAt();
-		return latestCheckpointAt != null
-				&& recordedAt != null
-				&& !latestCheckpointAt.isBefore(recordedAt);
+	/**
+	 * Whether a checkpoint already recorded at or after this work governs the remainder. Progress is
+	 * ordered by work date first and recording time second, so backdated work and the same save's own
+	 * checkpoint both stay history.
+	 */
+	private boolean isShieldedByLaterCheckpoint(
+			LocalDate workDate, Instant recordedAt, Task task) {
+		return recordedAt != null
+				&& taskService
+						.latestCheckpointOrder(task)
+						.map(order -> order.shields(workDate, recordedAt))
+						.orElse(false);
 	}
 
 	private Integer correctionAdjustment(
@@ -211,22 +214,14 @@ public class BlockProgressService {
 		}
 		int plannedMinutes = plannedMinutes(block);
 		int previousCredit =
-				credit(
+				RemainingEffortCalculator.creditFor(
 						WorkOutcome.valueOf(block.getOutcome()),
 						plannedMinutes,
 						block.getActualMinutes());
-		int nextCredit = credit(request.outcome(), plannedMinutes, request.actualMinutes());
+		int nextCredit =
+				RemainingEffortCalculator.creditFor(
+						request.outcome(), plannedMinutes, request.actualMinutes());
 		return previousCredit - nextCredit;
-	}
-
-	private static int credit(WorkOutcome outcome, int plannedMinutes, Integer actualMinutes) {
-		if (outcome == WorkOutcome.DONE) {
-			return plannedMinutes;
-		}
-		if (outcome == WorkOutcome.PARTLY_DONE) {
-			return actualMinutes != null ? actualMinutes : 0;
-		}
-		return 0;
 	}
 
 	private static void requireMatchingProgressVersion(
@@ -274,6 +269,9 @@ public class BlockProgressService {
 		if (request.outcome() == WorkOutcome.PARTLY_DONE
 				&& (request.actualMinutes() == null || request.actualMinutes() <= 0)) {
 			throw new BadRequestException("partly done requires positive actual minutes");
+		}
+		if (request.outcome() == WorkOutcome.SKIPPED && request.actualMinutes() != null) {
+			throw new BadRequestException("skipped work records no actual minutes");
 		}
 	}
 

@@ -344,6 +344,27 @@ describe('TaskForm', () => {
     expect(onEffortConflict).toHaveBeenCalled()
   })
 
+  it('disables the Open status option once work is recorded', async () => {
+    mockedUseUpdateTask.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useUpdateTask>)
+
+    renderTaskForm(vi.fn(), {
+      ...sampleTask,
+      status: 'IN_PROGRESS',
+      effortVersion: 2,
+    })
+
+    fireEvent.click(screen.getByRole('combobox', { name: /status/i }))
+    expect(await screen.findByRole('option', { name: /^open$/i })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  })
+
   it('limits edit form status options to Open and In progress', async () => {
     mockedUseUpdateTask.mockReturnValue({
       mutate: vi.fn(),

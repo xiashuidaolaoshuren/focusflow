@@ -200,6 +200,67 @@ class UnplannedWorkServiceTest {
 	}
 
 	@Test
+	void create_backdatedEntryAfterALaterCheckpoint_updatesHistoryOnly() {
+		stubOwnerAndTask();
+		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										WORK_DATE.plusDays(1),
+										Instant.parse("2026-10-06T10:00:00Z"))));
+
+		UnplannedWorkResponse response =
+				service.create(
+						new UnplannedWorkRequest(
+								TASK_ID, WORK_DATE, 30, WORK_DATE, 0, false, null));
+
+		assertThat(response.actualMinutes()).isEqualTo(30);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+		assertThat(task.getEffortVersion()).isZero();
+	}
+
+	@Test
+	void create_backdatedOverdrawAfterALaterCheckpoint_stillSaves() {
+		task.setRemainingEffortMinutes(25);
+		stubOwnerAndTask();
+		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										WORK_DATE.plusDays(1),
+										Instant.parse("2026-10-06T10:00:00Z"))));
+
+		UnplannedWorkResponse response =
+				service.create(
+						new UnplannedWorkRequest(
+								TASK_ID, WORK_DATE, 30, WORK_DATE, 0, false, null));
+
+		assertThat(response.actualMinutes()).isEqualTo(30);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(25);
+	}
+
+	@Test
+	void create_sameDateEntryRecordedAfterTheCheckpoint_stillCredits() {
+		stubOwnerAndTask();
+		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										WORK_DATE, Instant.parse("2026-10-05T08:00:00Z"))));
+
+		service.create(
+				new UnplannedWorkRequest(TASK_ID, WORK_DATE, 30, WORK_DATE, 0, false, null));
+
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(70);
+	}
+
+	@Test
 	void create_withCheckpoint_replacesRemainderWithoutCreditingMinutes() {
 		stubOwnerAndTask();
 		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
@@ -353,8 +414,11 @@ class UnplannedWorkServiceTest {
 		task.setRemainingEffortMinutes(65);
 		task.setEffortVersion(1);
 		stubOwnerTaskAndEntry(entry);
-		when(taskService.latestCheckpointRecordedAt(task))
-				.thenReturn(entry.getRecordedAt().plusSeconds(60));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										entry.getWorkDate(), entry.getRecordedAt().plusSeconds(60))));
 
 		service.correct(
 				entry.getId(),
@@ -389,8 +453,11 @@ class UnplannedWorkServiceTest {
 		task.setRemainingEffortMinutes(65);
 		task.setEffortVersion(1);
 		stubOwnerTaskAndEntryLookup(entry);
-		when(taskService.latestCheckpointRecordedAt(task))
-				.thenReturn(entry.getRecordedAt().plusSeconds(60));
+		when(taskService.latestCheckpointOrder(task))
+				.thenReturn(
+						Optional.of(
+								new CheckpointOrder(
+										entry.getWorkDate(), entry.getRecordedAt().plusSeconds(60))));
 
 		service.delete(entry.getId(), 1);
 

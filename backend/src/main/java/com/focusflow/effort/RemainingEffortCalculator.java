@@ -22,15 +22,23 @@ public final class RemainingEffortCalculator {
 				if (remaining == null) {
 					continue;
 				}
-				if (work.outcome() == WorkOutcome.DONE) {
-					remaining -= work.plannedMinutes();
-				} else if (work.outcome() == WorkOutcome.PARTLY_DONE) {
-					remaining -= work.actualMinutes();
-				} else if (work.outcome() == WorkOutcome.SKIPPED) {
-					// Skipped work credits nothing.
-				}
+				remaining -= creditFor(work.outcome(), work.plannedMinutes(), work.actualMinutes());
 			}
 		}
 		return new AcceptedEffort(remaining);
+	}
+
+	/**
+	 * The provisional credit an outcome grants: a done session credits its planned duration, a
+	 * partly done session credits its actual minutes, and a skipped session credits nothing.
+	 */
+	public static int creditFor(WorkOutcome outcome, int plannedMinutes, Integer actualMinutes) {
+		if (outcome == WorkOutcome.DONE) {
+			return plannedMinutes;
+		}
+		if (outcome == WorkOutcome.PARTLY_DONE) {
+			return actualMinutes != null ? actualMinutes : 0;
+		}
+		return 0;
 	}
 }
