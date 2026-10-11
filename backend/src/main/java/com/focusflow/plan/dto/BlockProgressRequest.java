@@ -1,11 +1,12 @@
 package com.focusflow.plan.dto;
 
 import com.focusflow.effort.WorkOutcome;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
 public record BlockProgressRequest(
-		WorkOutcome outcome,
+		@NotNull WorkOutcome outcome,
 		Integer actualMinutes,
 		LocalDate currentDate,
 		Integer expectedProgressVersion,

@@ -66,7 +66,7 @@ public class DailyPlanController {
 	public BlockProgressResponse recordProgress(
 			@PathVariable Long planId,
 			@PathVariable Long blockId,
-			@RequestBody BlockProgressRequest request) {
+			@Valid @RequestBody BlockProgressRequest request) {
 		return blockProgressService.record(planId, blockId, request);
 	}
 

@@ -303,6 +303,28 @@ class DailyPlanControllerTest {
 
 	@Test
 	@WithMockUser
+	void recordProgress_whenOutcomeMissing_returns400WithDetails() throws Exception {
+		mockMvc.perform(
+						put("/api/daily-plans/1/blocks/11/progress")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "currentDate": "2026-06-01"
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.path").value("/api/daily-plans/1/blocks/11/progress"))
+				.andExpect(jsonPath("$.details.outcome").isArray());
+
+		verify(blockProgressService, never())
+				.record(any(Long.class), any(Long.class), any(BlockProgressRequest.class));
+	}
+
+	@Test
+	@WithMockUser
 	void recordProgress_whenProgressIsStale_returns409WithCode() throws Exception {
 		when(blockProgressService.record(eq(1L), eq(11L), any(BlockProgressRequest.class)))
 				.thenThrow(new ConflictException("PROGRESS_CONFLICT", "block progress has changed"));
