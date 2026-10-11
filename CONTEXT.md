@@ -48,14 +48,20 @@ Open work with no due date or a due date after the Planning date. The scheduler 
 Must-continue work together with Due/overdue work, after Inherited urgency is applied.
 
 **Task dependency**:
-A finish-to-start link from a blocker to a blocked Task. The blocked Task is not scheduled until the blocker is finished.
+A finish-to-start link from a blocker to a blocked Task. The blocked Task may be scheduled only after the blocker's Planned completion. A Done or Cancelled blocker releases the blocked Task, and the link stays.
 _Avoid_: Subtask, parent task
+
+**Active dependency**:
+A Task dependency whose blocker and blocked Task are both Plannable tasks. Only an active dependency counts as "Blocked by" or "Blocks" and constrains a new schedule.
 
 **Active blocker**:
 A blocker whose status is Open or In progress. A Done or Cancelled blocker releases the blocked Task, and the link stays.
 
+**Planned completion**:
+A blocker whose known Remaining effort is fully placed in a schedule, with nothing left unplaced. It permits the blocked Task to be scheduled and does not by itself mark the blocker Done.
+
 **Inherited urgency**:
-The ranking group a Task takes from itself and from the Plannable tasks it blocks, directly or through a chain. A blocker is at least as urgent as the work waiting on it.
+The ranking group a Task takes from itself and from Plannable tasks reached through Open or In-progress tasks. A Done or Cancelled Task stops that chain. A blocker is at least as urgent as the work waiting on it.
 
 **Blocked work**:
 A Plannable task left entirely unplaced because an Active blocker in the same ranking was not fully placed.
@@ -111,7 +117,11 @@ _Avoid_: Multi-day plan, weekly plan
 A Horizon day that has no Daily plan. Fixed ordering rules and the existing scheduler place it.
 
 **As-planned pace**:
-The Horizon assumption that an unrecorded work session on a saved Daily plan consumes its planned minutes, up to the Task's live Remaining effort.
+The Horizon assumption that an eligible unrecorded Work session on a saved Daily plan is completed as planned.
+_Avoid_: Actual minutes, history-based pace
+
+**Assumed credit**:
+The planned minutes of an eligible unrecorded Work session that the Horizon counts toward completion, up to the Task's live Remaining effort. A session receives none when it starts before an Active blocker is satisfied, or when its date is on or before a later Remaining-effort checkpoint that its Schedule revision did not capture.
 
 **Plan detail**:
 The complete view of one Daily plan, including its actionable schedule, recorded progress, and earlier Schedule revisions.
@@ -160,7 +170,7 @@ The API view of a placed Daily plan block.
 A Scheduled block of work for one Task snapshot. Several sessions of the same source Task may exist in one Daily plan.
 
 **Unplaced work**:
-The API view of a Daily plan task that is not on the clock, or has a remaining unplaced portion, because its Remaining effort is unknown or the day ran out of time.
+The API view of a Daily plan task that is not on the clock, or has a remaining unplaced portion, because its Remaining effort is unknown, an Active blocker was not fully placed, or the day ran out of time.
 
 **Free minutes**:
 Minutes remaining in the Work window after Fixed breaks, overlapping Commitments, and the Trailing buffer are removed. Cadence breaks consume some of this time.
@@ -175,10 +185,10 @@ The sum of known Remaining effort on Must-include work when a Schedule revision 
 A notice that some Must-include work is Unplaced work.
 
 **Task snapshot**:
-Immutable source-task identity, title, priority, status, due date, Whole-task estimate, and Remaining effort copied into a Daily plan task when a Schedule revision is planned, with an optional reference to the live Task. It excludes free-form description.
+Immutable source-task identity, title, priority, status, due date, Whole-task estimate, and Remaining effort copied into a Daily plan task when a Schedule revision is planned, with an optional reference to the live Task. It also records which Remaining-effort checkpoint was captured with that effort, when one existed. It excludes free-form description.
 
 ## Preferences
 
 **Scheduling preferences**:
-The owner's Work window, Focus cadence, Minimum session, Trailing buffer, optional Peak window, and Fixed breaks. Missing preferences resolve to in-code defaults.
+The owner's Work window, Focus cadence, Minimum session, Trailing buffer, optional Peak window, Fixed breaks, and Working days. Missing preferences resolve to in-code defaults.
 _Avoid_: Settings (when meaning the persisted aggregate)
