@@ -45,7 +45,21 @@ _Avoid_: Due today
 Open work with no due date or a due date after the Planning date. The scheduler may leave it unplaced when the day is full.
 
 **Must-include work**:
-Must-continue work together with Due/overdue work.
+Must-continue work together with Due/overdue work, after Inherited urgency is applied.
+
+**Task dependency**:
+A finish-to-start link from a blocker to a blocked Task. The blocked Task is not scheduled until the blocker is finished.
+_Avoid_: Subtask, parent task
+
+**Active blocker**:
+A blocker whose status is Open or In progress. A Done or Cancelled blocker releases the blocked Task, and the link stays.
+
+**Inherited urgency**:
+The ranking group a Task takes from itself and from the Plannable tasks it blocks, directly or through a chain. A blocker is at least as urgent as the work waiting on it.
+
+**Blocked work**:
+A Plannable task left entirely unplaced because an Active blocker in the same ranking was not fully placed.
+_Avoid_: Out of time, no estimate
 
 ## Time
 
@@ -85,6 +99,19 @@ _Avoid_: Latest plan for a date, schedule (as a second noun for the same aggrega
 **Planning date**:
 The calendar date assigned to a Daily plan. Planning operations name it explicitly rather than relying on an unspecified “today.”
 _Avoid_: Server date, today (at an API boundary)
+
+**Working day**:
+A weekday the owner includes in the Horizon. It does not limit which dates can have a Daily plan.
+
+**Horizon**:
+The read-only forecast of the next seven Working days, calculated when it is viewed from live Tasks, current Scheduling preferences, Commitments, and saved Daily plans.
+_Avoid_: Multi-day plan, weekly plan
+
+**Forecast day**:
+A Horizon day that has no Daily plan. Fixed ordering rules and the existing scheduler place it.
+
+**As-planned pace**:
+The Horizon assumption that an unrecorded work session on a saved Daily plan consumes its planned minutes, up to the Task's live Remaining effort.
 
 **Plan detail**:
 The complete view of one Daily plan, including its actionable schedule, recorded progress, and earlier Schedule revisions.
