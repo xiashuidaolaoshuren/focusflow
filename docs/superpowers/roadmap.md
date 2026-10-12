@@ -13,7 +13,7 @@ This tracks a multi-milestone iteration aimed at making FocusFlow's planning fea
 | 1.1.0 — Platform hardening | Implemented and merged. | [`2026-08-26-focusflow-1.1.0-platform-hardening-design.md`](specs/2026-08-26-focusflow-1.1.0-platform-hardening-design.md) |
 | 1.2.0 — The scheduled day | Implemented. | [`2026-09-07-focusflow-1.2.0-scheduled-day-design.md`](specs/2026-09-07-focusflow-1.2.0-scheduled-day-design.md); [`2026-09-07-focusflow-1.2.0-scheduled-day-plan.md`](plans/2026-09-07-focusflow-1.2.0-scheduled-day-plan.md) |
 | 1.3.0 — Progress and carry-over | Implementation plan written. | [`2026-10-02-focusflow-1.3.0-progress-carry-over-design.md`](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md); [`2026-10-02-focusflow-1.3.0-progress-carry-over-plan.md`](plans/2026-10-02-focusflow-1.3.0-progress-carry-over-plan.md) |
-| 1.4.0 — Dependencies and the multi-day horizon | Spec reviewed. | [`2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md`](specs/2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md) |
+| 1.4.0 — Dependencies and the multi-day horizon | Implementation plan written. | [`2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md`](specs/2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md); [`2026-10-12-focusflow-1.4.0-dependencies-horizon-plan.md`](plans/2026-10-12-focusflow-1.4.0-dependencies-horizon-plan.md) |
 
 Deferred items with no milestone assigned are listed at the end.
 
@@ -46,7 +46,7 @@ Implementation plan written. See the [1.3.0 design](specs/2026-10-02-focusflow-1
 
 ## 1.4.0 — Dependencies and the multi-day horizon
 
-Spec reviewed. See the [1.4.0 design](specs/2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md) and ADRs [`0028`](../adr/0028-inherited-dependency-urgency.md) through [`0035`](../adr/0035-horizon-snapshot-read.md). It overrides the earlier outline: the scheduler does change, by leaving dependents of an unfinished blocker unplaced as `BLOCKED`, and the horizon is a calculated forecast rather than a stored multi-day plan.
+Implementation plan written. See the [1.4.0 design](specs/2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md), the [1.4.0 plan](plans/2026-10-12-focusflow-1.4.0-dependencies-horizon-plan.md), and ADRs [`0028`](../adr/0028-inherited-dependency-urgency.md) through [`0035`](../adr/0035-horizon-snapshot-read.md). It overrides the earlier outline: the scheduler does change, by leaving dependents of an unfinished blocker unplaced as `BLOCKED`, and the horizon is a calculated forecast rather than a stored multi-day plan.
 
 ## Deferred, no milestone assigned
 
