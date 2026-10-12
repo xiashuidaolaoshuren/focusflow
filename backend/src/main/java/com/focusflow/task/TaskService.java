@@ -77,9 +77,8 @@ public class TaskService {
 
 	public List<TaskResponse> listForCurrentUser() {
 		Long ownerId = currentUser.getCurrentUser().id();
-		return taskRepository.findByOwner_IdOrderByDueDateAsc(ownerId).stream()
-				.map(taskResponseMapper::toResponse)
-				.toList();
+		return taskResponseMapper.toResponses(
+				taskRepository.findByOwner_IdOrderByDueDateAsc(ownerId));
 	}
 
 	public TaskResponse getForCurrentUser(Long taskId) {

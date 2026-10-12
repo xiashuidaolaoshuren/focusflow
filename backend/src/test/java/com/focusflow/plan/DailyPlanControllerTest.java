@@ -262,7 +262,9 @@ class DailyPlanControllerTest {
 										null,
 										45,
 										20,
-										2),
+										2,
+										List.of(),
+										List.of()),
 								DailyPlanResponseTestSupport.minimal(
 										1L,
 										LocalDate.of(2026, 6, 1),

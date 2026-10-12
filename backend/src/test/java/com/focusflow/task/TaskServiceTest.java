@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,6 +34,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
@@ -58,12 +60,34 @@ class TaskServiceTest {
 	@Mock
 	private CurrentUser currentUser;
 
-	private final TaskResponseMapper taskResponseMapper = new TaskResponseMapper();
+	@Mock
+	private TaskQueryService taskQueryService;
+
+	private TaskResponseMapper taskResponseMapper;
 
 	private TaskService taskService;
 
 	@BeforeEach
 	void setUp() {
+		taskResponseMapper = new TaskResponseMapper(taskQueryService);
+		lenient().when(taskQueryService.findLinksByOwnerId(any())).thenReturn(List.of());
+		lenient()
+				.when(taskQueryService.findOwnedTasksByIds(any(), any()))
+				.thenReturn(List.of());
+		lenient()
+				.when(taskRepository.save(any(Task.class)))
+				.thenAnswer(
+						invocation -> {
+							Task task = invocation.getArgument(0);
+							if (task.getId() == null) {
+								ReflectionTestUtils.setField(task, "id", 1L);
+							}
+							User taskOwner = task.getOwner();
+							if (taskOwner != null && taskOwner.getId() == null) {
+								ReflectionTestUtils.setField(taskOwner, "id", 42L);
+							}
+							return task;
+						});
 		taskService =
 				new TaskService(
 						taskRepository,

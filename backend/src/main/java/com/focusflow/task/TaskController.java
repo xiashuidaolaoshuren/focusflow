@@ -1,5 +1,6 @@
 package com.focusflow.task;
 
+import com.focusflow.task.dto.AddBlockerRequest;
 import com.focusflow.task.dto.CreateTaskRequest;
 import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
@@ -22,9 +23,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class TaskController {
 
 	private final TaskService taskService;
+	private final TaskDependencyService taskDependencyService;
 
-	public TaskController(TaskService taskService) {
+	public TaskController(TaskService taskService, TaskDependencyService taskDependencyService) {
 		this.taskService = taskService;
+		this.taskDependencyService = taskDependencyService;
 	}
 
 	@PostMapping
@@ -59,5 +62,17 @@ public class TaskController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void delete(@PathVariable Long id) {
 		taskService.deleteForCurrentUser(id);
+	}
+
+	@PostMapping("/{id}/blockers")
+	public TaskResponse addBlocker(
+			@PathVariable Long id, @Valid @RequestBody AddBlockerRequest request) {
+		return taskDependencyService.addBlocker(id, request.blockerTaskId());
+	}
+
+	@DeleteMapping("/{id}/blockers/{blockerId}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void removeBlocker(@PathVariable Long id, @PathVariable Long blockerId) {
+		taskDependencyService.removeBlocker(id, blockerId);
 	}
 }

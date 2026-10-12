@@ -54,7 +54,7 @@ class BlockProgressServiceTest {
 	@Mock private TaskService taskService;
 	@Mock private com.focusflow.task.TaskQueryService taskQueryService;
 
-	private final TaskResponseMapper taskResponseMapper = new TaskResponseMapper();
+	private TaskResponseMapper taskResponseMapper;
 	private DailyPlanResponseMapper dailyPlanResponseMapper;
 
 	private BlockProgressService service;
@@ -64,9 +64,14 @@ class BlockProgressServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		taskResponseMapper = new TaskResponseMapper(taskQueryService);
 		dailyPlanResponseMapper = new DailyPlanResponseMapper(taskQueryService);
 		lenient()
 				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
+		lenient().when(taskQueryService.findLinksByOwnerId(any())).thenReturn(List.of());
+		lenient()
+				.when(taskQueryService.findOwnedTasksByIds(any(), any()))
 				.thenReturn(List.of());
 		service =
 				new BlockProgressService(
