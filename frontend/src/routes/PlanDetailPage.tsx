@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { DailyPlanView } from '@/features/plans/DailyPlanView'
 import { PlanDeleteButton } from '@/features/plans/PlanDeleteButton'
+import { RevisionSelect } from '@/features/plans/RevisionSelect'
 import { plansListQueryPrefix, useDeletePlan, usePlan } from '@/features/plans/hooks'
 import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
@@ -93,6 +95,9 @@ export function PlanDetailPage() {
   const planId = parsePlanId(idParam)
   const { plan, isPending, isError, error, refetch } = usePlan(planId)
   const { mutate: deletePlan, isPending: isDeleting } = useDeletePlan()
+  const [selectedRevisionId, setSelectedRevisionId] = useState<number | null>(
+    null,
+  )
 
   function handleDelete() {
     if (plan == null) {
@@ -153,7 +158,18 @@ export function PlanDetailPage() {
           />
         )}
       </div>
-      <DailyPlanView plan={plan} title={`Plan for ${plan?.planDate ?? ''}`} />
+      {plan != null && plan.revisions.length > 0 ? (
+        <RevisionSelect
+          revisions={plan.revisions}
+          selectedRevisionId={selectedRevisionId}
+          onSelect={setSelectedRevisionId}
+        />
+      ) : null}
+      <DailyPlanView
+        plan={plan}
+        title={`Plan for ${plan?.planDate ?? ''}`}
+        selectedRevisionId={selectedRevisionId}
+      />
       <Link to="/plans" className={backLinkClassName}>
         Back to plan history
       </Link>

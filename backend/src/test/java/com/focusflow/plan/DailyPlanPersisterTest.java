@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -12,7 +13,10 @@ import static org.mockito.Mockito.when;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
+import com.focusflow.plan.dto.TaskEffortVersion;
+import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.schedule.BlockKind;
+import com.focusflow.schedule.FixedBreakWindow;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.schedule.UnplacedWork;
@@ -55,7 +59,10 @@ class DailyPlanPersisterTest {
 
 	@BeforeEach
 	void setUp() {
-		responseMapper = new DailyPlanResponseMapper();
+		responseMapper = new DailyPlanResponseMapper(taskQueryService);
+		lenient()
+				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
+				.thenReturn(List.of());
 		persister =
 				new DailyPlanPersister(
 						ownerSchedulingLock,
@@ -77,6 +84,51 @@ class DailyPlanPersisterTest {
 						DailyPlanSchedule.class);
 
 		assertThat(method.isAnnotationPresent(Transactional.class)).isTrue();
+	}
+
+	@Test
+	void persistPlan_writesRevisionOneWithScheduleMetrics() throws Exception {
+		User owner = new User();
+		Task task = createTask(1L, "Continue work", 60, TaskStatus.IN_PROGRESS);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+		DailyPlanSchedule schedule = sampleSchedule();
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(task));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(task), schedule);
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).saveAndFlush(captor.capture());
+		DailyPlan savedPlan = captor.getValue();
+
+		Method getRevisions = DailyPlan.class.getMethod("getRevisions");
+		@SuppressWarnings("unchecked")
+		java.util.Set<Object> revisions = (java.util.Set<Object>) getRevisions.invoke(savedPlan);
+		assertThat(revisions).hasSize(1);
+		Object revision = revisions.iterator().next();
+		assertThat(revision.getClass().getMethod("getRevisionNumber").invoke(revision))
+				.isEqualTo(1);
+		assertThat(revision.getClass().getMethod("getFreeMinutes").invoke(revision))
+				.isEqualTo(480);
+		assertThat(revision.getClass().getMethod("getScheduledWorkMinutes").invoke(revision))
+				.isEqualTo(60);
+		assertThat(revision.getClass().getMethod("getRequiredMinutes").invoke(revision))
+				.isEqualTo(60L);
+		assertThat(revision.getClass().getMethod("getTasks").invoke(revision))
+				.asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.collection(Object.class))
+				.hasSize(1);
+		assertThat(revision.getClass().getMethod("getBlocks").invoke(revision))
+				.asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.collection(Object.class))
+				.hasSize(1);
 	}
 
 	@Test
@@ -107,18 +159,19 @@ class DailyPlanPersisterTest {
 		assertThat(savedPlan.getPlanDate()).isEqualTo(planDate);
 		assertThat(savedPlan.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
 		assertThat(savedPlan.getWindowEnd()).isEqualTo(LocalTime.of(18, 0));
-		assertThat(savedPlan.getFreeMinutes()).isEqualTo(480);
-		assertThat(savedPlan.getScheduledWorkMinutes()).isEqualTo(60);
-		assertThat(savedPlan.getRequiredMinutes()).isEqualTo(60L);
-		assertThat(savedPlan.getTasks()).hasSize(1);
-		DailyPlanTask savedPlanTask = savedPlan.getTasks().iterator().next();
+		DailyPlanRevision revision = savedPlan.getLatestRevision();
+		assertThat(revision.getFreeMinutes()).isEqualTo(480);
+		assertThat(revision.getScheduledWorkMinutes()).isEqualTo(60);
+		assertThat(revision.getRequiredMinutes()).isEqualTo(60L);
+		assertThat(revision.getTasks()).hasSize(1);
+		DailyPlanTask savedPlanTask = revision.getTasks().iterator().next();
 		assertThat(savedPlanTask.getTaskReference()).isSameAs(task);
 		assertThat(savedPlanTask.getRank()).isEqualTo(1);
 		assertThat(savedPlanTask.isMustInclude()).isTrue();
 		assertThat(savedPlanTask.getUnplacedReason())
 				.isEqualTo(UnplacedReason.OUT_OF_TIME);
 		assertThat(savedPlanTask.getUnplacedMinutes()).isEqualTo(30);
-		assertThat(savedPlan.getBlocks())
+		assertThat(revision.getBlocks())
 				.singleElement()
 				.satisfies(
 						block -> {
@@ -267,10 +320,102 @@ class DailyPlanPersisterTest {
 						});
 	}
 
+	@Test
+	void appendRevision_addsNextRevisionWithCutoffAndPreservesPlanIdentity() {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", 1L);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		DailyPlan existing = existingPlanWithRevision(5L, planDate, 100L, 1);
+		existing.setWindowStart(LocalTime.of(9, 0));
+		existing.setWindowEnd(LocalTime.of(18, 0));
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(14, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						240,
+						0,
+						0L,
+						0,
+						0,
+						List.of(),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
+						List.of());
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findByOwner_IdAndId(1L, 5L)).thenReturn(Optional.of(existing));
+		when(taskQueryService.findPlannableTasksByOwnerId(1L)).thenReturn(List.of());
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		DailyPlanResponse response =
+				persister.appendRevision(
+						5L,
+						100L,
+						List.of(),
+						LocalTime.of(14, 0),
+						List.of(),
+						List.of(),
+						schedule);
+
+		assertThat(existing.getRevisions()).hasSize(2);
+		DailyPlanRevision latest = existing.getLatestRevision();
+		assertThat(latest.getRevisionNumber()).isEqualTo(2);
+		assertThat(latest.getCutoffTime()).isEqualTo(LocalTime.of(14, 0));
+		assertThat(existing.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
+		assertThat(existing.getWindowEnd()).isEqualTo(LocalTime.of(18, 0));
+		assertThat(response.id()).isEqualTo(5L);
+	}
+
+	@Test
+	void appendRevision_whenExpectedRevisionIsStale_throwsPlanChanged() {
+		User owner = new User();
+		ReflectionTestUtils.setField(owner, "id", 1L);
+		LocalDate planDate = LocalDate.of(2026, 8, 28);
+		DailyPlan existing = existingPlanWithRevision(5L, planDate, 100L, 1);
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findByOwner_IdAndId(1L, 5L)).thenReturn(Optional.of(existing));
+		when(taskQueryService.findPlannableTasksByOwnerId(1L)).thenReturn(List.of());
+
+		assertThatThrownBy(
+						() ->
+								persister.appendRevision(
+										5L,
+										99L,
+										List.of(),
+										LocalTime.of(14, 0),
+										List.of(),
+										List.of(),
+										sampleSchedule()))
+				.isInstanceOf(ConflictException.class)
+				.satisfies(
+						ex ->
+								assertThat(((ConflictException) ex).getCode()).isEqualTo("PLAN_CHANGED"));
+
+		verify(dailyPlanRepository, never()).saveAndFlush(any());
+	}
+
 	private DailyPlan existingPlan(long id, LocalDate planDate) {
 		DailyPlan plan = new DailyPlan();
 		ReflectionTestUtils.setField(plan, "id", id);
 		plan.setPlanDate(planDate);
+		return plan;
+	}
+
+	private DailyPlan existingPlanWithRevision(
+			long planId, LocalDate planDate, long revisionId, int revisionNumber) {
+		DailyPlan plan = existingPlan(planId, planDate);
+		DailyPlanRevision revision = new DailyPlanRevision();
+		revision.setRevisionNumber(revisionNumber);
+		ReflectionTestUtils.setField(revision, "id", revisionId);
+		plan.addRevision(revision);
 		return plan;
 	}
 
@@ -292,7 +437,13 @@ class DailyPlanPersisterTest {
 								LocalTime.of(10, 0),
 								1L,
 								null)),
-				List.of(new UnplacedWork(1L, UnplacedReason.OUT_OF_TIME, 30)));
+				List.of(new UnplacedWork(1L, UnplacedReason.OUT_OF_TIME, 30)),
+				true,
+				50,
+				10,
+				15,
+				0,
+				List.of());
 	}
 
 	@Test
@@ -321,7 +472,7 @@ class DailyPlanPersisterTest {
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).save(captor.capture());
-		DailyPlanTask planTask = captor.getValue().getTasks().iterator().next();
+		DailyPlanTask planTask = captor.getValue().getLatestRevision().getTasks().iterator().next();
 		assertThat(planTask.getTaskTitle()).isEqualTo("Captured title");
 		assertThat(planTask.getTaskEstimatedMinutes()).isEqualTo(60);
 		assertThat(planTask.getTaskDueDate()).isEqualTo(LocalDate.of(2026, 8, 28));
@@ -329,6 +480,102 @@ class DailyPlanPersisterTest {
 		assertThat(planTask.getTaskPriority()).isEqualTo(TaskPriority.MEDIUM);
 		assertThat(planTask.isMustInclude()).isTrue();
 		assertThat(planTask.getTaskReference()).isSameAs(reloaded);
+	}
+
+	@Test
+	void persistPlan_storesTheCapturedRemainingEffortEvenWhenReloadedTaskChanged() {
+		User owner = new User();
+		LocalDate planDate = LocalDate.of(2026, 9, 1);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+
+		Task captured = createTask(1L, "Captured", 90, TaskStatus.OPEN);
+		captured.setRemainingEffortMinutes(40);
+		Task reloaded = createTask(1L, "Reloaded later", 90, TaskStatus.OPEN);
+		reloaded.setRemainingEffortMinutes(15);
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(reloaded));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), sampleSchedule());
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).save(captor.capture());
+		DailyPlanTask planTask = captor.getValue().getLatestRevision().getTasks().iterator().next();
+		assertThat(planTask.getCapturedRemainingEffortMinutes()).isEqualTo(40);
+		assertThat(captured.getRemainingEffortMinutes()).isEqualTo(40);
+		assertThat(reloaded.getRemainingEffortMinutes()).isEqualTo(15);
+	}
+
+	@Test
+	void persistPlan_writesTheCapturedSchedulingPolicyAndFixedBreaks() {
+		User owner = new User();
+		LocalDate planDate = LocalDate.of(2026, 9, 2);
+		List<AiPlanItem> aiItems = List.of(new AiPlanItem(1L, 1));
+		Task captured = createTask(1L, "Captured", 60, TaskStatus.OPEN);
+
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(9, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						480,
+						60,
+						60L,
+						0,
+						0,
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(9, 0),
+										LocalTime.of(10, 0),
+										1L,
+										null)),
+						List.of(),
+						false,
+						45,
+						7,
+						20,
+						12,
+						List.of(
+								new FixedBreakWindow(
+										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+						1L, planDate))
+				.thenReturn(Optional.empty());
+		when(taskQueryService.findOwnedTasksByIds(1L, List.of(1L))).thenReturn(List.of(captured));
+		when(dailyPlanRepository.save(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), schedule);
+
+		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
+		verify(dailyPlanRepository).save(captor.capture());
+		DailyPlan plan = captor.getValue();
+		assertThat(plan.getCadenceEnabled()).isFalse();
+		assertThat(plan.getTargetFocusMinutes()).isEqualTo(45);
+		assertThat(plan.getBreakMinutes()).isEqualTo(7);
+		assertThat(plan.getMinSessionMinutes()).isEqualTo(20);
+		assertThat(plan.getBufferMinutes()).isEqualTo(12);
+		assertThat(plan.getFixedBreakSnapshots())
+				.singleElement()
+				.satisfies(
+						snapshot -> {
+							assertThat(snapshot.getLabel()).isEqualTo("Lunch");
+							assertThat(snapshot.getStartTime()).isEqualTo(LocalTime.of(12, 0));
+							assertThat(snapshot.getEndTime()).isEqualTo(LocalTime.of(13, 0));
+						});
 	}
 
 	private Task createTask(Long id, String title, Integer estimatedMinutes, TaskStatus status) {

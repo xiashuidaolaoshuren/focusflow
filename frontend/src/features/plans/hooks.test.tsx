@@ -4,18 +4,25 @@ import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
+import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
 import {
   planByDateQueryKey,
   planDetailQueryKey,
+  plansByDateQueryPrefix,
+  plansDetailQueryPrefix,
+  plansListQueryPrefix,
   plansQueryKey,
   useDeletePlan,
   useGeneratePlan,
   usePlan,
   usePlanByDate,
   usePlans,
+  useRecordBlockProgress,
+  useReplan,
 } from '@/features/plans/hooks'
+import { tasksQueryKey } from '@/features/tasks/hooks'
 import { markRegeneratePromptNeeded, useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
 
 vi.mock('@/features/plans/api', () => ({
@@ -24,6 +31,8 @@ vi.mock('@/features/plans/api', () => ({
   getPlanByDate: vi.fn(),
   getPlanById: vi.fn(),
   listPlans: vi.fn(),
+  recordBlockProgress: vi.fn(),
+  replanDailyPlan: vi.fn(),
 }))
 
 import {
@@ -32,6 +41,8 @@ import {
   getPlanByDate,
   getPlanById,
   listPlans,
+  recordBlockProgress,
+  replanDailyPlan,
 } from '@/features/plans/api'
 
 const mockedDeletePlan = vi.mocked(deletePlan)
@@ -39,6 +50,8 @@ const mockedGenerateDailyPlan = vi.mocked(generateDailyPlan)
 const mockedGetPlanByDate = vi.mocked(getPlanByDate)
 const mockedGetPlanById = vi.mocked(getPlanById)
 const mockedListPlans = vi.mocked(listPlans)
+const mockedRecordBlockProgress = vi.mocked(recordBlockProgress)
+const mockedReplanDailyPlan = vi.mocked(replanDailyPlan)
 
 function createWrapper(queryClient?: QueryClient) {
   const client =
@@ -280,6 +293,216 @@ describe('useDeletePlan', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: planDetailQueryKey(1),
+    })
+  })
+})
+
+describe('useRecordBlockProgress', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+  it('refetches the plan and the task list after a recorded outcome', async () => {
+    mockedRecordBlockProgress.mockResolvedValue({
+      task: {
+        id: 10,
+        title: 'Write tests',
+        description: null,
+        priority: 'HIGH',
+        status: 'IN_PROGRESS',
+        dueDate: '2026-06-15',
+        estimatedMinutes: 60,
+        remainingEffortMinutes: 25,
+        effortVersion: 1,
+      },
+      plan: samplePlan,
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useRecordBlockProgress(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({
+      planId: 1,
+      blockId: 100,
+      request: {
+        outcome: 'DONE',
+        actualMinutes: 35,
+        currentDate: '2026-06-15',
+        expectedProgressVersion: 0,
+        finish: false,
+        checkpoint: null,
+      },
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockedRecordBlockProgress).toHaveBeenCalledWith(1, 100, {
+      outcome: 'DONE',
+      actualMinutes: 35,
+      currentDate: '2026-06-15',
+      expectedProgressVersion: 0,
+      finish: false,
+      checkpoint: null,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: planByDateQueryKey(samplePlan.planDate),
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansListQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: planDetailQueryKey(samplePlan.id),
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+  })
+
+  it('refetches the plan views and reports a PROGRESS_CONFLICT', async () => {
+    mockedRecordBlockProgress.mockRejectedValue(
+      new ApiError({
+        status: 409,
+        message: 'block progress has changed',
+        code: 'PROGRESS_CONFLICT',
+      }),
+    )
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    const onConflict = vi.fn()
+
+    const { result } = renderHook(
+      () => useRecordBlockProgress({ onConflict }),
+      { wrapper: createWrapper(queryClient) },
+    )
+
+    result.current.mutate({
+      planId: 1,
+      blockId: 100,
+      request: {
+        outcome: 'DONE',
+        actualMinutes: null,
+        currentDate: '2026-06-15',
+        expectedProgressVersion: 0,
+        finish: true,
+        checkpoint: null,
+      },
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansByDateQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansListQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansDetailQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(onConflict).toHaveBeenCalled()
+  })
+})
+
+describe('useReplan', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('refreshes the plan views after a successful re-plan', async () => {
+    mockedReplanDailyPlan.mockResolvedValue({ ...samplePlan, id: 1 })
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useReplan(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({
+      id: 1,
+      request: {
+        currentDate: '2026-06-15',
+        cutoff: '09:45:00',
+        expectedRevisionId: 1,
+        effortVersions: [{ taskId: 10, effortVersion: 2 }],
+      },
+    })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockedReplanDailyPlan).toHaveBeenCalledWith(1, {
+      currentDate: '2026-06-15',
+      cutoff: '09:45:00',
+      expectedRevisionId: 1,
+      effortVersions: [{ taskId: 10, effortVersion: 2 }],
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: planByDateQueryKey(samplePlan.planDate),
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansListQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: planDetailQueryKey(samplePlan.id),
+    })
+  })
+
+  it('refreshes the plan views when a re-plan loses to a newer change', async () => {
+    mockedReplanDailyPlan.mockRejectedValue(
+      new ApiError({
+        status: 409,
+        message: 'plan revision has changed',
+        code: 'PLAN_CHANGED',
+      }),
+    )
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useReplan(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({
+      id: 1,
+      request: {
+        currentDate: '2026-06-15',
+        cutoff: '09:45:00',
+        expectedRevisionId: 1,
+        effortVersions: [],
+      },
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansByDateQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansDetailQueryPrefix,
     })
   })
 })

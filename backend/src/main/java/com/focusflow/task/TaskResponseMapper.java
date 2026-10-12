@@ -14,6 +14,8 @@ public class TaskResponseMapper {
 				task.getPriority(),
 				task.getStatus(),
 				task.getDueDate(),
-				task.getEstimatedMinutes());
+				task.getEstimatedMinutes(),
+				task.getRemainingEffortMinutes(),
+				task.getEffortVersion());
 	}
 }

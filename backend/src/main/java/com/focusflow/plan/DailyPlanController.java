@@ -1,9 +1,12 @@
 package com.focusflow.plan;
 
 import com.focusflow.common.web.PageResponse;
+import com.focusflow.plan.dto.BlockProgressRequest;
+import com.focusflow.plan.dto.BlockProgressResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
 import com.focusflow.plan.dto.GeneratePlanRequest;
+import com.focusflow.plan.dto.ReplanRequest;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.Valid;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -25,9 +29,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class DailyPlanController {
 
 	private final DailyPlanService dailyPlanService;
+	private final BlockProgressService blockProgressService;
 
-	public DailyPlanController(DailyPlanService dailyPlanService) {
+	public DailyPlanController(
+			DailyPlanService dailyPlanService, BlockProgressService blockProgressService) {
 		this.dailyPlanService = dailyPlanService;
+		this.blockProgressService = blockProgressService;
 	}
 
 	@GetMapping
@@ -55,6 +62,14 @@ public class DailyPlanController {
 		return dailyPlanService.getForCurrentUser(id);
 	}
 
+	@PutMapping("/{planId}/blocks/{blockId}/progress")
+	public BlockProgressResponse recordProgress(
+			@PathVariable Long planId,
+			@PathVariable Long blockId,
+			@Valid @RequestBody BlockProgressRequest request) {
+		return blockProgressService.record(planId, blockId, request);
+	}
+
 	@DeleteMapping("/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void delete(@PathVariable Long id) {
@@ -65,5 +80,11 @@ public class DailyPlanController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public DailyPlanResponse generate(@Valid @RequestBody GeneratePlanRequest request) {
 		return dailyPlanService.generate(request);
+	}
+
+	@PostMapping("/{id}/replan")
+	public DailyPlanResponse replan(
+			@PathVariable Long id, @Valid @RequestBody ReplanRequest request) {
+		return dailyPlanService.replan(id, request);
 	}
 }

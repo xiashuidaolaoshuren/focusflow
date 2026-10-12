@@ -44,6 +44,9 @@ public class DailyPlanPromptBuilder {
 		if (task.estimatedMinutes() != null) {
 			line.append(", estimatedMinutes=").append(task.estimatedMinutes());
 		}
+		if (task.remainingEffortMinutes() != null) {
+			line.append(", remainingEffortMinutes=").append(task.remainingEffortMinutes());
+		}
 		line.append(", status=").append(task.status());
 		line.append(')');
 		return line.toString();

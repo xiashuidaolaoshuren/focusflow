@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -49,34 +50,33 @@ public class DailyPlan {
 	@Column(name = "peak_end")
 	private LocalTime peakEnd;
 
-	@Column(name = "free_minutes", nullable = false)
-	private int freeMinutes;
+	@Column(name = "cadence_enabled")
+	private Boolean cadenceEnabled;
 
-	@Column(name = "scheduled_work_minutes", nullable = false)
-	private int scheduledWorkMinutes;
+	@Column(name = "target_focus_minutes")
+	private Integer targetFocusMinutes;
 
-	@Column(name = "required_minutes", nullable = false)
-	private long requiredMinutes;
+	@Column(name = "break_minutes")
+	private Integer breakMinutes;
 
-	@Column(name = "requested_buffer_minutes", nullable = false)
-	private int requestedBufferMinutes;
+	@Column(name = "min_session_minutes")
+	private Integer minSessionMinutes;
 
-	@Column(name = "realized_buffer_minutes", nullable = false)
-	private int realizedBufferMinutes;
-
-	@OneToMany(
-			mappedBy = "dailyPlan",
-			cascade = CascadeType.ALL,
-			orphanRemoval = true)
-	@OrderBy("rank ASC")
-	private final Set<DailyPlanTask> tasks = new LinkedHashSet<>();
+	@Column(name = "buffer_minutes")
+	private Integer bufferMinutes;
 
 	@OneToMany(
 			mappedBy = "dailyPlan",
 			cascade = CascadeType.ALL,
 			orphanRemoval = true)
-	@OrderBy("position ASC")
-	private final Set<DailyPlanBlock> blocks = new LinkedHashSet<>();
+	@OrderBy("revisionNumber ASC")
+	private final Set<DailyPlanRevision> revisions = new LinkedHashSet<>();
+
+	@OneToMany(
+			mappedBy = "dailyPlan",
+			cascade = CascadeType.ALL,
+			orphanRemoval = true)
+	private final Set<PlanFixedBreakSnapshot> fixedBreakSnapshots = new LinkedHashSet<>();
 
 	public Long getId() {
 		return id;
@@ -138,61 +138,67 @@ public class DailyPlan {
 		this.peakEnd = peakEnd;
 	}
 
-	public int getFreeMinutes() {
-		return freeMinutes;
+	public Boolean getCadenceEnabled() {
+		return cadenceEnabled;
 	}
 
-	public void setFreeMinutes(int freeMinutes) {
-		this.freeMinutes = freeMinutes;
+	public void setCadenceEnabled(Boolean cadenceEnabled) {
+		this.cadenceEnabled = cadenceEnabled;
 	}
 
-	public int getScheduledWorkMinutes() {
-		return scheduledWorkMinutes;
+	public Integer getTargetFocusMinutes() {
+		return targetFocusMinutes;
 	}
 
-	public void setScheduledWorkMinutes(int scheduledWorkMinutes) {
-		this.scheduledWorkMinutes = scheduledWorkMinutes;
+	public void setTargetFocusMinutes(Integer targetFocusMinutes) {
+		this.targetFocusMinutes = targetFocusMinutes;
 	}
 
-	public long getRequiredMinutes() {
-		return requiredMinutes;
+	public Integer getBreakMinutes() {
+		return breakMinutes;
 	}
 
-	public void setRequiredMinutes(long requiredMinutes) {
-		this.requiredMinutes = requiredMinutes;
+	public void setBreakMinutes(Integer breakMinutes) {
+		this.breakMinutes = breakMinutes;
 	}
 
-	public int getRequestedBufferMinutes() {
-		return requestedBufferMinutes;
+	public Integer getMinSessionMinutes() {
+		return minSessionMinutes;
 	}
 
-	public void setRequestedBufferMinutes(int requestedBufferMinutes) {
-		this.requestedBufferMinutes = requestedBufferMinutes;
+	public void setMinSessionMinutes(Integer minSessionMinutes) {
+		this.minSessionMinutes = minSessionMinutes;
 	}
 
-	public int getRealizedBufferMinutes() {
-		return realizedBufferMinutes;
+	public Integer getBufferMinutes() {
+		return bufferMinutes;
 	}
 
-	public void setRealizedBufferMinutes(int realizedBufferMinutes) {
-		this.realizedBufferMinutes = realizedBufferMinutes;
+	public void setBufferMinutes(Integer bufferMinutes) {
+		this.bufferMinutes = bufferMinutes;
 	}
 
-	public Set<DailyPlanTask> getTasks() {
-		return tasks;
+	public Set<DailyPlanRevision> getRevisions() {
+		return revisions;
 	}
 
-	public Set<DailyPlanBlock> getBlocks() {
-		return blocks;
+	public Set<PlanFixedBreakSnapshot> getFixedBreakSnapshots() {
+		return fixedBreakSnapshots;
 	}
 
-	public void addTask(DailyPlanTask task) {
-		tasks.add(task);
-		task.setDailyPlan(this);
+	public DailyPlanRevision getLatestRevision() {
+		return revisions.stream()
+				.max(Comparator.comparingInt(DailyPlanRevision::getRevisionNumber))
+				.orElseThrow(() -> new IllegalStateException("plan has no revisions"));
 	}
 
-	public void addBlock(DailyPlanBlock block) {
-		blocks.add(block);
-		block.setDailyPlan(this);
+	public void addRevision(DailyPlanRevision revision) {
+		revisions.add(revision);
+		revision.setDailyPlan(this);
+	}
+
+	public void addFixedBreakSnapshot(PlanFixedBreakSnapshot snapshot) {
+		fixedBreakSnapshots.add(snapshot);
+		snapshot.setDailyPlan(this);
 	}
 }

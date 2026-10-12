@@ -12,4 +12,7 @@ public record UpdateTaskRequest(
 		TaskPriority priority,
 		TaskStatus status,
 		LocalDate dueDate,
-		@Positive Integer estimatedMinutes) {}
+		@Positive Integer estimatedMinutes,
+		LocalDate currentDate,
+		@Positive Integer remainingEffortMinutes,
+		Integer effortVersion) {}

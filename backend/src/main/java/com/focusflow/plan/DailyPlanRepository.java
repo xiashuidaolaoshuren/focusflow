@@ -11,27 +11,90 @@ import org.springframework.data.repository.query.Param;
 
 public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 
-	@EntityGraph(attributePaths = {"tasks", "blocks", "blocks.dailyPlanTask"})
+	@EntityGraph(
+			attributePaths = {
+				"revisions",
+				"revisions.tasks",
+				"revisions.tasks.taskReference",
+				"revisions.blocks",
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"fixedBreakSnapshots"
+			})
 	Optional<DailyPlan> findByOwner_IdAndId(Long ownerId, Long planId);
 
 	@Query(
 			value =
 					"""
 					SELECT p.id AS id, p.planDate AS planDate, p.createdAt AS createdAt,
-					       p.scheduledWorkMinutes AS scheduledWorkMinutes,
+					       (SELECT r.scheduledWorkMinutes FROM DailyPlanRevision r
+					        WHERE r.dailyPlan.id = p.id
+					          AND r.revisionNumber = (
+					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					              WHERE r2.dailyPlan.id = p.id))
+					           AS scheduledWorkMinutes,
 					       (SELECT COUNT(b) FROM DailyPlanBlock b
-					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
+					        JOIN b.revision r
+					        WHERE r.dailyPlan.id = p.id
+					          AND r.revisionNumber = (
+					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					              WHERE r2.dailyPlan.id = p.id)
+					          AND b.kind = com.focusflow.schedule.BlockKind.WORK)
 					           AS workSessionCount,
 					       (SELECT COUNT(DISTINCT b.dailyPlanTask.id) FROM DailyPlanBlock b
-					        WHERE b.dailyPlan.id = p.id AND b.kind = com.focusflow.schedule.BlockKind.WORK)
+					        JOIN b.revision r
+					        WHERE r.dailyPlan.id = p.id
+					          AND r.revisionNumber = (
+					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					              WHERE r2.dailyPlan.id = p.id)
+					          AND b.kind = com.focusflow.schedule.BlockKind.WORK)
 					           AS scheduledTaskCount,
 					       (SELECT COUNT(t) FROM DailyPlanTask t
-					        WHERE t.dailyPlan.id = p.id AND t.unplacedReason IS NOT NULL)
+					        JOIN t.revision r
+					        WHERE r.dailyPlan.id = p.id
+					          AND r.revisionNumber = (
+					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					              WHERE r2.dailyPlan.id = p.id)
+					          AND t.unplacedReason IS NOT NULL)
 					           AS unplacedWorkCount,
 					       EXISTS (SELECT t FROM DailyPlanTask t
-					               WHERE t.dailyPlan.id = p.id
+					               JOIN t.revision r
+					               WHERE r.dailyPlan.id = p.id
+					                 AND r.revisionNumber = (
+					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					                     WHERE r2.dailyPlan.id = p.id)
 					                 AND t.mustInclude = true
-					                 AND t.unplacedReason IS NOT NULL) AS hasWarning
+					                 AND t.unplacedReason IS NOT NULL) AS hasWarning,
+					       EXISTS (SELECT b FROM DailyPlanBlock b
+					               JOIN b.revision r
+					               WHERE r.dailyPlan.id = p.id
+					                 AND b.outcome IS NOT NULL) AS hasProgress,
+					       EXISTS (SELECT t FROM DailyPlanTask t
+					               JOIN t.revision r
+					               LEFT JOIN t.taskReference live
+					               WHERE r.dailyPlan.id = p.id
+					                 AND r.revisionNumber = (
+					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					                     WHERE r2.dailyPlan.id = p.id)
+					                 AND (
+					                   live IS NULL
+					                   OR live.status NOT IN (
+					                       com.focusflow.task.TaskStatus.OPEN,
+					                       com.focusflow.task.TaskStatus.IN_PROGRESS)
+					                   OR NOT (
+					                     (CASE
+					                        WHEN p.cadenceEnabled IS NULL
+					                             AND t.capturedRemainingEffortMinutes IS NULL
+					                        THEN t.taskEstimatedMinutes
+					                        ELSE t.capturedRemainingEffortMinutes
+					                      END IS NULL
+					                      AND live.remainingEffortMinutes IS NULL)
+					                     OR CASE
+					                          WHEN p.cadenceEnabled IS NULL
+					                               AND t.capturedRemainingEffortMinutes IS NULL
+					                          THEN t.taskEstimatedMinutes
+					                          ELSE t.capturedRemainingEffortMinutes
+					                        END = live.remainingEffortMinutes))) AS needsRefresh
 					FROM DailyPlan p
 					WHERE p.owner.id = :ownerId
 					ORDER BY p.createdAt DESC, p.id DESC
@@ -40,7 +103,16 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 	Page<DailyPlanSummaryProjection> findSummariesByOwner(
 			@Param("ownerId") Long ownerId, Pageable pageable);
 
-	@EntityGraph(attributePaths = {"tasks", "blocks", "blocks.dailyPlanTask"})
+	@EntityGraph(
+			attributePaths = {
+				"revisions",
+				"revisions.tasks",
+				"revisions.tasks.taskReference",
+				"revisions.blocks",
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"fixedBreakSnapshots"
+			})
 	Optional<DailyPlan> findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 			Long ownerId, LocalDate planDate);
 }

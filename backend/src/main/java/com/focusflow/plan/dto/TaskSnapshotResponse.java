@@ -12,4 +12,5 @@ public record TaskSnapshotResponse(
 		TaskStatus status,
 		LocalDate dueDate,
 		Integer estimatedMinutes,
+		Integer capturedRemainingEffortMinutes,
 		boolean mustInclude) {}

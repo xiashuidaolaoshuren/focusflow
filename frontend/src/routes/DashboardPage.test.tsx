@@ -23,6 +23,7 @@ vi.mock('@/features/tasks/hooks', async (importOriginal) => {
 vi.mock('@/features/plans/hooks', () => ({
   usePlanByDate: vi.fn(),
   useGeneratePlan: vi.fn(),
+  useReplan: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }))
 
 vi.mock('@/features/commitments/hooks', () => ({
@@ -77,6 +78,8 @@ const sampleTask = {
   status: 'OPEN' as const,
   dueDate: '2026-06-15',
   estimatedMinutes: 60,
+  remainingEffortMinutes: 25,
+  effortVersion: 0,
 }
 
 const dashboardSamplePlan = samplePlan
@@ -386,6 +389,7 @@ describe('DashboardPage', () => {
         status: 'IN_PROGRESS',
         dueDate: '2026-06-15',
         estimatedMinutes: 60,
+        effortVersion: 0,
       },
     })
   })
@@ -428,8 +432,20 @@ describe('DashboardPage', () => {
 
     renderDashboard()
 
-    expect(screen.getByText(/Write tests/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/work: write tests/i)).toBeInTheDocument()
     expect(screen.getByText(/45 min scheduled/)).toBeInTheDocument()
+  })
+
+  it('does not offer revision browsing on the dashboard', () => {
+    mockLoadedTasks()
+    mockMutations()
+    mockExistingPlan()
+
+    renderDashboard()
+
+    expect(
+      screen.queryByRole('combobox', { name: /revision/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows plan skeleton while today plan is loading', () => {

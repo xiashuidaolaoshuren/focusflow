@@ -1,6 +1,7 @@
 import { apiRequest } from '@/lib/api'
 import type {
   CreateTaskRequest,
+  RemainingEffortRequest,
   TaskResponse,
   UpdateTaskRequest,
 } from '@/types/api'
@@ -24,6 +25,16 @@ export async function updateTask(
 ): Promise<TaskResponse> {
   return apiRequest<TaskResponse>(`/api/tasks/${id}`, {
     method: 'PUT',
+    body: request,
+  })
+}
+
+export async function reassessRemainingEffort(
+  id: number,
+  request: RemainingEffortRequest,
+): Promise<TaskResponse> {
+  return apiRequest<TaskResponse>(`/api/tasks/${id}/remaining-effort`, {
+    method: 'POST',
     body: request,
   })
 }

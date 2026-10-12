@@ -1,0 +1,5 @@
+# Horizon credit follows dependency order and captured assessments
+
+Assumed credit is decided for each unrecorded saved session. The session counts, up to the live remainder, only when it starts after its active blockers are satisfied and its date is after the latest remaining-effort checkpoint. A revision that captured that checkpoint is the exception: its later sessions on the checkpoint date can still count. Displayed sessions stay visible either way. Each daily-plan task stores the captured checkpoint id, with no foreign key, because equal remaining minutes do not identify the assessment and a later save time does not prove the revision saw it.
+
+Counting every unrecorded session was rejected because a checkpoint would be subtracted again and a dependency violation could be reported as on track. Excluding the whole saved day was rejected because a later session that day can still be valid. Using the revision's save time was rejected because generation can capture the old remainder and persist after the checkpoint. Recording the wall-clock intervals an assessment covered was rejected because the product does not collect actual start and end times.

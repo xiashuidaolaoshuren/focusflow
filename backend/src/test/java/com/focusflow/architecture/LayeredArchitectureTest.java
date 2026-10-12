@@ -18,6 +18,13 @@ class LayeredArchitectureTest {
 							javaClass.getPackageName().contains("com.focusflow.task")
 									&& javaClass.getSimpleName().endsWith("Repository"));
 
+	private static final DescribedPredicate<JavaClass> PLAN_REPOSITORIES =
+			DescribedPredicate.describe(
+					"plan repositories",
+					javaClass ->
+							javaClass.getPackageName().contains("com.focusflow.plan")
+									&& javaClass.getSimpleName().endsWith("Repository"));
+
 	@ArchTest
 	static final ArchRule controllers_should_not_access_repositories =
 			noClasses()
@@ -50,6 +57,17 @@ class LayeredArchitectureTest {
 					.because("plan services must use task facades instead of task repositories");
 
 	@ArchTest
+	static final ArchRule task_services_should_not_access_plan_repositories =
+			noClasses()
+					.that()
+					.resideInAPackage("com.focusflow.task")
+					.and()
+					.haveSimpleNameEndingWith("Service")
+					.should()
+					.dependOnClassesThat(PLAN_REPOSITORIES)
+					.because("task services must use plan facades instead of plan repositories");
+
+	@ArchTest
 	static final ArchRule task_services_should_not_depend_on_auth_dtos =
 			noClasses()
 					.that()
@@ -69,6 +87,17 @@ class LayeredArchitectureTest {
 					.resideInAnyPackage(
 							"org.springframework..", "jakarta.persistence..", "com.focusflow.plan.dto..")
 					.because("the scheduler is pure: no Spring, JPA, or plan DTOs");
+
+	@ArchTest
+	static final ArchRule effort_should_not_depend_on_framework_layers =
+			noClasses()
+					.that()
+					.resideInAPackage("com.focusflow.effort")
+					.should()
+					.dependOnClassesThat()
+					.resideInAnyPackage(
+							"org.springframework..", "jakarta.persistence..", "..dto..")
+					.because("the effort ledger is pure: no Spring, JPA, or HTTP DTOs");
 
 	@ArchTest
 	static final ArchRule security_should_not_depend_on_auth_dtos =

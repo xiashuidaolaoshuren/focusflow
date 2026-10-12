@@ -4,16 +4,22 @@ import static com.focusflow.testsupport.PersistenceFixtures.savedPlan;
 import static com.focusflow.testsupport.PersistenceFixtures.savedTask;
 import static com.focusflow.testsupport.PersistenceFixtures.savedUser;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.plan.DailyPlan;
+import com.focusflow.plan.DailyPlanBlock;
 import com.focusflow.plan.DailyPlanPersister;
+import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
 import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
+import com.focusflow.plan.DailyPlanService;
 import com.focusflow.plan.DailyPlanSummaryProjection;
+import com.focusflow.plan.PlanFixedBreakSnapshot;
 import com.focusflow.plan.dto.DailyPlanResponse;
+import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.schedule.BlockKind;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedReason;
@@ -31,6 +37,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +62,8 @@ class PostgresIntegrationTest {
 	@Autowired DailyPlanRepository dailyPlanRepository;
 
 	@Autowired DailyPlanPersister dailyPlanPersister;
+
+	@Autowired DailyPlanService dailyPlanService;
 
 	@Autowired TransactionTemplate transactionTemplate;
 
@@ -157,60 +166,78 @@ class PostgresIntegrationTest {
 								.withAccountPrefix(accountPrefix)
 								.withPasswordHash(
 										"$2a$10$8888888888888888888888888888888888888888888888888888"));
-		return jdbcTemplate.queryForObject(
+		Long planId =
+				jdbcTemplate.queryForObject(
+						"""
+						INSERT INTO daily_plans (
+						    owner_id, plan_date, created_at, window_start, window_end
+						) VALUES (?, DATE '2026-10-04', NOW(), TIME '09:00', TIME '18:00')
+						RETURNING id
+						""",
+						Long.class,
+						owner.getId());
+		jdbcTemplate.update(
 				"""
-				INSERT INTO daily_plans (
-				    owner_id, plan_date, created_at, window_start, window_end,
-				    free_minutes, scheduled_work_minutes, required_minutes,
-				    requested_buffer_minutes, realized_buffer_minutes
-				) VALUES (?, DATE '2026-10-04', NOW(), TIME '09:00', TIME '18:00', 0, 0, 0, 0, 0)
-				RETURNING id
+				INSERT INTO daily_plan_revisions (
+				    daily_plan_id, revision_number, free_minutes, scheduled_work_minutes,
+				    required_minutes, requested_buffer_minutes, realized_buffer_minutes,
+				    created_at
+				) VALUES (?, 1, 0, 0, 0, 0, 0, NOW())
 				""",
+				planId);
+		return planId;
+	}
+
+	private Long revisionIdForPlan(Long planId) {
+		return jdbcTemplate.queryForObject(
+				"SELECT id FROM daily_plan_revisions WHERE daily_plan_id = ?",
 				Long.class,
-				owner.getId());
+				planId);
 	}
 
 	private Long insertBareDailyPlanTask(Long planId, long sourceTaskId) {
 		return jdbcTemplate.queryForObject(
 				"""
 				INSERT INTO daily_plan_tasks (
-				    daily_plan_id, rank, source_task_id, task_title, task_priority,
+				    revision_id, rank, source_task_id, task_title, task_priority,
 				    task_status, must_include
 				) VALUES (?, 1, ?, 'Snapshot', 'MEDIUM', 'OPEN', FALSE)
 				RETURNING id
 				""",
 				Long.class,
-				planId,
+				revisionIdForPlan(planId),
 				sourceTaskId);
 	}
 
 	@Test
 	void dailyPlanBlocks_rejectZeroDurationIntervals() {
 		Long planId = insertBareDailyPlan("block-zero-duration", 1);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'BUFFER', TIME '12:00', TIME '12:00', 'Buffer', 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
 	@Test
 	void dailyPlanBlocks_rejectWorkBlockWithoutTaskReference() {
 		Long planId = insertBareDailyPlan("block-work-no-ref", 2);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'WORK', TIME '09:00', TIME '10:00', NULL, 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -223,10 +250,10 @@ class PostgresIntegrationTest {
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, daily_plan_task_id, kind, start_time, end_time, label, position
+										    revision_id, daily_plan_task_id, kind, start_time, end_time, label, position
 										) VALUES (?, ?, 'WORK', TIME '09:00', TIME '10:00', 'Should not label work', 1)
 										""",
-										planId,
+										revisionIdForPlan(planId),
 										planTaskId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
@@ -234,15 +261,16 @@ class PostgresIntegrationTest {
 	@Test
 	void dailyPlanBlocks_rejectNonWorkBlockWithoutLabel() {
 		Long planId = insertBareDailyPlan("block-nonwork-no-label", 4);
+		Long revisionId = revisionIdForPlan(planId);
 		assertThatThrownBy(
 						() ->
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, kind, start_time, end_time, label, position
+										    revision_id, kind, start_time, end_time, label, position
 										) VALUES (?, 'BUFFER', TIME '17:00', TIME '18:00', NULL, 1)
 										""",
-										planId))
+										revisionId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -255,10 +283,10 @@ class PostgresIntegrationTest {
 								jdbcTemplate.update(
 										"""
 										INSERT INTO daily_plan_blocks (
-										    daily_plan_id, daily_plan_task_id, kind, start_time, end_time, label, position
+										    revision_id, daily_plan_task_id, kind, start_time, end_time, label, position
 										) VALUES (?, ?, 'BUFFER', TIME '17:00', TIME '18:00', 'Buffer', 1)
 										""",
-										planId,
+										revisionIdForPlan(planId),
 										planTaskId))
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
@@ -525,13 +553,13 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getRank)
 									.containsExactly(1, 2);
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getSourceTaskId)
 									.containsExactly(savedSecond.getId(), savedFirst.getId());
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
@@ -597,10 +625,10 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						p -> {
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getRank)
 									.containsExactly(1, 2);
-							assertThat(p.getTasks())
+							assertThat(p.getLatestRevision().getTasks())
 									.extracting(DailyPlanTask::getTaskTitle)
 									.containsExactly("Second task", "First task");
 						});
@@ -683,11 +711,12 @@ class PostgresIntegrationTest {
 				.get()
 				.satisfies(
 						reloaded -> {
-							assertThat(reloaded.getFreeMinutes()).isEqualTo(420);
-							assertThat(reloaded.getScheduledWorkMinutes()).isEqualTo(180);
-							assertThat(reloaded.getRequiredMinutes()).isEqualTo(240L);
-							assertThat(reloaded.getRequestedBufferMinutes()).isEqualTo(15);
-assertThat(reloaded.getRealizedBufferMinutes()).isEqualTo(10);
+							DailyPlanRevision revision = reloaded.getLatestRevision();
+							assertThat(revision.getFreeMinutes()).isEqualTo(420);
+							assertThat(revision.getScheduledWorkMinutes()).isEqualTo(180);
+							assertThat(revision.getRequiredMinutes()).isEqualTo(240L);
+							assertThat(revision.getRequestedBufferMinutes()).isEqualTo(15);
+							assertThat(revision.getRealizedBufferMinutes()).isEqualTo(10);
 					});
 	}
 
@@ -743,6 +772,12 @@ assertThat(reloaded.getRealizedBufferMinutes()).isEqualTo(10);
 										LocalTime.of(10, 0),
 										task.getId(),
 										null)),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
 						List.of());
 
 		DailyPlanResponse response =
@@ -812,5 +847,399 @@ assertThat(reloaded.getRealizedBufferMinutes()).isEqualTo(10);
 							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
 							assertThat(summary.getUnplacedWorkCount()).isEqualTo(2);
 						});
+	}
+
+	@Test
+	void findSummariesByOwner_countsLatestRevisionOnlyAndExposesProgressFlags() {
+		String suffix = UUID.randomUUID().toString().substring(0, 8);
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(suffix)
+								.withAccountPrefix("summary-flags-owner")
+								.withPasswordHash(
+										"$2a$10$8888888888888888888888888888888888888888888888888888888"));
+
+		Task tracked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Tracked")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(90));
+		tracked.setRemainingEffortMinutes(40);
+		taskRepository.save(tracked);
+
+		Task forward =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Forward")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+		forward.setRemainingEffortMinutes(60);
+		taskRepository.save(forward);
+
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 4))
+								.withCreatedAt(Instant.parse("2026-10-04T08:00:00Z"))
+								.withMetrics(480, 120, 90L, 0, 0)
+								.addTask(tracked, 1, false, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 0), null, 2));
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan managed = dailyPlanRepository.findById(plan.getId()).orElseThrow();
+					managed.setCadenceEnabled(true);
+					managed.getLatestRevision()
+							.getTasks()
+							.iterator()
+							.next()
+							.setCapturedRemainingEffortMinutes(40);
+					DailyPlanBlock firstBlock =
+							managed.getLatestRevision().getBlocks().stream()
+									.filter(block -> block.getPosition() == 1)
+									.findFirst()
+									.orElseThrow();
+					firstBlock.setOutcome("DONE");
+					firstBlock.setActualMinutes(50);
+
+					DailyPlanRevision secondRevision = new DailyPlanRevision();
+					secondRevision.setRevisionNumber(2);
+					secondRevision.setCutoffTime(LocalTime.of(11, 0));
+					secondRevision.setFreeMinutes(300);
+					secondRevision.setScheduledWorkMinutes(60);
+					secondRevision.setRequiredMinutes(60L);
+					secondRevision.setRequestedBufferMinutes(0);
+					secondRevision.setRealizedBufferMinutes(0);
+					secondRevision.setCreatedAt(Instant.parse("2026-10-04T11:00:00Z"));
+					managed.addRevision(secondRevision);
+
+					DailyPlanTask forwardTask = new DailyPlanTask();
+					forwardTask.setRank(1);
+					forwardTask.setSourceTaskId(forward.getId());
+					forwardTask.setTaskReference(forward);
+					forwardTask.setTaskTitle(forward.getTitle());
+					forwardTask.setTaskPriority(forward.getPriority());
+					forwardTask.setTaskStatus(forward.getStatus());
+					forwardTask.setTaskEstimatedMinutes(forward.getEstimatedMinutes());
+					forwardTask.setCapturedRemainingEffortMinutes(60);
+					forwardTask.setMustInclude(false);
+					secondRevision.addTask(forwardTask);
+
+					dailyPlanRepository.saveAndFlush(managed);
+				});
+
+		// The appended blocks reference the new revision's task snapshots, so attach them
+		// once those snapshots exist, the same order the re-plan writer uses.
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan persisted = dailyPlanRepository.findById(plan.getId()).orElseThrow();
+					DailyPlanRevision appended = persisted.getLatestRevision();
+					DailyPlanBlock forwardBlock = new DailyPlanBlock();
+					forwardBlock.setKind(BlockKind.WORK);
+					forwardBlock.setStartTime(LocalTime.of(11, 0));
+					forwardBlock.setEndTime(LocalTime.of(12, 0));
+					forwardBlock.setPosition(1);
+					forwardBlock.setDailyPlanTask(appended.getTasks().iterator().next());
+					appended.addBlock(forwardBlock);
+					dailyPlanRepository.saveAndFlush(persisted);
+				});
+
+		assertThat(
+						dailyPlanRepository
+								.findSummariesByOwner(owner.getId(), PageRequest.of(0, 20))
+								.getContent())
+				.singleElement()
+				.satisfies(
+						summary -> {
+							assertThat(summary.getScheduledWorkMinutes()).isEqualTo(60);
+							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
+							assertThat(summary.getHasProgress()).isTrue();
+							assertThat(summary.getNeedsRefresh()).isFalse();
+						});
+
+		forward.setRemainingEffortMinutes(30);
+		taskRepository.save(forward);
+		taskRepository.flush();
+
+		assertThat(
+						dailyPlanRepository
+								.findSummariesByOwner(owner.getId(), PageRequest.of(0, 20))
+								.getContent())
+				.singleElement()
+				.satisfies(summary -> assertThat(summary.getNeedsRefresh()).isTrue());
+	}
+
+	@Test
+	@WithMockUser(username = "replan-append-owner")
+	void appendRevision_persistsNewWorkBlocksLinkedToTheirRevisionTasks() {
+		User owner =
+				userRepository
+						.findByUsername("replan-append-owner")
+						.orElseGet(
+								() ->
+										userRepository.save(
+												UserTestBuilder.user()
+														.withUsername("replan-append-owner")
+														.withEmail("replan-append-owner@example.com")
+														.withPasswordHash(
+																"$2a$10$9999999999999999999999999999999999999999999999999999999")
+														.build()));
+
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Replan work")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+
+		LocalDate planDate = LocalDate.of(2026, 10, 5);
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, planDate)
+								.withCreatedAt(Instant.parse("2026-10-05T08:00:00Z"))
+								.withMetrics(480, 60, 60L, 0, 0)
+								.addTask(task, 1, false, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1));
+
+		DailyPlanSchedule schedule =
+				new DailyPlanSchedule(
+						LocalTime.of(9, 0),
+						LocalTime.of(18, 0),
+						null,
+						null,
+						420,
+						60,
+						60L,
+						0,
+						0,
+						List.of(
+								new ScheduledBlock(
+										BlockKind.WORK,
+										LocalTime.of(11, 0),
+										LocalTime.of(12, 0),
+										task.getId(),
+										null)),
+						List.of(),
+						true,
+						50,
+						10,
+						15,
+						0,
+						List.of());
+
+		DailyPlanResponse response =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanPersister.appendRevision(
+										plan.getId(),
+										plan.getLatestRevision().getId(),
+										List.of(new TaskEffortVersion(task.getId(), task.getEffortVersion())),
+										LocalTime.of(11, 0),
+										List.of(new AiPlanItem(task.getId(), 1)),
+										List.of(task),
+										schedule));
+
+		assertThat(response.id()).isEqualTo(plan.getId());
+		assertThat(response.revisions()).hasSize(2);
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlanRevision latest =
+							dailyPlanRepository
+									.findByOwner_IdAndId(owner.getId(), plan.getId())
+									.orElseThrow()
+									.getLatestRevision();
+					assertThat(latest.getRevisionNumber()).isEqualTo(2);
+					assertThat(latest.getBlocks())
+							.singleElement()
+							.satisfies(
+									block -> {
+										assertThat(block.getKind()).isEqualTo(BlockKind.WORK);
+										assertThat(block.getDailyPlanTask()).isNotNull();
+										assertThat(block.getDailyPlanTask().getSourceTaskId())
+												.isEqualTo(task.getId());
+									});
+				});
+	}
+
+	@Test
+	void wallClockTimes_areStoredAsEnteredAndInstantsStayUtc() {
+		String suffix = UUID.randomUUID().toString().substring(0, 8);
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(suffix)
+								.withAccountPrefix("wall-clock-owner")
+								.withPasswordHash(
+										"$2a$10$1111111111111111111111111111111111111111111111111111111"));
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Wall clock")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(60));
+		Instant createdAt = Instant.parse("2026-10-05T03:00:00Z");
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 10, 5))
+								.withCreatedAt(createdAt)
+								.withWindow(LocalTime.of(9, 0), LocalTime.of(18, 0))
+								.withMetrics(480, 60, 60L, 0, 0)
+								.addTask(task, 1, false, null, null)
+								.addBlock(
+										0,
+										BlockKind.WORK,
+										LocalTime.of(11, 0),
+										LocalTime.of(12, 0),
+										null,
+										1));
+
+		assertThat(storedTime("window_start", "daily_plans", plan.getId())).isEqualTo("09:00:00");
+		assertThat(storedBlockStart(plan.getId())).isEqualTo("11:00:00");
+		assertThat(storedEpochSeconds("created_at", "daily_plans", plan.getId()))
+				.isEqualTo(createdAt.getEpochSecond());
+
+		DailyPlan reloaded =
+				dailyPlanRepository.findByOwner_IdAndId(owner.getId(), plan.getId()).orElseThrow();
+		assertThat(reloaded.getWindowStart()).isEqualTo(LocalTime.of(9, 0));
+		assertThat(reloaded.getCreatedAt()).isEqualTo(createdAt);
+		assertThat(reloaded.getLatestRevision().getBlocks())
+				.singleElement()
+				.satisfies(block -> assertThat(block.getStartTime()).isEqualTo(LocalTime.of(11, 0)));
+	}
+
+	@Test
+	@WithMockUser(username = "plan-detached-load-owner")
+	void planFinders_initializeAssociationsForUseOutsideRepositoryTransaction() {
+		User owner =
+				userRepository
+						.findByUsername("plan-detached-load-owner")
+						.orElseGet(
+								() ->
+										userRepository.save(
+												UserTestBuilder.user()
+														.withUsername("plan-detached-load-owner")
+														.withEmail("plan-detached-load-owner@example.com")
+														.withPasswordHash(
+																"$2a$10$9999999999999999999999999999999999999999999999999999999")
+														.build()));
+
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Detached load")
+								.withStatus(TaskStatus.IN_PROGRESS)
+								.withEstimatedMinutes(60));
+		task.setRemainingEffortMinutes(60);
+		taskRepository.saveAndFlush(task);
+
+		LocalDate planDate = LocalDate.of(2026, 10, 6);
+		DailyPlan plan =
+				savedPlan(
+						dailyPlanRepository,
+						DailyPlanTestBuilder.plan(owner, planDate)
+								.withMetrics(420, 60, 60L, 0, 0)
+								.addTask(task, 1, true, null, null)
+								.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1));
+		transactionTemplate.executeWithoutResult(
+				status -> {
+					DailyPlan managed =
+							dailyPlanRepository.findByOwner_IdAndId(owner.getId(), plan.getId()).orElseThrow();
+					managed.setCadenceEnabled(true);
+					managed.setTargetFocusMinutes(50);
+					managed.setBreakMinutes(10);
+					managed.setMinSessionMinutes(15);
+					managed.setBufferMinutes(0);
+					managed.getLatestRevision().getTasks().iterator().next()
+							.setCapturedRemainingEffortMinutes(60);
+					PlanFixedBreakSnapshot lunch = new PlanFixedBreakSnapshot();
+					lunch.setLabel("Lunch");
+					lunch.setStartTime(LocalTime.of(12, 0));
+					lunch.setEndTime(LocalTime.of(13, 0));
+					managed.addFixedBreakSnapshot(lunch);
+					dailyPlanRepository.saveAndFlush(managed);
+				});
+
+		Long ownerId = owner.getId();
+		Long planId = plan.getId();
+
+		DailyPlan loadedById =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanRepository
+										.findByOwner_IdAndId(ownerId, planId)
+										.orElseThrow());
+		assertDetachedPlanAssociations(loadedById, task);
+
+		DailyPlan loadedByDate =
+				transactionTemplate.execute(
+						status ->
+								dailyPlanRepository
+										.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
+												ownerId, planDate)
+										.orElseThrow());
+		assertDetachedPlanAssociations(loadedByDate, task);
+
+		DailyPlanResponse byId = dailyPlanService.getForCurrentUser(planId);
+		assertThat(byId.id()).isEqualTo(planId);
+		assertThat(byId.needsRefresh()).isFalse();
+
+		Optional<DailyPlanResponse> byDate = dailyPlanService.byDateForCurrentUser(planDate);
+		assertThat(byDate).isPresent();
+		assertThat(byDate.orElseThrow().id()).isEqualTo(planId);
+	}
+
+	private static void assertDetachedPlanAssociations(DailyPlan plan, Task task) {
+		assertThatCode(
+						() -> {
+							Task live =
+									plan.getLatestRevision().getTasks().iterator().next().getTaskReference();
+							assertThat(live.getStatus()).isEqualTo(task.getStatus());
+							assertThat(live.getRemainingEffortMinutes())
+									.isEqualTo(task.getRemainingEffortMinutes());
+							assertThat(plan.getFixedBreakSnapshots())
+									.singleElement()
+									.extracting(PlanFixedBreakSnapshot::getLabel)
+									.isEqualTo("Lunch");
+						})
+				.doesNotThrowAnyException();
+	}
+
+	private String storedTime(String column, String table, Long id) {
+		return jdbcTemplate.queryForObject(
+				"SELECT " + column + "::text FROM " + table + " WHERE id = ?", String.class, id);
+	}
+
+	private String storedBlockStart(Long planId) {
+		return jdbcTemplate.queryForObject(
+				"""
+				SELECT b.start_time::text
+				FROM daily_plan_blocks b
+				JOIN daily_plan_revisions r ON r.id = b.revision_id
+				WHERE r.daily_plan_id = ?
+				""",
+				String.class,
+				planId);
+	}
+
+	private long storedEpochSeconds(String column, String table, Long id) {
+		return jdbcTemplate.queryForObject(
+				"SELECT EXTRACT(EPOCH FROM " + column + ") FROM " + table + " WHERE id = ?",
+				Long.class,
+				id);
 	}
 }

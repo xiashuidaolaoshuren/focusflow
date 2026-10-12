@@ -38,6 +38,8 @@ const cachedSummary: DailyPlanSummaryResponse = {
   scheduledTaskCount: 1,
   unplacedWorkCount: 0,
   hasWarning: false,
+  hasProgress: false,
+  needsRefresh: false,
 }
 
 function renderPlanDetailPage(options?: {
@@ -122,6 +124,46 @@ describe('PlanDetailPage', () => {
         screen.getByRole('heading', { name: /plan history/i }),
       ).toBeInTheDocument()
     })
+  })
+
+  it('shows the revision selector and can inspect an earlier revision', () => {
+    mockedUsePlan.mockReturnValue({
+      plan: {
+        ...samplePlan,
+        revisions: [
+          {
+            ...samplePlan.revisions[0]!,
+            blocks: [
+              {
+                ...samplePlan.revisions[0]!.blocks[0]!,
+                id: 601,
+                startTime: '16:00:00',
+                endTime: '16:30:00',
+                displayState: 'SUPERSEDED',
+              },
+            ],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>)
+
+    renderPlanDetailPage()
+
+    fireEvent.click(screen.getByRole('combobox', { name: /revision/i }))
+    return screen
+      .findByRole('option', { name: /revision 1/i })
+      .then((option) => {
+        fireEvent.pointerDown(option)
+        fireEvent.click(option)
+
+        expect(
+          screen.getByLabelText(/work: write tests, session 1 of 1, 16:00–16:30/i),
+        ).toBeInTheDocument()
+      })
   })
 
   it('links to the cached planning date when a stale plan id returns 404', () => {

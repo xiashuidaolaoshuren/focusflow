@@ -46,7 +46,7 @@ public class DailyPlanScheduler {
 								task ->
 										new RankedTask(
 												task.getId() != null ? task.getId() : 0L,
-												task.getEstimatedMinutes()))
+												task.getRemainingEffortMinutes()))
 						.toList();
 		PlacementPolicy policy =
 				new PlacementPolicy(
@@ -68,7 +68,13 @@ public class DailyPlanScheduler {
 				stage1.requestedBufferMinutes(),
 				stage1.realizedBufferMinutes(),
 				result.blocks(),
-				result.unplacedWork());
+				result.unplacedWork(),
+				preferences.cadenceEnabled(),
+				preferences.targetFocusMinutes(),
+				preferences.breakMinutes(),
+				preferences.minSessionMinutes(),
+				preferences.bufferMinutes(),
+				fixedBreaks);
 	}
 
 	private FixedBreakWindow toFixedBreakWindow(EffectiveFixedBreak fixedBreak) {
@@ -90,8 +96,8 @@ public class DailyPlanScheduler {
 		long total = 0L;
 		for (Task task : rankedTasks) {
 			if (PlanMustIncludeRules.isMustInclude(task, planDate)
-					&& task.getEstimatedMinutes() != null) {
-				total += task.getEstimatedMinutes();
+					&& task.getRemainingEffortMinutes() != null) {
+				total += task.getRemainingEffortMinutes();
 			}
 		}
 		return total;

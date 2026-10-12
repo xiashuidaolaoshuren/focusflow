@@ -108,9 +108,18 @@ Clients should branch on `code`, not `message` copy.
 | Code | Typical status | When |
 |------|----------------|------|
 | `PLAN_EXISTS` | **409** | A plan already exists for `planDate` and `replacePlanId` was omitted |
-| `PLAN_CHANGED` | **409** | `replacePlanId` is stale (another plan is now latest for that date, or no plan exists) |
+| `PLAN_CHANGED` | **409** | `replacePlanId` is stale (another plan is now latest for that date, or no plan exists); also a re-plan whose `expectedRevisionId` or `effortVersions` no longer match the server |
 | `TASK_MISSING_DURING_GENERATION` | **409** | A ranked task disappeared between the AI call and the transactional save |
 | `PLAN_CANDIDATE_LIMIT` | **400** | More than 100 plannable tasks (`OPEN` + `IN_PROGRESS`) |
+| `PLAN_HAS_PROGRESS` | **409** | Generate or delete was asked for a plan that has at least one recorded block outcome. An unrecorded no-longer-needed session does not count |
+| `PROGRESS_CONFLICT` | **409** | `expectedProgressVersion` or `effortVersion` is behind the server. Refetch, then retry against the newer version |
+| `REMAINDER_UNRESOLVED` | **400** | The credit would exhaust the task's remaining effort without a `finish` or a positive `checkpoint` in the same save |
+| `FUTURE_ACTUAL` | **400** | The work date is after the client-supplied current date |
+| `BLOCK_NOT_RECORDABLE` | **400** | The block is superseded, or it is an unused session of a finished or cancelled task |
+| `ELAPSED_WORK_UNRESOLVED` | **409** | Re-plan was asked while an elapsed block has no outcome, or a block that spans the cutoff is unreconciled |
+| `REPLAN_LEGACY_SNAPSHOT` | **409** | The plan has no complete scheduling snapshot (migrated from before revisions) |
+| `REPLAN_NOT_TODAY` | **409** | The plan date is not the client-supplied current date |
+| `REPLAN_WINDOW_ENDED` | **409** | The cutoff is at or after the original window end |
 
 Invalid AI ranking returns **502** with `code` null. The server records bounded rejection reasons (`UNKNOWN_TASK`, `DUPLICATE_TASK`, `BLOCK_ORDER`, `MISSING_BLOCK_1`, `MISSING_BLOCK_2`, `MISSING_OPTIONAL`) in Micrometer only.
 
@@ -134,6 +143,8 @@ Invalid AI ranking returns **502** with `code` null. The server records bounded 
 | `TaskStatus` | `OPEN`, `IN_PROGRESS`, `DONE`, `CANCELLED` |
 | `BlockKind` | `WORK`, `CADENCE_BREAK`, `FIXED_BREAK`, `COMMITMENT`, `BUFFER` |
 | `UnplacedReason` | `NO_ESTIMATE`, `OUT_OF_TIME` |
+| `WorkOutcome` | `DONE`, `PARTLY_DONE`, `SKIPPED` |
+| `BlockDisplayState` | `ACTIONABLE`, `HISTORICAL`, `SUPERSEDED`, `NO_LONGER_NEEDED` |
 
 ### `UserResponse`
 
@@ -153,7 +164,9 @@ Invalid AI ranking returns **502** with `code` null. The server records bounded 
 | `priority` | `TaskPriority` | yes | |
 | `status` | `TaskStatus` | yes | |
 | `dueDate` | string (date) \| null | yes | `YYYY-MM-DD` |
-| `estimatedMinutes` | integer \| null | yes | Null or positive |
+| `estimatedMinutes` | integer \| null | yes | Null or positive. Whole-task estimate |
+| `remainingEffortMinutes` | integer \| null | yes | Current estimate of time still needed; null means unknown |
+| `effortVersion` | integer | yes | Monotonic; send back as `effortVersion` on progress writes |
 
 ### `TaskSnapshotResponse`
 
@@ -168,11 +181,12 @@ Frozen task fields captured at plan generation. Work blocks reference this snaps
 | `status` | `TaskStatus` | yes | Status at generate time |
 | `dueDate` | string (date) \| null | yes | |
 | `estimatedMinutes` | integer \| null | yes | |
+| `capturedRemainingEffortMinutes` | integer \| null | yes | Remaining effort this revision scheduled; null when unknown |
 | `mustInclude` | boolean | yes | `IN_PROGRESS`, or `OPEN` with due date on/before plan date |
 
 ### `ScheduledBlockResponse`
 
-One minute-aligned interval on the day rail.
+One minute-aligned interval on a revision rail.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -183,6 +197,13 @@ One minute-aligned interval on the day rail.
 | `sessionCount` | integer \| null | yes | Total work sessions for this task; null for non-work blocks |
 | `taskSnapshot` | `TaskSnapshotResponse` \| null | yes | Populated for `WORK` blocks |
 | `label` | string \| null | yes | Fixed-break or commitment label when applicable |
+| `id` | integer \| null | yes | Block id; null for a derived composed-rail entry that has no stored row |
+| `revisionId` | integer \| null | yes | Revision the block belongs to |
+| `outcome` | `WorkOutcome` \| null | yes | Recorded outcome; null while unrecorded |
+| `actualMinutes` | integer \| null | yes | Time spent; null means not recorded (not zero) |
+| `reconciled` | boolean | yes | Crossing block closed at the re-plan cutoff with a checkpoint |
+| `progressVersion` | integer | yes | Send back as `expectedProgressVersion` on the next write |
+| `displayState` | `BlockDisplayState` | yes | Only `ACTIONABLE` and `HISTORICAL` accept a new outcome |
 
 ### `UnplacedWorkResponse`
 
@@ -212,7 +233,7 @@ Derived on read when must-include snapshots have unplaced work. Not persisted as
 
 ### `DailyPlanResponse`
 
-Full scheduled-day detail.
+Full scheduled-day detail. Schedule metrics and `blocks` are read from the plan's **latest revision**; `revisions` exposes all of them.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
@@ -225,14 +246,21 @@ Full scheduled-day detail.
 | `peakEnd` | string (time) \| null | yes | |
 | `freeMinutes` | integer | yes | Minutes still free after scheduling |
 | `scheduledWorkMinutes` | integer | yes | Work placed on the rail |
-| `requiredMinutes` | integer | yes | Sum of ranked estimates considered |
+| `requiredMinutes` | integer | yes | Captured remaining effort considered |
 | `requestedBufferMinutes` | integer | yes | Buffer requested from preferences |
 | `realizedBufferMinutes` | integer | yes | Buffer actually reserved at end of window |
 | `warning` | `DailyPlanWarning` \| null | yes | Derived shortfall; null when no must-include gap |
-| `blocks` | `ScheduledBlockResponse[]` | yes | Ordered day rail |
+| `blocks` | `ScheduledBlockResponse[]` | yes | Ordered rail of the latest revision |
 | `unplacedWork` | `UnplacedWorkResponse[]` | yes | Companion list for unscheduled ranked tasks |
+| `needsRefresh` | boolean | yes | Captured remaining effort or plannability no longer matches the live tasks |
+| `knownActualMinutes` | integer | yes | Day-wide sum of recorded actual minutes; each known actual counts once |
+| `missingActualCount` | integer | yes | Work blocks completed without recorded minutes |
+| `revisions` | `PlanRevisionResponse[]` | yes | Every revision, oldest first |
+| `composedRail` | `ScheduledBlockResponse[]` | yes | Non-overlapping rail: elapsed history through the latest cutoff plus the latest revision from the cutoff forward |
+| `offRailEarlyCompletions` | `ScheduledBlockResponse[]` | yes | Early completions whose whole interval falls after the latest cutoff |
+| `unplannedWork` | `UnplannedWorkResponse[]` | yes | Dated unplanned work credited to this plan date |
 
-List-by-id, generate, and by-date return this shape.
+List-by-id, generate, by-date, and re-plan return this shape.
 
 ### `DailyPlanSummaryResponse`
 
@@ -248,6 +276,109 @@ History list rows only — no blocks or snapshots.
 | `scheduledTaskCount` | integer | yes | |
 | `unplacedWorkCount` | integer | yes | |
 | `hasWarning` | boolean | yes | Derived must-include shortfall present |
+| `hasProgress` | boolean | yes | Any block on any revision carries a recorded outcome |
+| `needsRefresh` | boolean | yes | Same condition as the detail field |
+
+### `PlanRevisionResponse`
+
+One schedule revision of a plan. Re-planning appends a revision to the same plan id.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | integer | yes | |
+| `revisionNumber` | integer | yes | 1-based; 1 is the original generation |
+| `cutoff` | string (time) \| null | yes | Re-plan cutoff that started this revision; null for the original |
+| `freeMinutes` | integer | yes | |
+| `scheduledWorkMinutes` | integer | yes | |
+| `requiredMinutes` | integer | yes | |
+| `requestedBufferMinutes` | integer | yes | |
+| `realizedBufferMinutes` | integer | yes | |
+| `blocks` | `ScheduledBlockResponse[]` | yes | This revision's rail |
+| `unplacedWork` | `UnplacedWorkResponse[]` | yes | |
+
+### `UnplannedWorkResponse`
+
+Dated work credited to a task that was not on the rail.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | integer | yes | |
+| `sourceTaskId` | integer | yes | Original task id; survives task deletion |
+| `taskReferenceId` | integer \| null | yes | Live task id when still linked |
+| `workDate` | string (date) | yes | `YYYY-MM-DD` |
+| `actualMinutes` | integer | yes | Positive |
+| `recordedAt` | string (instant) | yes | ISO-8601 |
+
+### `UnplannedWorkRequest`
+
+Body for create and correct.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `taskId` | integer | yes | Target task |
+| `workDate` | string (date) | yes | Must not be after `currentDate` |
+| `actualMinutes` | integer | yes | Positive |
+| `currentDate` | string (date) | yes | Client-supplied current date |
+| `effortVersion` | integer | no | Expected task effort version; stale → **409** `PROGRESS_CONFLICT` |
+| `finish` | boolean | no | Marks the task finished without an extra credit |
+| `checkpoint` | `Checkpoint` | no | Explicit reassessment; replaces the running remainder |
+
+### `Checkpoint`
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `remainingEffortMinutes` | integer \| null | no | Explicit unknown when null |
+
+### `BlockProgressRequest`
+
+Body for `PUT /api/daily-plans/{planId}/blocks/{blockId}/progress`.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `outcome` | `WorkOutcome` | yes | `DONE`, `PARTLY_DONE`, or `SKIPPED` |
+| `actualMinutes` | integer | no | Required and positive for `PARTLY_DONE`; null means not recorded |
+| `currentDate` | string (date) | yes | Client-supplied current date; plan after it → **400** `FUTURE_ACTUAL` |
+| `expectedProgressVersion` | integer | no | Block's `progressVersion`; stale → **409** `PROGRESS_CONFLICT` |
+| `finish` | boolean | no | Finishes the task |
+| `checkpoint` | `Checkpoint` | no | Explicit reassessment; replaces the running remainder |
+| `cutoff` | string (time) | no | Set to the current time to reconcile a block that spans now; grants no planned credit |
+
+### `BlockProgressResponse`
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `task` | `TaskResponse` | yes | Task after the credit |
+| `plan` | `DailyPlanResponse` | yes | Plan after the credit |
+
+### `RemainingEffortRequest`
+
+Body for `POST /api/tasks/{id}/remaining-effort`.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `remainingEffortMinutes` | integer | yes | Positive reassessment |
+| `currentDate` | string (date) | yes | Client-supplied current date |
+| `effortVersion` | integer | no | Stale → **409** `PROGRESS_CONFLICT` |
+
+### `TaskEffortVersion`
+
+One captured task effort version, used for re-plan freshness.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `taskId` | integer | yes | |
+| `effortVersion` | integer | yes | |
+
+### `ReplanRequest`
+
+Body for `POST /api/daily-plans/{id}/replan`. All fields are required.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `currentDate` | string (date) | yes | Must equal the plan date |
+| `cutoff` | string (time) | yes | Client current time; before the window start it clamps up, at or after the window end it is rejected |
+| `expectedRevisionId` | integer | yes | Latest revision id the client saw; stale → **409** `PLAN_CHANGED` |
+| `effortVersions` | `TaskEffortVersion[]` | yes | One entry per current plannable task, matching server state |
 
 ### `SchedulingPreferencesResponse`
 
@@ -452,7 +583,12 @@ Update task.
 | `priority` | `TaskPriority` | no | Default `MEDIUM` if omitted |
 | `status` | `TaskStatus` | no | Default `OPEN` if omitted |
 | `dueDate` | string (date) | no | |
-| `estimatedMinutes` | integer | no | Null or positive |
+| `estimatedMinutes` | integer | no | Null or positive. Also moves the remainder while the task is `OPEN` with no recorded progress |
+| `remainingEffortMinutes` | integer | no | Positive. Used only when reopening a `DONE` or `CANCELLED` task |
+| `currentDate` | string (date) | conditional | Required when this update finishes or reopens the task; missing → **400** |
+| `effortVersion` | integer | no | Stale → **409** `PROGRESS_CONFLICT` |
+
+A status change to `DONE` finishes the task and records a zero remainder. Moving a `DONE` or `CANCELLED` task back to `OPEN` or `IN_PROGRESS` is a reopen and requires `remainingEffortMinutes`. An `estimatedMinutes` edit also moves the remainder only while the task is `OPEN` and has no checkpoint, unplanned work, or recorded block outcome; after that, change the remainder through `POST /api/tasks/{id}/remaining-effort`.
 
 **Responses**
 
@@ -462,12 +598,37 @@ Update task.
 | **400** | Validation failed |
 | **401** | Not authenticated |
 | **404** | `message`: `task not found` |
+| **409** | `code`: `PROGRESS_CONFLICT` |
+
+---
+
+### `POST /api/tasks/{id}/remaining-effort`
+
+Record an explicit reassessment (a checkpoint) of a task's remaining effort. A checkpoint replaces the running value rather than subtracting from it, so only work recorded after it credits further.
+
+**Request body — `RemainingEffortRequest`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `remainingEffortMinutes` | integer | yes | Positive |
+| `currentDate` | string (date) | yes | Client-supplied current date |
+| `effortVersion` | integer | no | Expected effort version; stale → **409** `PROGRESS_CONFLICT` |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `TaskResponse` |
+| **400** | Validation failed |
+| **401** | Not authenticated |
+| **404** | `message`: `task not found` |
+| **409** | `code`: `PROGRESS_CONFLICT` |
 
 ---
 
 ### `DELETE /api/tasks/{id}`
 
-Delete task.
+Delete task. Snapshots, recorded outcomes, unplanned work, and checkpoints survive by `sourceTaskId`; only the live reference is detached. Generate and delete of a plan are separate, and a plan that already has progress still refuses with **409** `PLAN_HAS_PROGRESS`.
 
 **Responses**
 
@@ -586,7 +747,9 @@ All daily-plan routes require session. Mutations require CSRF.
 
 ### `POST /api/daily-plans/generate`
 
-Generate a scheduled day from plannable tasks (`OPEN` and `IN_PROGRESS`). The AI returns a total ordering; the Java scheduler places work into the effective window, reserves buffer, and snapshots each ranked task. Regenerating a date compare-and-replaces the latest plan for that owner and date when `replacePlanId` matches.
+Generate a scheduled day from plannable tasks (`OPEN` and `IN_PROGRESS`) using each task's current remaining effort. The AI returns a total ordering; the Java scheduler places work into the effective window, reserves buffer, and snapshots each ranked task. Generating writes revision 1.
+
+Regenerating a date compare-and-replaces the latest plan for that owner and date when `replacePlanId` matches, and only while that plan has no recorded outcome. Once a plan has progress it is retained: use re-plan to append a revision, and record outcomes from the relative route.
 
 **Request body — `GeneratePlanRequest`**
 
@@ -611,7 +774,7 @@ Generate a scheduled day from plannable tasks (`OPEN` and `IN_PROGRESS`). The AI
 | **201** | `DailyPlanResponse` |
 | **400** | `message`: `no plannable tasks available for planning`, missing/invalid `planDate`, or `code`: `PLAN_CANDIDATE_LIMIT` |
 | **401** | Not authenticated |
-| **409** | `code`: `PLAN_EXISTS`, `PLAN_CHANGED`, or `TASK_MISSING_DURING_GENERATION` |
+| **409** | `code`: `PLAN_EXISTS`, `PLAN_CHANGED`, `TASK_MISSING_DURING_GENERATION`, or `PLAN_HAS_PROGRESS` |
 | **502** | `ApiErrorResponse` — AI provider or ranking failure (`code` null; nothing saved) |
 
 On **502** or **409** during persist, nothing is saved.
@@ -648,12 +811,40 @@ On **502** or **409** during persist, nothing is saved.
         "status": "IN_PROGRESS",
         "dueDate": "2026-06-01",
         "estimatedMinutes": 60,
+        "capturedRemainingEffortMinutes": 60,
         "mustInclude": true
       },
-      "label": null
+      "label": null,
+      "id": 11,
+      "revisionId": 3,
+      "outcome": null,
+      "actualMinutes": null,
+      "reconciled": false,
+      "progressVersion": 0,
+      "displayState": "ACTIONABLE"
     }
   ],
-  "unplacedWork": []
+  "unplacedWork": [],
+  "needsRefresh": false,
+  "knownActualMinutes": 0,
+  "missingActualCount": 0,
+  "revisions": [
+    {
+      "id": 3,
+      "revisionNumber": 1,
+      "cutoff": null,
+      "freeMinutes": 45,
+      "scheduledWorkMinutes": 120,
+      "requiredMinutes": 180,
+      "requestedBufferMinutes": 30,
+      "realizedBufferMinutes": 30,
+      "blocks": [],
+      "unplacedWork": []
+    }
+  ],
+  "composedRail": [],
+  "offRailEarlyCompletions": [],
+  "unplannedWork": []
 }
 ```
 
@@ -742,9 +933,71 @@ Get one saved plan by id.
 
 ---
 
+### `PUT /api/daily-plans/{planId}/blocks/{blockId}/progress`
+
+Record an outcome for one work block. A first save credits provisionally: `DONE` credits the planned duration, `PARTLY_DONE` credits the entered actual minutes, and `SKIPPED` credits nothing. A later save for the same block is a correction that reverses the previous credit and applies the new one, keeping the original recorded order. A `DONE` or `PARTLY_DONE` save also puts the task `IN_PROGRESS`. `SKIPPED` alone does not.
+
+**Request body — `BlockProgressRequest`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `outcome` | `WorkOutcome` | yes | `PARTLY_DONE` without positive `actualMinutes` → **400** |
+| `actualMinutes` | integer | no | Time spent; null means not recorded, which is not zero |
+| `currentDate` | string (date) | yes | Client-supplied current date |
+| `expectedProgressVersion` | integer | no | Block's `progressVersion`; stale → **409** `PROGRESS_CONFLICT` |
+| `finish` | boolean | no | Finishes the task; wins over `cutoff` when both are sent |
+| `checkpoint` | `Checkpoint` | no | Explicit reassessment that replaces the running remainder |
+| `cutoff` | string (time) | no | Current time, to reconcile a block that spans now |
+
+**Reconciling a block that spans the current time.** For an actionable block whose interval contains `cutoff`, send `cutoff` with the known `actualMinutes` and the required `checkpoint` (or an explicit null remainder for unknown). That stores the elapsed portion and closes the block for re-planning; it grants no planned credit.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `BlockProgressResponse` |
+| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, `BLOCK_NOT_RECORDABLE`, or validation failed |
+| **401** | Not authenticated |
+| **404** | `message`: `daily plan not found` or block not found |
+| **409** | `code`: `PROGRESS_CONFLICT` |
+
+A save that would leave the task's remaining effort at zero or below is rejected with `REMAINDER_UNRESOLVED` unless the same save finishes the task or supplies a positive checkpoint.
+
+---
+
+### `POST /api/daily-plans/{id}/replan`
+
+Re-plan the remaining day onto the same plan by appending a schedule revision. Only the revision the client names stays actionable; the latest revision is the one that can receive outcomes. The plan id does not change.
+
+Re-plan runs only for the client current date and only when the plan has a complete scheduling snapshot. It reloads commitments, keeps the captured cadence, minimum session, buffer, and fixed breaks, and places work from the effective cutoff through the original window end. The focus stretch restarts and is not stored as a break that was taken. An empty remaining effort may append a revision whose work is unplaced.
+
+**Request body — `ReplanRequest`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `currentDate` | string (date) | yes | Must equal the plan date, else **409** `REPLAN_NOT_TODAY` |
+| `cutoff` | string (time) | yes | Clamps up to the window start when earlier; at or after the window end → **409** `REPLAN_WINDOW_ENDED` |
+| `expectedRevisionId` | integer | yes | Latest revision id the client saw |
+| `effortVersions` | `TaskEffortVersion[]` | yes | One entry per current plannable task, matching `remainingEffortMinutes` state |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `DailyPlanResponse` with the appended revision |
+| **400** | `code`: `PLAN_CANDIDATE_LIMIT`, or validation failed |
+| **401** | Not authenticated |
+| **404** | `message`: `daily plan not found` |
+| **409** | `code`: `REPLAN_NOT_TODAY`, `REPLAN_LEGACY_SNAPSHOT`, `REPLAN_WINDOW_ENDED`, `ELAPSED_WORK_UNRESOLVED`, `PLAN_CHANGED`, or `TASK_MISSING_DURING_GENERATION` |
+| **502** | `ApiErrorResponse` — AI provider or ranking failure (`code` null) |
+
+On any failure the previous revision stays actionable and nothing is appended. A reconciliation saved before a later failure stays saved.
+
+---
+
 ### `DELETE /api/daily-plans/{id}`
 
-Owner-scoped hard delete. Removes the plan, its task snapshots, and scheduled blocks; live tasks remain.
+Owner-scoped hard delete. Removes the plan, its revisions, task snapshots, and scheduled blocks; live tasks remain. A plan that has recorded progress refuses deletion.
 
 **Responses**
 
@@ -753,6 +1006,72 @@ Owner-scoped hard delete. Removes the plan, its task snapshots, and scheduled bl
 | **204** | Empty |
 | **401** | Not authenticated |
 | **404** | `message`: `daily plan not found` |
+| **409** | `code`: `PLAN_HAS_PROGRESS` |
+
+---
+
+## Unplanned work
+
+All routes require session. Mutations require CSRF.
+
+Dated work credited to a task that was not on the rail. Create and correct credit or delta-adjust the task's remaining effort the same way block progress does, and `finish` or a `checkpoint` replaces the remainder instead of adding a credit. A `workDate` after `currentDate` is rejected with **400** `FUTURE_ACTUAL`.
+
+### `POST /api/unplanned-work`
+
+Creating an entry credits `actualMinutes` against the task's remaining effort and moves an `OPEN` task to `IN_PROGRESS`. A `finish` or a `checkpoint` replaces the remainder instead of subtracting.
+
+**Request body — `UnplannedWorkRequest`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `taskId` | integer | yes | Target task |
+| `workDate` | string (date) | yes | `YYYY-MM-DD`; not after `currentDate` |
+| `actualMinutes` | integer | yes | Positive |
+| `currentDate` | string (date) | yes | Client-supplied current date |
+| `effortVersion` | integer | no | Stale → **409** `PROGRESS_CONFLICT` |
+| `finish` | boolean | no | Finishes the task |
+| `checkpoint` | `Checkpoint` | no | Explicit reassessment |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **201** | `UnplannedWorkResponse` |
+| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, or validation failed |
+| **401** | Not authenticated |
+| **404** | Task not found |
+| **409** | `code`: `PROGRESS_CONFLICT` |
+
+### `PUT /api/unplanned-work/{id}`
+
+Correct an entry: same body as create. Minutes are delta-adjusted, and `workDate` must repeat the stored date (changing it → **400**), so the entry keeps its recorded order and an earlier-dated correction does not move later credit.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `UnplannedWorkResponse` |
+| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, or validation failed |
+| **401** | Not authenticated |
+| **404** | Entry or task not found |
+| **409** | `code`: `PROGRESS_CONFLICT` |
+
+### `DELETE /api/unplanned-work/{id}?effortVersion=`
+
+Delete an entry and reverse its credit, unless a checkpoint recorded at or after it shields that reversal.
+
+| Name | Type | Required | Notes |
+|------|------|----------|-------|
+| `effortVersion` | integer | no | Stale → **409** `PROGRESS_CONFLICT` |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **204** | Empty |
+| **401** | Not authenticated |
+| **404** | Entry not found |
+| **409** | `code`: `PROGRESS_CONFLICT` |
 
 ---
 
@@ -775,6 +1094,18 @@ sequenceDiagram
     Api-->>Client: 409 PLAN_EXISTS
     Client->>Api: refetch by-date then retry with replacePlanId
   end
+  Client->>Api: PUT /api/daily-plans/{planId}/blocks/{blockId}/progress with outcome and expectedProgressVersion
+  Api-->>Client: 200 BlockProgressResponse with the refreshed plan and task
+  alt progress version is stale
+    Api-->>Client: 409 PROGRESS_CONFLICT
+    Client->>Api: refetch the plan and the task, then retry against the newer version
+  end
+  Client->>Api: POST /api/daily-plans/{id}/replan with currentDate, cutoff, expectedRevisionId and effortVersions
+  Api-->>Client: 200 DailyPlanResponse with the appended revision
+  alt elapsed work is unresolved
+    Api-->>Client: 409 ELAPSED_WORK_UNRESOLVED
+    Client->>Api: record or reconcile the elapsed blocks, then retry
+  end
   Client->>Api: later POST PUT DELETE with both cookies and X-XSRF-TOKEN
 ```
 
@@ -784,3 +1115,5 @@ For curl/Postman:
 2. Read `XSRF-TOKEN` from the cookie jar.
 3. Send `POST`/`PUT`/`DELETE` with `X-XSRF-TOKEN: <token>` and the same cookie jar.
 4. Load a day with `GET /api/daily-plans/by-date?planDate=YYYY-MM-DD` (treat **204** as “no plan yet”).
+5. Record an outcome with `PUT /api/daily-plans/{planId}/blocks/{blockId}/progress`, echoing the block's `progressVersion` as `expectedProgressVersion`; on **409** `PROGRESS_CONFLICT` refetch the plan and the task before retrying.
+6. Re-plan with `POST /api/daily-plans/{id}/replan`, echoing the latest `revisions[].id` as `expectedRevisionId` and one `effortVersions` entry per current plannable task.

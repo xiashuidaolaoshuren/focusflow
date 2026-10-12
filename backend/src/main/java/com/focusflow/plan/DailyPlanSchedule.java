@@ -1,5 +1,6 @@
 package com.focusflow.plan;
 
+import com.focusflow.schedule.FixedBreakWindow;
 import com.focusflow.schedule.ScheduledBlock;
 import com.focusflow.schedule.UnplacedWork;
 import java.time.LocalTime;
@@ -16,4 +17,10 @@ public record DailyPlanSchedule(
 		int requestedBufferMinutes,
 		int realizedBufferMinutes,
 		List<ScheduledBlock> blocks,
-		List<UnplacedWork> unplacedWork) {}
+		List<UnplacedWork> unplacedWork,
+		boolean cadenceEnabled,
+		int targetFocusMinutes,
+		int breakMinutes,
+		int minSessionMinutes,
+		int bufferMinutes,
+		List<FixedBreakWindow> fixedBreaks) {}

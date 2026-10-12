@@ -26,8 +26,8 @@ public class DailyPlanTask {
 	private Long id;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "daily_plan_id", nullable = false)
-	private DailyPlan dailyPlan;
+	@JoinColumn(name = "revision_id", nullable = false)
+	private DailyPlanRevision revision;
 
 	@Column(nullable = false)
 	private int rank;
@@ -56,6 +56,9 @@ public class DailyPlanTask {
 	@Column(name = "task_estimated_minutes")
 	private Integer taskEstimatedMinutes;
 
+	@Column(name = "captured_remaining_effort_minutes")
+	private Integer capturedRemainingEffortMinutes;
+
 	@Column(name = "must_include", nullable = false)
 	private boolean mustInclude;
 
@@ -70,12 +73,12 @@ public class DailyPlanTask {
 		return id;
 	}
 
-	public DailyPlan getDailyPlan() {
-		return dailyPlan;
+	public DailyPlanRevision getRevision() {
+		return revision;
 	}
 
-	public void setDailyPlan(DailyPlan dailyPlan) {
-		this.dailyPlan = dailyPlan;
+	public void setRevision(DailyPlanRevision revision) {
+		this.revision = revision;
 	}
 
 	public int getRank() {
@@ -144,6 +147,14 @@ public class DailyPlanTask {
 
 	public void setTaskEstimatedMinutes(Integer taskEstimatedMinutes) {
 		this.taskEstimatedMinutes = taskEstimatedMinutes;
+	}
+
+	public Integer getCapturedRemainingEffortMinutes() {
+		return capturedRemainingEffortMinutes;
+	}
+
+	public void setCapturedRemainingEffortMinutes(Integer capturedRemainingEffortMinutes) {
+		this.capturedRemainingEffortMinutes = capturedRemainingEffortMinutes;
 	}
 
 	public boolean isMustInclude() {

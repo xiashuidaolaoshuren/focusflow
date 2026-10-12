@@ -19,7 +19,9 @@ class DailyPlanSummaryResponseTest {
 						2,
 						2,
 						1,
-						true);
+						true,
+						true,
+						false);
 
 		assertThat(response.id()).isEqualTo(1L);
 		assertThat(response.planDate()).isEqualTo(LocalDate.of(2026, 6, 1));
@@ -29,5 +31,7 @@ class DailyPlanSummaryResponseTest {
 		assertThat(response.scheduledTaskCount()).isEqualTo(2);
 		assertThat(response.unplacedWorkCount()).isEqualTo(1);
 		assertThat(response.hasWarning()).isTrue();
+		assertThat(response.hasProgress()).isTrue();
+		assertThat(response.needsRefresh()).isFalse();
 	}
 }

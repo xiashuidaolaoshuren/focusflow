@@ -6,21 +6,42 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
 
-import { tasksQueryKey, useCreateTask, useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
+import {
+  tasksQueryKey,
+  useCreateTask,
+  useDeleteTask,
+  useReassessRemainingEffort,
+  useTasks,
+  useUpdateTask,
+} from '@/features/tasks/hooks'
 
 vi.mock('@/features/tasks/api', () => ({
   listTasks: vi.fn(),
   createTask: vi.fn(),
   updateTask: vi.fn(),
   deleteTask: vi.fn(),
+  reassessRemainingEffort: vi.fn(),
 }))
 
-import { createTask, deleteTask, listTasks, updateTask } from '@/features/tasks/api'
+import {
+  createTask,
+  deleteTask,
+  listTasks,
+  reassessRemainingEffort,
+  updateTask,
+} from '@/features/tasks/api'
 
 const mockedListTasks = vi.mocked(listTasks)
 const mockedCreateTask = vi.mocked(createTask)
 const mockedUpdateTask = vi.mocked(updateTask)
 const mockedDeleteTask = vi.mocked(deleteTask)
+const mockedReassessRemainingEffort = vi.mocked(reassessRemainingEffort)
+
+const progressConflictError = new ApiError({
+  status: 409,
+  message: 'task effort has changed',
+  code: 'PROGRESS_CONFLICT',
+})
 
 function createWrapper(queryClient?: QueryClient) {
   const client =
@@ -58,6 +79,8 @@ describe('useTasks', () => {
         status: 'OPEN',
         dueDate: '2026-06-15',
         estimatedMinutes: 30,
+        remainingEffortMinutes: 30,
+        effortVersion: 0,
       },
     ]
     mockedListTasks.mockResolvedValue(tasks)
@@ -118,6 +141,8 @@ describe('useCreateTask', () => {
       status: 'OPEN',
       dueDate: '2026-06-01',
       estimatedMinutes: 45,
+      remainingEffortMinutes: 45,
+      effortVersion: 0,
     }
     mockedCreateTask.mockResolvedValue(created)
 
@@ -170,6 +195,8 @@ describe('useUpdateTask', () => {
       status: 'IN_PROGRESS',
       dueDate: '2026-06-10',
       estimatedMinutes: 60,
+      remainingEffortMinutes: 25,
+      effortVersion: 2,
     }
     mockedUpdateTask.mockResolvedValue(updated)
 
@@ -210,6 +237,82 @@ describe('useUpdateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
+  })
+
+  it('refetches the task list on PROGRESS_CONFLICT without a success invalidation', async () => {
+    mockedUpdateTask.mockRejectedValue(progressConflictError)
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useUpdateTask(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({
+      id: 1,
+      request: {
+        title: 'Updated title',
+        description: 'Updated description',
+        priority: 'HIGH',
+        status: 'IN_PROGRESS',
+        dueDate: '2026-06-10',
+        estimatedMinutes: 60,
+        effortVersion: 1,
+      },
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: tasksQueryKey,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(result.current.isSuccess).toBe(false)
+  })
+})
+
+describe('useReassessRemainingEffort', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('refetches the task list on PROGRESS_CONFLICT without a success invalidation', async () => {
+    mockedReassessRemainingEffort.mockRejectedValue(progressConflictError)
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useReassessRemainingEffort(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({
+      id: 1,
+      request: {
+        remainingEffortMinutes: 40,
+        currentDate: '2026-06-15',
+        effortVersion: 2,
+      },
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: tasksQueryKey,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(result.current.isSuccess).toBe(false)
   })
 })
 

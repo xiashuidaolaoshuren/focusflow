@@ -5,8 +5,30 @@ FocusFlow helps an individual turn owned tasks into a realistic clock schedule f
 ## Tasks
 
 **Task**:
-A user-owned unit of work with a status, priority, optional due date, and optional effort estimate.
+A user-owned unit of work with a status, priority, optional due date, an optional Whole-task estimate, and Remaining effort.
 _Avoid_: Plan item, work block, commitment
+
+**Whole-task estimate**:
+The Task's estimate of its complete effort. It initializes Remaining effort and remains available for comparison.
+_Avoid_: Remaining effort, actual minutes
+
+**Remaining effort**:
+The current estimate of minutes still needed to finish a Task. It is unknown until an estimate or an explicit assessment exists.
+_Avoid_: Actual minutes, whole-task estimate
+
+**Actual minutes**:
+Time spent on work. Unknown actual time is neither zero nor the planned duration.
+_Avoid_: Planned duration, remaining effort
+
+**Work outcome**:
+The recorded result of one planned work block: done, partly done, or skipped.
+
+**Remaining-effort checkpoint**:
+An explicit reassessment of Remaining effort. Work dated before it remains history and does not change that reassessment.
+
+**Unplanned work**:
+Time recorded against a Task on a date without a planned work block.
+_Avoid_: Work session, scheduled block
 
 **Plannable task**:
 A Task that may appear in a new Daily plan. Its status is Open or In progress.
@@ -23,7 +45,27 @@ _Avoid_: Due today
 Open work with no due date or a due date after the Planning date. The scheduler may leave it unplaced when the day is full.
 
 **Must-include work**:
-Must-continue work together with Due/overdue work.
+Must-continue work together with Due/overdue work, after Inherited urgency is applied.
+
+**Task dependency**:
+A finish-to-start link from a blocker to a blocked Task. The blocked Task may be scheduled only after the blocker's Planned completion. A Done or Cancelled blocker releases the blocked Task, and the link stays.
+_Avoid_: Subtask, parent task
+
+**Active dependency**:
+A Task dependency whose blocker and blocked Task are both Plannable tasks. Only an active dependency counts as "Blocked by" or "Blocks" and constrains a new schedule.
+
+**Active blocker**:
+A blocker whose status is Open or In progress. A Done or Cancelled blocker releases the blocked Task, and the link stays.
+
+**Planned completion**:
+A blocker whose known Remaining effort is fully placed in a schedule, with nothing left unplaced. It permits the blocked Task to be scheduled and does not by itself mark the blocker Done.
+
+**Inherited urgency**:
+The ranking group a Task takes from itself and from Plannable tasks reached through Open or In-progress tasks. A Done or Cancelled Task stops that chain. A blocker is at least as urgent as the work waiting on it.
+
+**Blocked work**:
+A Plannable task left entirely unplaced because an Active blocker in the same ranking was not fully placed.
+_Avoid_: Out of time, no estimate
 
 ## Time
 
@@ -64,27 +106,62 @@ _Avoid_: Latest plan for a date, schedule (as a second noun for the same aggrega
 The calendar date assigned to a Daily plan. Planning operations name it explicitly rather than relying on an unspecified “today.”
 _Avoid_: Server date, today (at an API boundary)
 
+**Working day**:
+A weekday the owner includes in the Horizon. It does not limit which dates can have a Daily plan.
+
+**Horizon**:
+The read-only forecast of the next seven Working days, calculated when it is viewed from live Tasks, current Scheduling preferences, Commitments, and saved Daily plans.
+_Avoid_: Multi-day plan, weekly plan
+
+**Forecast day**:
+A Horizon day that has no Daily plan. Fixed ordering rules and the existing scheduler place it.
+
+**As-planned pace**:
+The Horizon assumption that an eligible unrecorded Work session on a saved Daily plan is completed as planned.
+_Avoid_: Actual minutes, history-based pace
+
+**Assumed credit**:
+The planned minutes of an eligible unrecorded Work session that the Horizon counts toward completion, up to the Task's live Remaining effort. A session receives none when it starts before an Active blocker is satisfied, or when its date is on or before a later Remaining-effort checkpoint that its Schedule revision did not capture.
+
 **Plan detail**:
-The complete view of one Daily plan, including Scheduled blocks and Unplaced work.
+The complete view of one Daily plan, including its actionable schedule, recorded progress, and earlier Schedule revisions.
 
 **Plan summary**:
 The reduced view of a Daily plan used in plan history. It describes the plan without including its entries.
 
 **The plan for a date**:
-The one Daily plan for an owner and Planning date. Generating again replaces it.
+The one Daily plan for an owner and Planning date. Regeneration replaces it only when it has no Work outcome; Re-planning keeps it.
 _Avoid_: Latest plan for a date
+
+**Schedule revision**:
+One complete scheduling result retained by a Daily plan. The latest revision is actionable, and earlier revisions are history.
+_Avoid_: Replacement plan
+
+**Regeneration**:
+Replacement of a Daily plan that has no Work outcome with a new plan for the same Planning date.
+_Avoid_: Re-plan
+
+**Re-plan**:
+A new Schedule revision for the unelapsed remainder of the current day's existing Daily plan.
+_Avoid_: Regeneration, replace plan
+
+**No longer needed**:
+A planned work session kept after its Task is finished or cancelled, without an invented Work outcome or Actual minutes.
+
+**Needs refresh**:
+The state of a Daily plan whose captured effort assumptions no longer match live Remaining effort.
 
 **Generation snapshot**:
 The Plannable task state, effective Scheduling preferences, and Commitments used to make decisions for one plan-generation attempt. Later edits do not retroactively change those decisions.
 
 **Schedule snapshot**:
-The Work window, Peak window, constraints, and source-task data copied onto a Daily plan at generate time so later edits do not rewrite history.
+The Work window, Peak window, focus and break constraints, Fixed breaks, and source-task data copied onto a Daily plan at planning time so later edits do not rewrite history.
 
 **Daily plan task**:
-One ranked snapshot of a Plannable task in a Daily plan. It owns the task snapshot and any Unplaced work.
+One ranked snapshot of a Plannable task in a Schedule revision. It owns the task snapshot and any Unplaced work for that revision.
 
 **Daily plan block**:
-One minute-aligned clock interval inside a Daily plan. Work blocks reference a Daily plan task; other kinds do not.
+One minute-aligned clock interval inside a Schedule revision. Work blocks reference a Daily plan task; other kinds do not.
 
 **Scheduled block**:
 The API view of a placed Daily plan block.
@@ -93,7 +170,7 @@ The API view of a placed Daily plan block.
 A Scheduled block of work for one Task snapshot. Several sessions of the same source Task may exist in one Daily plan.
 
 **Unplaced work**:
-The API view of a Daily plan task that is not on the clock, or has a remaining unplaced portion, because its source Task has no estimate or the day ran out of time.
+The API view of a Daily plan task that is not on the clock, or has a remaining unplaced portion, because its Remaining effort is unknown, an Active blocker was not fully placed, or the day ran out of time.
 
 **Free minutes**:
 Minutes remaining in the Work window after Fixed breaks, overlapping Commitments, and the Trailing buffer are removed. Cadence breaks consume some of this time.
@@ -102,16 +179,16 @@ Minutes remaining in the Work window after Fixed breaks, overlapping Commitments
 The sum of durations of Work sessions after cadence and unavailable intervals are applied.
 
 **Required minutes**:
-The sum of known estimates on Must-include work at generate time.
+The sum of known Remaining effort on Must-include work when a Schedule revision is planned.
 
 **Shortfall warning**:
 A notice that some Must-include work is Unplaced work.
 
 **Task snapshot**:
-Immutable source-task identity, title, priority, status, due date, and estimate copied into a Daily plan task at generation, with an optional reference to the live Task. It excludes free-form description.
+Immutable source-task identity, title, priority, status, due date, Whole-task estimate, and Remaining effort copied into a Daily plan task when a Schedule revision is planned, with an optional reference to the live Task. It also records which Remaining-effort checkpoint was captured with that effort, when one existed. It excludes free-form description.
 
 ## Preferences
 
 **Scheduling preferences**:
-The owner's Work window, Focus cadence, Minimum session, Trailing buffer, optional Peak window, and Fixed breaks. Missing preferences resolve to in-code defaults.
+The owner's Work window, Focus cadence, Minimum session, Trailing buffer, optional Peak window, Fixed breaks, and Working days. Missing preferences resolve to in-code defaults.
 _Avoid_: Settings (when meaning the persisted aggregate)

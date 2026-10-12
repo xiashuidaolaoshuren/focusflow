@@ -1,15 +1,26 @@
 package com.focusflow.task;
 
 import com.focusflow.common.error.BadRequestException;
+import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.effort.EffortAssessment;
+import com.focusflow.effort.EffortEvent;
+import com.focusflow.effort.RemainingEffortCalculator;
+import com.focusflow.plan.PlanProgressQueryService;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
 import com.focusflow.task.dto.CreateTaskRequest;
+import com.focusflow.task.dto.RemainingEffortRequest;
 import com.focusflow.task.dto.TaskResponse;
 import com.focusflow.task.dto.UpdateTaskRequest;
+import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
 import com.focusflow.user.UserRepository;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,16 +28,28 @@ import org.springframework.transaction.annotation.Transactional;
 public class TaskService {
 
 	private final TaskRepository taskRepository;
+	private final RemainingEffortCheckpointRepository remainingEffortCheckpointRepository;
+	private final PlanProgressQueryService planProgressQueryService;
+	private final UnplannedWorkRepository unplannedWorkRepository;
+	private final OwnerSchedulingLock ownerSchedulingLock;
 	private final UserRepository userRepository;
 	private final CurrentUser currentUser;
 	private final TaskResponseMapper taskResponseMapper;
 
 	public TaskService(
 			TaskRepository taskRepository,
+			RemainingEffortCheckpointRepository remainingEffortCheckpointRepository,
+			PlanProgressQueryService planProgressQueryService,
+			UnplannedWorkRepository unplannedWorkRepository,
+			OwnerSchedulingLock ownerSchedulingLock,
 			UserRepository userRepository,
 			CurrentUser currentUser,
 			TaskResponseMapper taskResponseMapper) {
 		this.taskRepository = taskRepository;
+		this.remainingEffortCheckpointRepository = remainingEffortCheckpointRepository;
+		this.planProgressQueryService = planProgressQueryService;
+		this.unplannedWorkRepository = unplannedWorkRepository;
+		this.ownerSchedulingLock = ownerSchedulingLock;
 		this.userRepository = userRepository;
 		this.currentUser = currentUser;
 		this.taskResponseMapper = taskResponseMapper;
@@ -46,6 +69,8 @@ public class TaskService {
 		task.setStatus(TaskStatus.OPEN);
 		task.setDueDate(request.dueDate());
 		task.setEstimatedMinutes(request.estimatedMinutes());
+		task.setRemainingEffortMinutes(request.estimatedMinutes());
+		task.setEffortVersion(0);
 
 		return taskResponseMapper.toResponse(taskRepository.save(task));
 	}
@@ -62,23 +87,179 @@ public class TaskService {
 	}
 
 	@Transactional
+	public void recordRemainingEffortCheckpoint(
+			Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
+		saveCheckpoint(task, workDate, assessedRemainingMinutes);
+	}
+
+	/**
+	 * The latest remaining-effort checkpoint for a Task in event order, or empty when the Task has
+	 * none. Plan-side callers use this to tell whether newer effort state already replaced earlier
+	 * work.
+	 */
+	public Optional<CheckpointOrder> latestCheckpointOrder(Task task) {
+		return remainingEffortCheckpointRepository
+				.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task)
+				.map(
+						checkpoint ->
+								new CheckpointOrder(
+										checkpoint.getWorkDate(), checkpoint.getRecordedAt()));
+	}
+
+	@Transactional
 	public TaskResponse updateForCurrentUser(Long taskId, UpdateTaskRequest request) {
 		requireNullOrPositiveEstimate(request.estimatedMinutes());
+		ownerSchedulingLock.lockCurrentOwner();
 		Task task = loadTaskForCurrentUser(taskId);
+		requireMatchingEffortVersion(task, request.effortVersion());
+		Integer previousEstimate = task.getEstimatedMinutes();
+		TaskStatus previousStatus = task.getStatus();
+		TaskStatus nextStatus = request.status() != null ? request.status() : TaskStatus.OPEN;
+		requireOpenStatusAllowed(taskId, previousStatus, nextStatus);
 		task.setTitle(request.title());
 		task.setDescription(request.description());
 		task.setPriority(
 				request.priority() != null ? request.priority() : TaskPriority.MEDIUM);
-		task.setStatus(request.status() != null ? request.status() : TaskStatus.OPEN);
 		task.setDueDate(request.dueDate());
 		task.setEstimatedMinutes(request.estimatedMinutes());
+		if (shouldSyncRemainingFromEstimate(task, previousEstimate, request.estimatedMinutes())) {
+			task.setRemainingEffortMinutes(request.estimatedMinutes());
+			task.setEffortVersion(task.getEffortVersion() + 1);
+		}
+		if (nextStatus == TaskStatus.DONE && previousStatus != TaskStatus.DONE) {
+			requireCurrentDate(request.currentDate());
+			finishTask(task, request.currentDate());
+		} else if (nextStatus == TaskStatus.CANCELLED && previousStatus != TaskStatus.CANCELLED) {
+			task.setEffortVersion(task.getEffortVersion() + 1);
+		} else if (isReopen(previousStatus, nextStatus)) {
+			requireCurrentDate(request.currentDate());
+			reopenTask(task, request.currentDate(), request.remainingEffortMinutes());
+		}
+		task.setStatus(nextStatus);
+		return taskResponseMapper.toResponse(taskRepository.save(task));
+	}
+
+	private void finishTask(Task task, LocalDate workDate) {
+		applyCheckpoint(task, workDate, 0);
+	}
+
+	private void applyCheckpoint(Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
+		EffortEvent.Checkpoint checkpoint =
+				new EffortEvent.Checkpoint(
+						workDate, Instant.now(), task.getEffortVersion() + 1L, assessedRemainingMinutes);
+		EffortAssessment assessment =
+				RemainingEffortCalculator.apply(
+						task.getRemainingEffortMinutes(), List.of(checkpoint));
+		task.setRemainingEffortMinutes(assessment.remainingMinutes());
+		task.setEffortVersion(task.getEffortVersion() + 1);
+		saveCheckpoint(task, workDate, assessedRemainingMinutes);
+	}
+
+	private void saveCheckpoint(Task task, LocalDate workDate, Integer assessedRemainingMinutes) {
+		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
+		checkpoint.setOwner(task.getOwner());
+		checkpoint.setSourceTaskId(task.getId());
+		checkpoint.setTaskReference(task);
+		checkpoint.setWorkDate(workDate);
+		checkpoint.setRecordedAt(Instant.now());
+		checkpoint.setAssessedRemainingMinutes(assessedRemainingMinutes);
+		remainingEffortCheckpointRepository.save(checkpoint);
+	}
+
+	private static void requireCurrentDate(LocalDate currentDate) {
+		if (currentDate == null) {
+			throw new BadRequestException("current date is required");
+		}
+	}
+
+	/**
+	 * A Task that already has recorded work cannot slide back to Open through the ordinary status
+	 * control. Explicit reopening from Done or Cancelled stays available because it carries a fresh
+	 * assessment.
+	 */
+	private void requireOpenStatusAllowed(
+			Long taskId, TaskStatus previousStatus, TaskStatus nextStatus) {
+		if (nextStatus != TaskStatus.OPEN || previousStatus != TaskStatus.IN_PROGRESS) {
+			return;
+		}
+		if (planProgressQueryService.hasRecordedOutcome(taskId)
+				|| unplannedWorkRepository.existsByTaskReference_Id(taskId)) {
+			throw new BadRequestException("status cannot return to Open once work is recorded");
+		}
+	}
+
+	private static boolean isReopen(TaskStatus previousStatus, TaskStatus nextStatus) {
+		if (nextStatus != TaskStatus.OPEN && nextStatus != TaskStatus.IN_PROGRESS) {
+			return false;
+		}
+		return previousStatus == TaskStatus.DONE || previousStatus == TaskStatus.CANCELLED;
+	}
+
+	private void reopenTask(Task task, LocalDate workDate, Integer remainingEffortMinutes) {
+		applyCheckpoint(task, workDate, remainingEffortMinutes);
+	}
+
+	private boolean shouldSyncRemainingFromEstimate(
+			Task task, Integer previousEstimate, Integer nextEstimate) {
+		if (nextEstimate == null || Objects.equals(previousEstimate, nextEstimate)) {
+			return false;
+		}
+		if (task.getStatus() != TaskStatus.OPEN) {
+			return false;
+		}
+		Long taskId = task.getId();
+		return taskId == null
+				|| (!remainingEffortCheckpointRepository.existsByTaskReference_Id(taskId)
+						&& !unplannedWorkRepository.existsByTaskReference_Id(taskId)
+						&& !planProgressQueryService.hasRecordedOutcome(taskId));
+	}
+
+	@Transactional
+	public TaskResponse reassessRemainingEffortForCurrentUser(
+			Long taskId, RemainingEffortRequest request) {
+		requireCurrentDate(request.currentDate());
+		ownerSchedulingLock.lockCurrentOwner();
+		Task task = loadTaskForCurrentUser(taskId);
+		requireMatchingEffortVersion(task, request.effortVersion());
+		applyCheckpoint(task, request.currentDate(), request.remainingEffortMinutes());
 		return taskResponseMapper.toResponse(taskRepository.save(task));
 	}
 
 	@Transactional
 	public void deleteForCurrentUser(Long taskId) {
 		Task task = loadTaskForCurrentUser(taskId);
+		detachCheckpointReferences(task);
+		detachUnplannedWorkReferences(task);
 		taskRepository.delete(task);
+	}
+
+	private void detachCheckpointReferences(Task task) {
+		Long taskId = task.getId();
+		if (taskId == null) {
+			return;
+		}
+		for (RemainingEffortCheckpoint checkpoint :
+				remainingEffortCheckpointRepository.findByTaskReference_Id(taskId)) {
+			checkpoint.setTaskReference(null);
+			remainingEffortCheckpointRepository.save(checkpoint);
+		}
+	}
+
+	private void detachUnplannedWorkReferences(Task task) {
+		Long taskId = task.getId();
+		if (taskId == null) {
+			return;
+		}
+		for (UnplannedWork entry : unplannedWorkRepository.findByTaskReference_Id(taskId)) {
+			entry.setTaskReference(null);
+			unplannedWorkRepository.save(entry);
+		}
+	}
+
+	private static void requireMatchingEffortVersion(Task task, Integer expectedEffortVersion) {
+		if (expectedEffortVersion != null && expectedEffortVersion != task.getEffortVersion()) {
+			throw new ConflictException("PROGRESS_CONFLICT", "task effort has changed");
+		}
 	}
 
 	private static void requireNullOrPositiveEstimate(Integer estimatedMinutes) {

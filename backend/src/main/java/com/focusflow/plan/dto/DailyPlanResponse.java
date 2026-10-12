@@ -1,5 +1,6 @@
 package com.focusflow.plan.dto;
 
+import com.focusflow.task.dto.UnplannedWorkResponse;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -20,4 +21,11 @@ public record DailyPlanResponse(
 		int realizedBufferMinutes,
 		DailyPlanWarning warning,
 		List<ScheduledBlockResponse> blocks,
-		List<UnplacedWorkResponse> unplacedWork) {}
+		List<UnplacedWorkResponse> unplacedWork,
+		boolean needsRefresh,
+		int knownActualMinutes,
+		int missingActualCount,
+		List<PlanRevisionResponse> revisions,
+		List<ScheduledBlockResponse> composedRail,
+		List<ScheduledBlockResponse> offRailEarlyCompletions,
+		List<UnplannedWorkResponse> unplannedWork) {}
