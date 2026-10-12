@@ -100,6 +100,17 @@ class LayeredArchitectureTest {
 					.because("the effort ledger is pure: no Spring, JPA, or HTTP DTOs");
 
 	@ArchTest
+	static final ArchRule dependency_should_not_depend_on_framework_layers =
+			noClasses()
+					.that()
+					.resideInAPackage("com.focusflow.dependency")
+					.should()
+					.dependOnClassesThat()
+					.resideInAnyPackage(
+							"org.springframework..", "jakarta.persistence..", "..dto..")
+					.because("dependency rules are pure: no Spring, JPA, or plan DTOs");
+
+	@ArchTest
 	static final ArchRule security_should_not_depend_on_auth_dtos =
 			noClasses()
 					.that()
