@@ -77,6 +77,273 @@ class PostgresIntegrationTest {
 	}
 
 	@Test
+	void v7Migration_createsDependencyAndHorizonTables() {
+		assertThat(tableExists("task_dependencies")).isTrue();
+		assertThat(tableExists("daily_plan_revision_dependencies")).isTrue();
+		assertThat(columnExists("daily_plan_tasks", "captured_checkpoint_id")).isTrue();
+		assertThat(columnExists("scheduling_preferences", "working_monday")).isTrue();
+		assertThat(columnExists("scheduling_preferences", "working_sunday")).isTrue();
+	}
+
+	@Test
+	void schedulingPreferences_insertWithoutWeekdayColumns_usesMondayThroughFridayDefaults() {
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(UUID.randomUUID().toString().substring(0, 8))
+								.withAccountPrefix("v7-weekday-defaults")
+								.withPasswordHash(
+										"$2a$10$aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+
+		insertSchedulingPreferences(owner.getId());
+
+		Boolean weekdaysMatchDefaults =
+				jdbcTemplate.queryForObject(
+						"""
+						SELECT working_monday AND working_tuesday AND working_wednesday
+						       AND working_thursday AND working_friday
+						       AND NOT working_saturday AND NOT working_sunday
+						FROM scheduling_preferences
+						WHERE owner_id = ?
+						""",
+						Boolean.class,
+						owner.getId());
+		assertThat(weekdaysMatchDefaults).isTrue();
+	}
+
+	@Test
+	void dailyPlanTasks_capturedCheckpointId_isNullableAndHasNoForeignKey() {
+		Long planId = insertBareDailyPlan("v7-checkpoint-null", 901);
+		Long planTaskId = insertBareDailyPlanTask(planId, 999L);
+
+		assertThat(
+						jdbcTemplate.queryForObject(
+								"SELECT captured_checkpoint_id FROM daily_plan_tasks WHERE id = ?",
+								Long.class,
+								planTaskId))
+				.isNull();
+
+		jdbcTemplate.update(
+				"UPDATE daily_plan_tasks SET captured_checkpoint_id = ? WHERE id = ?",
+				888888888L,
+				planTaskId);
+
+		assertThat(
+						jdbcTemplate.queryForObject(
+								"SELECT captured_checkpoint_id FROM daily_plan_tasks WHERE id = ?",
+								Long.class,
+								planTaskId))
+				.isEqualTo(888888888L);
+	}
+
+	@Test
+	void taskDependencies_rejectSelfLink() {
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(UUID.randomUUID().toString().substring(0, 8))
+								.withAccountPrefix("v7-self-link")
+								.withPasswordHash(
+										"$2a$10$bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+		Task task =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Self link task")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+
+		assertThatThrownBy(
+						() ->
+								jdbcTemplate.update(
+										"""
+										INSERT INTO task_dependencies (
+										    owner_id, blocked_task_id, blocker_task_id
+										) VALUES (?, ?, ?)
+										""",
+										owner.getId(),
+										task.getId(),
+										task.getId()))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void taskDependencies_rejectDuplicatePair() {
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(UUID.randomUUID().toString().substring(0, 8))
+								.withAccountPrefix("v7-dup-link")
+								.withPasswordHash(
+										"$2a$10$ccccccccccccccccccccccccccccccccccccccccccccccccccccccc"));
+		Task blocker =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Blocker")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+		Task blocked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Blocked")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+
+		insertTaskDependency(owner.getId(), blocked.getId(), blocker.getId());
+		assertThatThrownBy(
+						() -> insertTaskDependency(owner.getId(), blocked.getId(), blocker.getId()))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void taskDependencies_rejectOrphanOwner() {
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(UUID.randomUUID().toString().substring(0, 8))
+								.withAccountPrefix("v7-orphan-owner")
+								.withPasswordHash(
+										"$2a$10$ddddddddddddddddddddddddddddddddddddddddddddddddddddddd"));
+		Task blocker =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Blocker orphan")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+		Task blocked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Blocked orphan")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+
+		assertThatThrownBy(
+						() ->
+								jdbcTemplate.update(
+										"""
+										INSERT INTO task_dependencies (
+										    owner_id, blocked_task_id, blocker_task_id
+										) VALUES (999999, ?, ?)
+										""",
+										blocked.getId(),
+										blocker.getId()))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void taskDependencies_cascadeWhenEitherTaskDeleted() {
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(UUID.randomUUID().toString().substring(0, 8))
+								.withAccountPrefix("v7-cascade")
+								.withPasswordHash(
+										"$2a$10$eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"));
+		Task blocker =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Cascade blocker")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+		Task blocked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Cascade blocked")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+
+		insertTaskDependency(owner.getId(), blocked.getId(), blocker.getId());
+		assertThat(countTaskDependencies()).isEqualTo(1L);
+
+		taskRepository.delete(blocked);
+		taskRepository.flush();
+		assertThat(countTaskDependencies()).isZero();
+
+		Task blockedAgain =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Cascade blocked again")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN));
+		insertTaskDependency(owner.getId(), blockedAgain.getId(), blocker.getId());
+		taskRepository.delete(blocker);
+		taskRepository.flush();
+		assertThat(countTaskDependencies()).isZero();
+	}
+
+	@Test
+	void revisionDependencies_allowMissingLiveTasks_andCascadeWithRevision() {
+		Long planId = insertBareDailyPlan("v7-rev-deps", 902);
+		Long revisionId = revisionIdForPlan(planId);
+
+		jdbcTemplate.update(
+				"""
+				INSERT INTO daily_plan_revision_dependencies (
+				    revision_id, blocked_source_task_id, blocker_source_task_id
+				) VALUES (?, 111111, 222222)
+				""",
+				revisionId);
+
+		assertThat(countRevisionDependencies(revisionId)).isEqualTo(1L);
+
+		jdbcTemplate.update("DELETE FROM daily_plan_revisions WHERE id = ?", revisionId);
+		assertThat(countRevisionDependencies(revisionId)).isZero();
+	}
+
+	private void insertTaskDependency(long ownerId, long blockedTaskId, long blockerTaskId) {
+		jdbcTemplate.update(
+				"""
+				INSERT INTO task_dependencies (owner_id, blocked_task_id, blocker_task_id)
+				VALUES (?, ?, ?)
+				""",
+				ownerId,
+				blockedTaskId,
+				blockerTaskId);
+	}
+
+	private long countTaskDependencies() {
+		Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM task_dependencies", Long.class);
+		return count != null ? count : 0L;
+	}
+
+	private long countRevisionDependencies(long revisionId) {
+		Long count =
+				jdbcTemplate.queryForObject(
+						"SELECT COUNT(*) FROM daily_plan_revision_dependencies WHERE revision_id = ?",
+						Long.class,
+						revisionId);
+		return count != null ? count : 0L;
+	}
+
+	private boolean columnExists(String tableName, String columnName) {
+		Integer count =
+				jdbcTemplate.queryForObject(
+						"""
+						SELECT COUNT(*)
+						FROM information_schema.columns
+						WHERE table_schema = 'public'
+						  AND table_name = ?
+						  AND column_name = ?
+						""",
+						Integer.class,
+						tableName,
+						columnName);
+		return count != null && count == 1;
+	}
+
+	@Test
 	void schedulingPreferences_rejectsDuplicateOwner() {
 		User owner =
 				savedUser(
