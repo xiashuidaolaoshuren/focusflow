@@ -50,6 +50,27 @@ public class SchedulingPreferences {
 	@Column(name = "buffer_minutes", nullable = false)
 	private int bufferMinutes;
 
+	@Column(name = "working_monday", nullable = false)
+	private boolean workingMonday = true;
+
+	@Column(name = "working_tuesday", nullable = false)
+	private boolean workingTuesday = true;
+
+	@Column(name = "working_wednesday", nullable = false)
+	private boolean workingWednesday = true;
+
+	@Column(name = "working_thursday", nullable = false)
+	private boolean workingThursday = true;
+
+	@Column(name = "working_friday", nullable = false)
+	private boolean workingFriday = true;
+
+	@Column(name = "working_saturday", nullable = false)
+	private boolean workingSaturday = false;
+
+	@Column(name = "working_sunday", nullable = false)
+	private boolean workingSunday = false;
+
 	@Column(name = "peak_start")
 	private LocalTime peakStart;
 
@@ -129,6 +150,62 @@ public class SchedulingPreferences {
 
 	public void setBufferMinutes(int bufferMinutes) {
 		this.bufferMinutes = bufferMinutes;
+	}
+
+	public boolean isWorkingMonday() {
+		return workingMonday;
+	}
+
+	public void setWorkingMonday(boolean workingMonday) {
+		this.workingMonday = workingMonday;
+	}
+
+	public boolean isWorkingTuesday() {
+		return workingTuesday;
+	}
+
+	public void setWorkingTuesday(boolean workingTuesday) {
+		this.workingTuesday = workingTuesday;
+	}
+
+	public boolean isWorkingWednesday() {
+		return workingWednesday;
+	}
+
+	public void setWorkingWednesday(boolean workingWednesday) {
+		this.workingWednesday = workingWednesday;
+	}
+
+	public boolean isWorkingThursday() {
+		return workingThursday;
+	}
+
+	public void setWorkingThursday(boolean workingThursday) {
+		this.workingThursday = workingThursday;
+	}
+
+	public boolean isWorkingFriday() {
+		return workingFriday;
+	}
+
+	public void setWorkingFriday(boolean workingFriday) {
+		this.workingFriday = workingFriday;
+	}
+
+	public boolean isWorkingSaturday() {
+		return workingSaturday;
+	}
+
+	public void setWorkingSaturday(boolean workingSaturday) {
+		this.workingSaturday = workingSaturday;
+	}
+
+	public boolean isWorkingSunday() {
+		return workingSunday;
+	}
+
+	public void setWorkingSunday(boolean workingSunday) {
+		this.workingSunday = workingSunday;
 	}
 
 	public LocalTime getPeakStart() {

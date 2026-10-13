@@ -15,6 +15,10 @@ import { PriorityBadge } from '@/features/tasks/PriorityBadge'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { TaskMetaItem } from '@/features/tasks/TaskMetaItem'
 import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
+import {
+  countActiveBlockedBy,
+  countActiveBlocks,
+} from '@/features/tasks/taskDependencyLinks'
 import type { TaskResponse } from '@/types/api'
 
 function formatDueDate(dueDate: string | null): string {
@@ -45,6 +49,9 @@ function TaskRow({
   onDelete,
   isDeleting,
 }: TaskRowProps) {
+  const blockedByCount = countActiveBlockedBy(task)
+  const blocksCount = countActiveBlocks(task)
+
   return (
     <Card size="sm">
       <CardContent className="flex flex-col gap-2 py-3">
@@ -75,6 +82,14 @@ function TaskRow({
           </TaskMetaItem>
           <RemainingEffortControl task={task} />
         </div>
+        {blockedByCount > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Blocked by {blockedByCount}
+          </p>
+        ) : null}
+        {blocksCount > 0 ? (
+          <p className="text-sm text-muted-foreground">Blocks {blocksCount}</p>
+        ) : null}
       </CardContent>
     </Card>
   )

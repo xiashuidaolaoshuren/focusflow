@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider, useIsMutating } from '@tanstack/react-query'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TaskForm, TaskFormSubmitButton } from '@/features/tasks/TaskForm'
 import { PROGRESS_CONFLICT_MESSAGE } from '@/features/tasks/taskEffortConflict'
@@ -24,13 +24,25 @@ vi.mock('@/features/tasks/hooks', async (importOriginal) => {
     ...actual,
     useCreateTask: vi.fn(),
     useUpdateTask: vi.fn(),
+    useTasks: vi.fn(),
+    useAddBlocker: vi.fn(),
+    useRemoveBlocker: vi.fn(),
   }
 })
 
-import { useCreateTask, useUpdateTask } from '@/features/tasks/hooks'
+import {
+  useAddBlocker,
+  useCreateTask,
+  useRemoveBlocker,
+  useTasks,
+  useUpdateTask,
+} from '@/features/tasks/hooks'
 
 const mockedUseCreateTask = vi.mocked(useCreateTask)
 const mockedUseUpdateTask = vi.mocked(useUpdateTask)
+const mockedUseTasks = vi.mocked(useTasks)
+const mockedUseAddBlocker = vi.mocked(useAddBlocker)
+const mockedUseRemoveBlocker = vi.mocked(useRemoveBlocker)
 const mockedUseIsMutating = vi.mocked(useIsMutating)
 
 function renderTaskForm(
@@ -87,9 +99,36 @@ const sampleTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 0,
+  blockedBy: [],
+  blocks: [],
+}
+
+function mockBlockerHooks() {
+  mockedUseTasks.mockReturnValue({
+    tasks: [],
+    isPending: false,
+    isError: false,
+    isEmpty: true,
+  } as unknown as ReturnType<typeof useTasks>)
+  mockedUseAddBlocker.mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof useAddBlocker>)
+  mockedUseRemoveBlocker.mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof useRemoveBlocker>)
 }
 
 describe('TaskForm', () => {
+  beforeEach(() => {
+    mockBlockerHooks()
+  })
+
   it('renders fields, submits create payload, and disables submit while pending', async () => {
     const mutate = vi.fn()
     mockedUseCreateTask.mockReturnValue({
@@ -433,6 +472,73 @@ describe('TaskForm', () => {
         onSuccess: expect.any(Function),
       }),
     )
+  })
+
+  it('lists finished blockers and offers other owner tasks in the add control', async () => {
+    mockedUseTasks.mockReturnValue({
+      tasks: [
+        sampleTask,
+        {
+          id: 2,
+          title: 'Prerequisite',
+          description: null,
+          priority: 'MEDIUM',
+          status: 'OPEN',
+          dueDate: null,
+          estimatedMinutes: 30,
+          remainingEffortMinutes: 30,
+          effortVersion: 0,
+          blockedBy: [],
+          blocks: [],
+        },
+        {
+          id: 3,
+          title: 'Finished blocker',
+          description: null,
+          priority: 'LOW',
+          status: 'DONE',
+          dueDate: null,
+          estimatedMinutes: 15,
+          remainingEffortMinutes: 0,
+          effortVersion: 1,
+          blockedBy: [],
+          blocks: [],
+        },
+      ],
+      isPending: false,
+      isError: false,
+      isEmpty: false,
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskForm(vi.fn(), {
+      ...sampleTask,
+      blockedBy: [
+        { taskId: 3, title: 'Finished blocker', status: 'DONE' },
+      ],
+    })
+
+    expect(screen.getByText(/finished blocker/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: /add blocker/i }))
+    expect(await screen.findByRole('option', { name: /prerequisite/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /write report/i })).not.toBeInTheDocument()
+  })
+
+  it('shows dependency error codes beside the blocker control without clearing the form', async () => {
+    mockedUseAddBlocker.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new ApiError({
+        status: 409,
+        message: 'cycle',
+        code: 'DEPENDENCY_CYCLE',
+      }),
+    } as unknown as ReturnType<typeof useAddBlocker>)
+
+    renderTaskForm(vi.fn(), sampleTask)
+
+    expect(screen.getByText('DEPENDENCY_CYCLE')).toBeInTheDocument()
+    expect(screen.getByLabelText(/^title$/i)).toHaveValue('Write report')
   })
 
   it('disables save while form update mutation is pending', async () => {

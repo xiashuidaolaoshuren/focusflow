@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 import { ApiError } from '@/lib/api'
@@ -60,6 +60,8 @@ const sampleTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 0,
+  blockedBy: [],
+  blocks: [],
 }
 
 describe('TaskList', () => {
@@ -330,6 +332,62 @@ describe('TaskList', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /edit/i }))
 
     expect(onEditTask).toHaveBeenCalledWith(sampleTask)
+  })
+
+  it('shows active dependency counts only when both tasks are Open or In progress', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          blockedBy: [{ taskId: 2, title: 'Blocker', status: 'OPEN' }],
+          blocks: [{ taskId: 3, title: 'Dependent', status: 'IN_PROGRESS' }],
+        },
+        {
+          id: 2,
+          title: 'Done blocker endpoint',
+          description: null,
+          priority: 'MEDIUM',
+          status: 'OPEN',
+          dueDate: null,
+          estimatedMinutes: 20,
+          remainingEffortMinutes: 20,
+          effortVersion: 0,
+          blockedBy: [],
+          blocks: [{ taskId: 1, title: 'Write report', status: 'OPEN' }],
+        },
+        {
+          id: 4,
+          title: 'Done blocked task',
+          description: null,
+          priority: 'LOW',
+          status: 'DONE',
+          dueDate: null,
+          estimatedMinutes: 10,
+          remainingEffortMinutes: 0,
+          effortVersion: 0,
+          blockedBy: [{ taskId: 1, title: 'Write report', status: 'OPEN' }],
+          blocks: [],
+        },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    const writeReportRow = screen
+      .getByRole('heading', { name: /write report/i })
+      .closest('[data-slot="card"]') as HTMLElement
+    expect(within(writeReportRow).getByText('Blocked by 1')).toBeInTheDocument()
+    expect(within(writeReportRow).getByText('Blocks 1')).toBeInTheDocument()
+
+    const doneRow = screen
+      .getByRole('heading', { name: /done blocked task/i })
+      .closest('[data-slot="card"]') as HTMLElement
+    expect(within(doneRow).queryByText(/blocked by/i)).not.toBeInTheDocument()
   })
 
   it('calls delete mutation only after confirmation', async () => {

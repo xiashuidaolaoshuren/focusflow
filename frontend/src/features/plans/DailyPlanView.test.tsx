@@ -141,6 +141,8 @@ const liveTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 2,
+  blockedBy: [],
+  blocks: [],
 }
 
 describe('DailyPlanView revision rail', () => {
@@ -321,6 +323,98 @@ describe('DailyPlanView unplaced companion list', () => {
       screen.getByText(/no estimate — add one to put it on the clock/i),
     ).toBeInTheDocument()
     expect(screen.getByText(/out of time — 30 min unplaced/i)).toBeInTheDocument()
+  })
+
+  it('shows waiting-on snapshot titles for blocked unplaced work', () => {
+    const blockedPlan: DailyPlanResponse = {
+      ...samplePlan,
+      unplacedWork: [
+        {
+          reason: 'BLOCKED',
+          unplacedMinutes: 45,
+          blockerSourceTaskIds: [10, 11],
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 20,
+            title: 'Blocked feature',
+          },
+        },
+        {
+          reason: 'BLOCKED',
+          unplacedMinutes: 45,
+          blockerSourceTaskIds: [99],
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 21,
+            title: 'Unknown blocker title',
+          },
+        },
+      ],
+      blocks: [
+        sampleWorkBlock,
+        {
+          ...sampleWorkBlock,
+          id: 101,
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 11,
+            title: 'Second blocker',
+          },
+        },
+      ],
+      composedRail: [
+        sampleWorkBlock,
+        {
+          ...sampleWorkBlock,
+          id: 101,
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 11,
+            title: 'Second blocker',
+          },
+        },
+      ],
+    }
+
+    render(<DailyPlanView plan={blockedPlan} />)
+
+    expect(
+      screen.getByText(/blocked feature: waiting on write tests, second blocker/i),
+    ).toBeInTheDocument()
+  })
+
+  it('shows needed-for copy with due date from plan snapshots', () => {
+    const inheritedPlan: DailyPlanResponse = {
+      ...samplePlan,
+      composedRail: [
+        {
+          ...sampleWorkBlock,
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 30,
+            title: 'Inherited prep',
+            neededForTaskId: 10,
+          },
+        },
+      ],
+      blocks: [
+        {
+          ...sampleWorkBlock,
+          taskSnapshot: {
+            ...sampleWorkBlock.taskSnapshot,
+            sourceTaskId: 30,
+            title: 'Inherited prep',
+            neededForTaskId: 10,
+          },
+        },
+      ],
+    }
+
+    render(<DailyPlanView plan={inheritedPlan} />)
+
+    expect(
+      screen.getByText(/needed for write tests \(due 2026-06-15\)/i),
+    ).toBeInTheDocument()
   })
 })
 

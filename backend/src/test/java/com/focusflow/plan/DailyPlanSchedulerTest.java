@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -71,7 +72,8 @@ class DailyPlanSchedulerTest {
 								new EffectiveFixedBreak(
 										"Lunch",
 										LocalTime.of(12, 0),
-										LocalTime.of(13, 0))));
+										LocalTime.of(13, 0))),
+						Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 		List<CommitmentWindow> commitments =
 				List.of(new CommitmentWindow("Standup", LocalTime.of(10, 0), LocalTime.of(11, 0)));
 
@@ -172,7 +174,8 @@ class DailyPlanSchedulerTest {
 						null,
 						List.of(
 								new EffectiveFixedBreak(
-										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))),
+						Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 
 		DailyPlanSchedule schedule =
 				scheduler.compose(planDate, List.of(task), preferences, List.of());
@@ -200,7 +203,8 @@ class DailyPlanSchedulerTest {
 				SchedulingPreferenceDefaults.BUFFER_MINUTES,
 				null,
 				null,
-				List.of());
+				List.of(),
+				Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 	}
 
 	private Task createTask(long id, int estimatedMinutes, TaskStatus status) {

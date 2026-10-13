@@ -34,6 +34,8 @@ const liveTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 2,
+  blockedBy: [],
+  blocks: [],
 }
 
 function renderForm() {

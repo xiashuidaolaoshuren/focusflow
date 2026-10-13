@@ -80,6 +80,8 @@ const sampleTask = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 0,
+  blockedBy: [],
+  blocks: [],
 }
 
 const dashboardSamplePlan = samplePlan
@@ -390,6 +392,8 @@ describe('DashboardPage', () => {
         dueDate: '2026-06-15',
         estimatedMinutes: 60,
         effortVersion: 0,
+        blockedBy: [],
+        blocks: [],
       },
     })
   })

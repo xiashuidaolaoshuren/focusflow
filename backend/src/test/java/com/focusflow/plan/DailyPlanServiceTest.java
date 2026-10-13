@@ -29,6 +29,7 @@ import com.focusflow.plan.dto.GeneratePlanRequest;
 import com.focusflow.plan.dto.ReplanRequest;
 import com.focusflow.plan.dto.TaskEffortVersion;
 import com.focusflow.preferences.EffectiveSchedulingPreferences;
+import com.focusflow.preferences.SchedulingPreferenceDefaults;
 import com.focusflow.preferences.SchedulingPreferencesQueryService;
 import com.focusflow.security.CurrentUser;
 import com.focusflow.security.UserContext;
@@ -355,7 +356,8 @@ class DailyPlanServiceTest {
 				0,
 				null,
 				null,
-				List.of());
+				List.of(),
+				java.util.Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 	}
 
 	@Test

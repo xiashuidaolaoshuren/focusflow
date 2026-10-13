@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -43,6 +44,19 @@ public class GlobalExceptionHandler {
 						details,
 						currentRequestId());
 
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ApiErrorResponse> handleMalformedBody(
+			HttpMessageNotReadableException ex, HttpServletRequest request) {
+		ApiErrorResponse body =
+				ApiErrorResponse.withoutDetails(
+						HttpStatus.BAD_REQUEST.value(),
+						HttpStatus.BAD_REQUEST.getReasonPhrase(),
+						"Malformed request body",
+						request.getRequestURI(),
+						currentRequestId());
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
 	}
 

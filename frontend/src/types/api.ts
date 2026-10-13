@@ -33,6 +33,13 @@ export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH'
 
 export type TaskStatus = 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
 
+/** Mirrors `com.focusflow.task.dto.TaskLinkResponse` */
+export type TaskLinkResponse = {
+  taskId: number
+  title: string
+  status: TaskStatus
+}
+
 export type TaskResponse = {
   id: number
   title: string
@@ -43,6 +50,12 @@ export type TaskResponse = {
   estimatedMinutes: number | null
   remainingEffortMinutes: number | null
   effortVersion: number
+  blockedBy: TaskLinkResponse[]
+  blocks: TaskLinkResponse[]
+}
+
+export type AddBlockerRequest = {
+  blockerTaskId: number
 }
 
 export type CreateTaskRequest = {
@@ -103,6 +116,38 @@ export type FixedBreakResponse = {
 /** Mirrors `com.focusflow.preferences.dto.FixedBreakRequest` */
 export type FixedBreakRequest = FixedBreakResponse
 
+/** Mirrors `java.time.DayOfWeek` in scheduling preferences DTOs */
+export type DayOfWeek =
+  | 'MONDAY'
+  | 'TUESDAY'
+  | 'WEDNESDAY'
+  | 'THURSDAY'
+  | 'FRIDAY'
+  | 'SATURDAY'
+  | 'SUNDAY'
+
+const DAY_OF_WEEK_ORDER: DayOfWeek[] = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+]
+
+export const DAY_OF_WEEK_LABELS: Record<DayOfWeek, string> = {
+  MONDAY: 'Monday',
+  TUESDAY: 'Tuesday',
+  WEDNESDAY: 'Wednesday',
+  THURSDAY: 'Thursday',
+  FRIDAY: 'Friday',
+  SATURDAY: 'Saturday',
+  SUNDAY: 'Sunday',
+}
+
+export { DAY_OF_WEEK_ORDER }
+
 /** Mirrors `com.focusflow.preferences.dto.SchedulingPreferencesResponse` */
 export type SchedulingPreferencesResponse = {
   workDayStart: string
@@ -115,6 +160,7 @@ export type SchedulingPreferencesResponse = {
   peakStart: string | null
   peakEnd: string | null
   fixedBreaks: FixedBreakResponse[]
+  workingDays: DayOfWeek[]
   persisted: boolean
 }
 
@@ -130,6 +176,7 @@ export type SchedulingPreferencesRequest = {
   peakStart: string | null
   peakEnd: string | null
   fixedBreaks: FixedBreakRequest[]
+  workingDays: DayOfWeek[]
 }
 
 /** Mirrors `com.focusflow.common.web.PageResponse` */
@@ -150,7 +197,7 @@ export type BlockKind =
   | 'BUFFER'
 
 /** Mirrors `com.focusflow.schedule.UnplacedReason` */
-export type UnplacedReason = 'NO_ESTIMATE' | 'OUT_OF_TIME'
+export type UnplacedReason = 'NO_ESTIMATE' | 'OUT_OF_TIME' | 'BLOCKED'
 
 /** Mirrors `com.focusflow.effort.WorkOutcome` */
 export type WorkOutcome = 'DONE' | 'PARTLY_DONE' | 'SKIPPED'
@@ -173,6 +220,8 @@ export type TaskSnapshotResponse = {
   estimatedMinutes: number | null
   capturedRemainingEffortMinutes: number | null
   mustInclude: boolean
+  capturedCheckpointId: number | null
+  neededForTaskId: number | null
 }
 
 type ScheduledBlockFields = {
@@ -215,6 +264,7 @@ export type UnplacedWorkResponse = {
   reason: UnplacedReason
   unplacedMinutes: number | null
   taskSnapshot: TaskSnapshotResponse
+  blockerSourceTaskIds: number[]
 }
 
 /** Mirrors `com.focusflow.plan.dto.PlanRevisionResponse` */
@@ -310,6 +360,11 @@ export type DailyPlanWarning = {
   unestimatedTasks: {
     sourceTaskId: number
     title: string
+  }[]
+  blockedTasks: {
+    sourceTaskId: number
+    title: string
+    blockerSourceTaskIds: number[]
   }[]
 }
 

@@ -35,6 +35,8 @@ const liveTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 2,
+  blockedBy: [],
+  blocks: [],
 }
 
 function renderDialog(
@@ -291,5 +293,43 @@ describe('BlockProgressDialog summary', () => {
     renderDialog({ task: null })
 
     expect(screen.getByText(/45 min captured remaining/i)).toBeInTheDocument()
+  })
+
+  it('names open and in-progress blockers but hides done blockers', () => {
+    renderDialog({
+      task: {
+        ...liveTask,
+        blockedBy: [
+          { taskId: 2, title: 'Active blocker', status: 'OPEN' },
+          { taskId: 3, title: 'Finished blocker', status: 'DONE' },
+        ],
+      },
+    })
+
+    expect(screen.getByText(/active blocker/i)).toBeInTheDocument()
+    expect(screen.queryByText(/finished blocker/i)).not.toBeInTheDocument()
+  })
+
+  it('still saves partly done when active blockers are shown', async () => {
+    const mutate = vi.fn()
+    mockedUseRecordBlockProgress.mockReturnValue({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useRecordBlockProgress>)
+
+    renderDialog({
+      task: {
+        ...liveTask,
+        blockedBy: [{ taskId: 2, title: 'Active blocker', status: 'IN_PROGRESS' }],
+      },
+    })
+
+    await selectOutcome(/^partly done$/i)
+    fireEvent.change(screen.getByLabelText(/^actual minutes$/i), {
+      target: { value: '20' },
+    })
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalled()
   })
 })

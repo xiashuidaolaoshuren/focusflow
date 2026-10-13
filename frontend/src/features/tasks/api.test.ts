@@ -3,10 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { TaskResponse } from '@/types/api'
 
 import {
+  addBlocker,
   createTask,
   deleteTask,
   listTasks,
   reassessRemainingEffort,
+  removeBlocker,
   updateTask,
 } from '@/features/tasks/api'
 
@@ -27,6 +29,8 @@ describe('listTasks', () => {
         estimatedMinutes: 30,
         remainingEffortMinutes: 30,
         effortVersion: 0,
+        blockedBy: [],
+        blocks: [],
       },
       {
         id: 2,
@@ -38,6 +42,8 @@ describe('listTasks', () => {
         estimatedMinutes: 45,
         remainingEffortMinutes: 45,
         effortVersion: 1,
+        blockedBy: [],
+        blocks: [],
       },
     ]
     const fetchMock = vi.fn().mockResolvedValue(
@@ -109,6 +115,8 @@ describe('createTask', () => {
       estimatedMinutes: 45,
       remainingEffortMinutes: 45,
       effortVersion: 0,
+      blockedBy: [],
+      blocks: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(created), {
@@ -208,6 +216,8 @@ describe('updateTask', () => {
       estimatedMinutes: 60,
       remainingEffortMinutes: 25,
       effortVersion: 2,
+      blockedBy: [],
+      blocks: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(updated), {
@@ -261,6 +271,8 @@ describe('reassessRemainingEffort', () => {
       estimatedMinutes: 60,
       remainingEffortMinutes: 40,
       effortVersion: 3,
+      blockedBy: [],
+      blocks: [],
     }
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(response), {
@@ -288,6 +300,69 @@ describe('reassessRemainingEffort', () => {
           currentDate: '2026-06-15',
           effortVersion: 2,
         }),
+      }),
+    )
+  })
+})
+
+describe('addBlocker', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('posts AddBlockerRequest to the blockers route', async () => {
+    const updated: TaskResponse = {
+      id: 1,
+      title: 'Blocked task',
+      description: null,
+      priority: 'HIGH',
+      status: 'OPEN',
+      dueDate: '2026-06-15',
+      estimatedMinutes: 60,
+      remainingEffortMinutes: 60,
+      effortVersion: 0,
+      blockedBy: [{ taskId: 2, title: 'Blocker', status: 'OPEN' }],
+      blocks: [],
+    }
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(updated), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(addBlocker(1, { blockerTaskId: 2 })).resolves.toEqual(updated)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/tasks/1/blockers'),
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        body: JSON.stringify({ blockerTaskId: 2 }),
+      }),
+    )
+  })
+})
+
+describe('removeBlocker', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('deletes the blocker link on success (204)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 204,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(removeBlocker(1, 2)).resolves.toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/tasks/1/blockers/2'),
+      expect.objectContaining({
+        method: 'DELETE',
+        credentials: 'include',
       }),
     )
   })

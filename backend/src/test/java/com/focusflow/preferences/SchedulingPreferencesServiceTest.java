@@ -15,6 +15,7 @@ import com.focusflow.security.UserContext;
 import com.focusflow.user.OwnerSchedulingLock;
 import com.focusflow.user.User;
 import java.lang.reflect.Method;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
@@ -239,7 +240,8 @@ class SchedulingPreferencesServiceTest {
 						0,
 						null,
 						null,
-						List.of(new FixedBreakRequest("Coffee", LocalTime.of(15, 0), LocalTime.of(15, 15))));
+						List.of(new FixedBreakRequest("Coffee", LocalTime.of(15, 0), LocalTime.of(15, 15))),
+						List.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 
 		SchedulingPreferencesResponse response = schedulingPreferencesService.put(request);
 
@@ -251,6 +253,61 @@ class SchedulingPreferencesServiceTest {
 		assertThat(response.fixedBreaks()).singleElement().satisfies(breakItem -> {
 			assertThat(breakItem.label()).isEqualTo("Coffee");
 		});
+	}
+
+	@Test
+	void put_whenWorkingDaysEmpty_throwsBadRequestException() {
+		SchedulingPreferencesRequest request =
+				validRequestBuilder().withWorkingDays(List.of()).build();
+
+		assertThatThrownBy(() -> schedulingPreferencesService.put(request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("working days must not be empty");
+	}
+
+	@Test
+	void put_whenWorkingDaysContainDuplicates_throwsBadRequestException() {
+		SchedulingPreferencesRequest request =
+				validRequestBuilder()
+						.withWorkingDays(List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY))
+						.build();
+
+		assertThatThrownBy(() -> schedulingPreferencesService.put(request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("working days must not contain duplicates");
+	}
+
+	@Test
+	void put_persistsWorkingDaysOnEntityAndEchoesThemInResponse() {
+		when(currentUser.getCurrentUser()).thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		User owner = new User();
+		owner.setEmail("owner@example.com");
+		owner.setUsername("owner");
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(schedulingPreferencesRepository.findByOwner_Id(42L)).thenReturn(Optional.empty());
+		when(schedulingPreferencesRepository.save(any(SchedulingPreferences.class)))
+				.thenAnswer(invocation -> invocation.getArgument(0));
+
+		SchedulingPreferencesRequest request =
+				validRequestBuilder()
+						.withWorkingDays(List.of(DayOfWeek.TUESDAY, DayOfWeek.SATURDAY))
+						.build();
+
+		SchedulingPreferencesResponse response = schedulingPreferencesService.put(request);
+
+		ArgumentCaptor<SchedulingPreferences> captor = ArgumentCaptor.forClass(SchedulingPreferences.class);
+		verify(schedulingPreferencesRepository).save(captor.capture());
+		SchedulingPreferences saved = captor.getValue();
+		assertThat(saved.isWorkingMonday()).isFalse();
+		assertThat(saved.isWorkingTuesday()).isTrue();
+		assertThat(saved.isWorkingWednesday()).isFalse();
+		assertThat(saved.isWorkingThursday()).isFalse();
+		assertThat(saved.isWorkingFriday()).isFalse();
+		assertThat(saved.isWorkingSaturday()).isTrue();
+		assertThat(saved.isWorkingSunday()).isFalse();
+		assertThat(response.workingDays())
+				.containsExactly(DayOfWeek.TUESDAY, DayOfWeek.SATURDAY);
 	}
 
 	@Test
@@ -276,7 +333,8 @@ class SchedulingPreferencesServiceTest {
 						0,
 						null,
 						null,
-						List.of(new FixedBreakRequest("Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+						List.of(new FixedBreakRequest("Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))),
+						List.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 
 		SchedulingPreferencesResponse response = schedulingPreferencesService.put(request);
 
@@ -351,6 +409,41 @@ class SchedulingPreferencesServiceTest {
 		assertThat(response.peakStart()).isNull();
 		assertThat(response.peakEnd()).isNull();
 		assertThat(response.fixedBreaks()).isEmpty();
+		assertThat(response.workingDays())
+				.containsExactly(
+						DayOfWeek.MONDAY,
+						DayOfWeek.TUESDAY,
+						DayOfWeek.WEDNESDAY,
+						DayOfWeek.THURSDAY,
+						DayOfWeek.FRIDAY);
+	}
+
+	@Test
+	void getEffective_whenRowExists_returnsPersistedWorkingDays() {
+		when(currentUser.getCurrentUser()).thenReturn(new UserContext(42L, "owner@example.com", "owner"));
+
+		SchedulingPreferences preferences = new SchedulingPreferences();
+		preferences.setWorkDayStart(LocalTime.of(9, 0));
+		preferences.setWorkDayEnd(LocalTime.of(18, 0));
+		preferences.setCadenceEnabled(true);
+		preferences.setTargetFocusMinutes(50);
+		preferences.setBreakMinutes(10);
+		preferences.setMinSessionMinutes(15);
+		preferences.setBufferMinutes(0);
+		preferences.setWorkingMonday(false);
+		preferences.setWorkingTuesday(true);
+		preferences.setWorkingWednesday(false);
+		preferences.setWorkingThursday(true);
+		preferences.setWorkingFriday(false);
+		preferences.setWorkingSaturday(true);
+		preferences.setWorkingSunday(false);
+
+		when(schedulingPreferencesRepository.findByOwner_Id(42L)).thenReturn(Optional.of(preferences));
+
+		SchedulingPreferencesResponse response = schedulingPreferencesService.getEffective();
+
+		assertThat(response.workingDays())
+				.containsExactly(DayOfWeek.TUESDAY, DayOfWeek.THURSDAY, DayOfWeek.SATURDAY);
 	}
 
 	private void stubOwnerLock() {
@@ -380,6 +473,7 @@ class SchedulingPreferencesServiceTest {
 		private LocalTime peakStart;
 		private LocalTime peakEnd;
 		private List<FixedBreakRequest> fixedBreaks = List.of();
+		private List<DayOfWeek> workingDays = WorkingDaysPreference.defaultWorkingDays();
 
 		ValidRequestBuilder withWorkDayStart(LocalTime workDayStart) {
 			this.workDayStart = workDayStart;
@@ -431,6 +525,11 @@ class SchedulingPreferencesServiceTest {
 			return this;
 		}
 
+		ValidRequestBuilder withWorkingDays(List<DayOfWeek> workingDays) {
+			this.workingDays = workingDays;
+			return this;
+		}
+
 		SchedulingPreferencesRequest build() {
 			return new SchedulingPreferencesRequest(
 					workDayStart,
@@ -442,7 +541,8 @@ class SchedulingPreferencesServiceTest {
 					bufferMinutes,
 					peakStart,
 					peakEnd,
-					fixedBreaks);
+					fixedBreaks,
+					workingDays);
 		}
 	}
 }

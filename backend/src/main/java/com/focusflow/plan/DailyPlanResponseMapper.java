@@ -89,7 +89,10 @@ public class DailyPlanResponseMapper {
 				latestRevision.getTasks().stream()
 						.filter(task -> task.getUnplacedReason() != null)
 						.sorted(Comparator.comparingInt(DailyPlanTask::getRank))
-						.map(task -> toUnplacedWorkResponse(task, neededForByTaskId))
+						.map(
+								task ->
+										toUnplacedWorkResponse(
+												latestRevision, task, neededForByTaskId))
 						.toList();
 
 		return new DailyPlanResponse(
@@ -148,7 +151,10 @@ public class DailyPlanResponseMapper {
 				revision.getTasks().stream()
 						.filter(task -> task.getUnplacedReason() != null)
 						.sorted(Comparator.comparingInt(DailyPlanTask::getRank))
-						.map(task -> toUnplacedWorkResponse(task, neededForByTaskId))
+						.map(
+								task ->
+										toUnplacedWorkResponse(
+												revision, task, neededForByTaskId))
 						.toList();
 		return new PlanRevisionResponse(
 				revision.getId(),
@@ -462,11 +468,18 @@ public class DailyPlanResponseMapper {
 	}
 
 	private UnplacedWorkResponse toUnplacedWorkResponse(
-			DailyPlanTask task, Map<Long, Long> neededForByTaskId) {
+			DailyPlanRevision revision,
+			DailyPlanTask task,
+			Map<Long, Long> neededForByTaskId) {
+		List<Long> blockerSourceTaskIds =
+				task.getUnplacedReason() == UnplacedReason.BLOCKED
+						? blockerSourceTaskIds(revision, task.getSourceTaskId())
+						: List.of();
 		return new UnplacedWorkResponse(
 				task.getUnplacedReason(),
 				task.getUnplacedMinutes(),
-				toTaskSnapshot(task, neededForByTaskId));
+				toTaskSnapshot(task, neededForByTaskId),
+				blockerSourceTaskIds);
 	}
 
 	private TaskSnapshotResponse toTaskSnapshot(

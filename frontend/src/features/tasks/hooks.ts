@@ -2,10 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import {
+  addBlocker,
   createTask,
   deleteTask,
   listTasks,
   reassessRemainingEffort,
+  removeBlocker,
   updateTask,
 } from '@/features/tasks/api'
 import { isProgressConflict } from '@/features/tasks/taskEffortConflict'
@@ -80,6 +82,35 @@ export function useUpdateTask(options?: UseUpdateTaskOptions) {
         await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
         options?.onEffortConflict?.()
       }
+    },
+  })
+}
+
+export function useAddBlocker() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      blockerTaskId,
+    }: {
+      id: number
+      blockerTaskId: number
+    }) => addBlocker(id, { blockerTaskId }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+    },
+  })
+}
+
+export function useRemoveBlocker() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, blockerId }: { id: number; blockerId: number }) =>
+      removeBlocker(id, blockerId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
     },
   })
 }

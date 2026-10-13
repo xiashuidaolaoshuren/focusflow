@@ -32,6 +32,13 @@ const defaultPreferences: SchedulingPreferencesResponse = {
   peakStart: null,
   peakEnd: null,
   fixedBreaks: [],
+  workingDays: [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ],
   persisted: false,
 }
 
@@ -230,7 +237,110 @@ describe('SchedulingPreferencesForm save', () => {
           endTime: '16:15:00',
         },
       ],
+      workingDays: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+      ],
     })
+  })
+})
+
+describe('SchedulingPreferencesForm working days', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('shows seven day toggles bound from GET with Saturday checked and Sunday unchecked', () => {
+    mockLoadedPreferences({
+      ...defaultPreferences,
+      workingDays: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+        'SATURDAY',
+      ],
+      persisted: true,
+    })
+    mockSaveMutation()
+
+    renderForm()
+
+    expect(screen.getByLabelText(/^Monday$/i)).toBeChecked()
+    expect(screen.getByLabelText(/^Saturday$/i)).toBeChecked()
+    expect(screen.getByLabelText(/^Sunday$/i)).not.toBeChecked()
+  })
+
+  it('checks only Tuesday when GET returns Tuesday alone', () => {
+    mockLoadedPreferences({
+      ...defaultPreferences,
+      workingDays: ['TUESDAY'],
+      persisted: true,
+    })
+    mockSaveMutation()
+
+    renderForm()
+
+    expect(screen.getByLabelText(/^Monday$/i)).not.toBeChecked()
+    expect(screen.getByLabelText(/^Tuesday$/i)).toBeChecked()
+    expect(screen.getByLabelText(/^Wednesday$/i)).not.toBeChecked()
+  })
+
+  it('PUTs working days in natural order after toggling Monday off and Saturday on', async () => {
+    const mutate = vi.fn()
+    mockLoadedPreferences({
+      ...defaultPreferences,
+      workingDays: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
+      ],
+      persisted: true,
+    })
+    mockSaveMutation(mutate)
+
+    renderForm()
+
+    fireEvent.click(screen.getByLabelText(/^Monday$/i))
+    fireEvent.click(screen.getByLabelText(/^Saturday$/i))
+    fireEvent.click(screen.getByRole('button', { name: /save preferences/i }))
+
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalledTimes(1)
+    })
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workingDays: [
+          'TUESDAY',
+          'WEDNESDAY',
+          'THURSDAY',
+          'FRIDAY',
+          'SATURDAY',
+        ],
+      }),
+    )
+  })
+
+  it('explains that working days shape the horizon without forbidding daily plans', () => {
+    mockLoadedPreferences({ ...defaultPreferences, persisted: true })
+    mockSaveMutation()
+
+    renderForm()
+
+    expect(
+      screen.getByText(/working days shape the horizon forecast/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/daily plans can still be generated for any date/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/cannot plan/i)).not.toBeInTheDocument()
   })
 })
 

@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api'
 import type {
+  AddBlockerRequest,
   CreateTaskRequest,
   RemainingEffortRequest,
   TaskResponse,
@@ -41,6 +42,25 @@ export async function reassessRemainingEffort(
 
 export async function deleteTask(id: number): Promise<void> {
   return apiRequest<void>(`/api/tasks/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function addBlocker(
+  id: number,
+  request: AddBlockerRequest,
+): Promise<TaskResponse> {
+  return apiRequest<TaskResponse>(`/api/tasks/${id}/blockers`, {
+    method: 'POST',
+    body: request,
+  })
+}
+
+export async function removeBlocker(
+  id: number,
+  blockerId: number,
+): Promise<void> {
+  return apiRequest<void>(`/api/tasks/${id}/blockers/${blockerId}`, {
     method: 'DELETE',
   })
 }

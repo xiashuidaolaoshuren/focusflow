@@ -16,6 +16,7 @@ import com.focusflow.preferences.dto.SchedulingPreferencesRequest;
 import com.focusflow.preferences.dto.SchedulingPreferencesResponse;
 import com.focusflow.security.FocusFlowUserDetailsService;
 import com.focusflow.security.SecurityConfig;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,12 @@ class SchedulingPreferencesControllerTest {
 								null,
 								null,
 								List.of(),
+								List.of(
+										DayOfWeek.MONDAY,
+										DayOfWeek.TUESDAY,
+										DayOfWeek.WEDNESDAY,
+										DayOfWeek.THURSDAY,
+										DayOfWeek.FRIDAY),
 								false));
 
 		mockMvc.perform(get("/api/scheduling-preferences"))
@@ -90,7 +97,8 @@ class SchedulingPreferencesControllerTest {
 										  "breakMinutes": 10,
 										  "minSessionMinutes": 15,
 										  "bufferMinutes": 0,
-										  "fixedBreaks": []
+										  "fixedBreaks": [],
+										  "workingDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]
 										}
 										"""))
 				.andExpect(status().isUnauthorized());
@@ -118,13 +126,42 @@ class SchedulingPreferencesControllerTest {
 										  "breakMinutes": 10,
 										  "minSessionMinutes": 15,
 										  "bufferMinutes": 0,
-										  "fixedBreaks": []
+										  "fixedBreaks": [],
+										  "workingDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]
 										}
 										"""))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value(400))
 				.andExpect(jsonPath("$.message").value("work day end must be after work day start"))
 				.andExpect(jsonPath("$.path").value("/api/scheduling-preferences"));
+	}
+
+	@Test
+	@WithMockUser
+	void put_whenWorkingDaysContainUnknownValue_returns400() throws Exception {
+		mockMvc.perform(
+						put("/api/scheduling-preferences")
+								.with(csrf())
+								.contentType(MediaType.APPLICATION_JSON)
+								.content(
+										"""
+										{
+										  "workDayStart": "09:00:00",
+										  "workDayEnd": "18:00:00",
+										  "cadenceEnabled": true,
+										  "targetFocusMinutes": 50,
+										  "breakMinutes": 10,
+										  "minSessionMinutes": 15,
+										  "bufferMinutes": 0,
+										  "fixedBreaks": [],
+										  "workingDays": ["MONDAY", "BANANA"]
+										}
+										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.message").value("Malformed request body"));
+
+		verify(schedulingPreferencesService, never()).put(any(SchedulingPreferencesRequest.class));
 	}
 
 	@Test
@@ -143,6 +180,12 @@ class SchedulingPreferencesControllerTest {
 								null,
 								null,
 								List.of(),
+								List.of(
+										DayOfWeek.MONDAY,
+										DayOfWeek.TUESDAY,
+										DayOfWeek.WEDNESDAY,
+										DayOfWeek.THURSDAY,
+										DayOfWeek.FRIDAY),
 								true));
 
 		mockMvc.perform(
@@ -159,7 +202,8 @@ class SchedulingPreferencesControllerTest {
 										  "breakMinutes": 10,
 										  "minSessionMinutes": 15,
 										  "bufferMinutes": 0,
-										  "fixedBreaks": []
+										  "fixedBreaks": [],
+										  "workingDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]
 										}
 										"""))
 				.andExpect(status().isOk())

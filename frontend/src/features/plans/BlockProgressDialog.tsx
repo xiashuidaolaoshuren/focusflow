@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { creditFor, isCrossingNow, plannedMinutes, wouldExhaustRemainder } from '@/features/plans/progressRules'
+import { activeBlockedByLinks } from '@/features/tasks/taskDependencyLinks'
 import { useRecordBlockProgress } from '@/features/plans/hooks'
 import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
 import type {
@@ -102,6 +103,8 @@ export function BlockProgressDialog({
   const [unknownRemainder, setUnknownRemainder] = useState(false)
   const isCrossing = isCrossingNow(block, getLocalTimeString())
   const hidesActualMinutes = outcome === 'SKIPPED' && !reconcile
+  const activeBlockers =
+    task != null ? activeBlockedByLinks(task).map((link) => link.title) : []
 
   function parsedActualMinutes(): number | null {
     if (actualMinutes.trim() === '') {
@@ -219,6 +222,12 @@ export function BlockProgressDialog({
             label="Remaining effort"
             value={formatRemainingEffort(block, task)}
           />
+          {activeBlockers.length > 0 ? (
+            <SummaryRow
+              label="Waiting on"
+              value={activeBlockers.join(', ')}
+            />
+          ) : null}
         </dl>
         <div className="flex flex-col gap-3 px-4">
           <div className="flex flex-col gap-2">

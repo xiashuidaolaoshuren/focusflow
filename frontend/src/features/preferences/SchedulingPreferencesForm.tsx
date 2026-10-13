@@ -9,10 +9,13 @@ import {
   useUpdateSchedulingPreferences,
 } from '@/features/preferences/hooks'
 import { ApiError } from '@/lib/api'
-import type {
-  FixedBreakRequest,
-  SchedulingPreferencesRequest,
-  SchedulingPreferencesResponse,
+import {
+  DAY_OF_WEEK_LABELS,
+  DAY_OF_WEEK_ORDER,
+  type DayOfWeek,
+  type FixedBreakRequest,
+  type SchedulingPreferencesRequest,
+  type SchedulingPreferencesResponse,
 } from '@/types/api'
 
 type FixedBreakField = {
@@ -64,8 +67,13 @@ function preferencesToFormState(preferences: SchedulingPreferencesResponse) {
       startTime: toTimeInputValue(fixedBreak.startTime),
       endTime: toTimeInputValue(fixedBreak.endTime),
     })),
+    workingDays: new Set(preferences.workingDays),
     persisted: preferences.persisted,
   }
+}
+
+function workingDaysInNaturalOrder(selected: Set<DayOfWeek>): DayOfWeek[] {
+  return DAY_OF_WEEK_ORDER.filter((day) => selected.has(day))
 }
 
 function buildRequest(
@@ -90,6 +98,7 @@ function buildRequest(
     peakStart: formState.peakStart.trim() === '' ? null : toApiTime(formState.peakStart),
     peakEnd: formState.peakEnd.trim() === '' ? null : toApiTime(formState.peakEnd),
     fixedBreaks,
+    workingDays: workingDaysInNaturalOrder(formState.workingDays),
   }
 }
 
@@ -109,6 +118,9 @@ export function SchedulingPreferencesForm() {
   const [peakStart, setPeakStart] = useState('')
   const [peakEnd, setPeakEnd] = useState('')
   const [fixedBreaks, setFixedBreaks] = useState<FixedBreakField[]>([])
+  const [workingDays, setWorkingDays] = useState<Set<DayOfWeek>>(
+    () => new Set(DAY_OF_WEEK_ORDER.slice(0, 5)),
+  )
   const [persisted, setPersisted] = useState(true)
   const [nextBreakId, setNextBreakId] = useState(0)
 
@@ -128,6 +140,7 @@ export function SchedulingPreferencesForm() {
     setPeakStart(formState.peakStart)
     setPeakEnd(formState.peakEnd)
     setFixedBreaks(formState.fixedBreaks)
+    setWorkingDays(formState.workingDays)
     setPersisted(formState.persisted)
     setNextBreakId(formState.fixedBreaks.length)
   }, [preferences])
@@ -146,6 +159,7 @@ export function SchedulingPreferencesForm() {
       peakStart,
       peakEnd,
       fixedBreaks,
+      workingDays,
       persisted,
     })
 
@@ -320,6 +334,41 @@ export function SchedulingPreferencesForm() {
             }
             required
           />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-medium">Working days</h2>
+        <p className="text-sm text-muted-foreground">
+          Working days shape the horizon forecast. Daily plans can still be
+          generated for any date.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {DAY_OF_WEEK_ORDER.map((day) => (
+            <div key={day} className="flex items-center gap-2">
+              <input
+                id={`workingDay-${day}`}
+                name={`workingDay-${day}`}
+                type="checkbox"
+                checked={workingDays.has(day)}
+                onChange={(event) => {
+                  setWorkingDays((current) => {
+                    const next = new Set(current)
+                    if (event.target.checked) {
+                      next.add(day)
+                    } else {
+                      next.delete(day)
+                    }
+                    return next
+                  })
+                }}
+                className="size-4 rounded border border-input"
+              />
+              <Label htmlFor={`workingDay-${day}`}>
+                {DAY_OF_WEEK_LABELS[day]}
+              </Label>
+            </div>
+          ))}
         </div>
       </div>
 

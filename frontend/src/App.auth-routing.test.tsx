@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { UserResponse } from '@/types/api'
+import type { SchedulingPreferencesResponse, UserResponse } from '@/types/api'
 
 vi.mock('@/features/auth/api', () => ({
   getCurrentUser: vi.fn(),
@@ -35,7 +35,7 @@ const mockedGetCurrentUser = vi.mocked(getCurrentUser)
 const mockedGetSchedulingPreferences = vi.mocked(getSchedulingPreferences)
 const mockedListTasks = vi.mocked(listTasks)
 
-const defaultPreferences = {
+const defaultPreferences: SchedulingPreferencesResponse = {
   workDayStart: '09:00:00',
   workDayEnd: '18:00:00',
   cadenceEnabled: true,
@@ -46,6 +46,13 @@ const defaultPreferences = {
   peakStart: null,
   peakEnd: null,
   fixedBreaks: [],
+  workingDays: [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ],
   persisted: false,
 }
 

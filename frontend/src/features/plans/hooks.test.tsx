@@ -313,6 +313,8 @@ describe('useRecordBlockProgress', () => {
         estimatedMinutes: 60,
         remainingEffortMinutes: 25,
         effortVersion: 1,
+        blockedBy: [],
+        blocks: [],
       },
       plan: samplePlan,
     })
