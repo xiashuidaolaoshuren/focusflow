@@ -4,7 +4,11 @@ import java.time.Duration;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public final class WorkPlacementPlanner {
 
@@ -14,36 +18,85 @@ public final class WorkPlacementPlanner {
 
 	public static PlacementResult place(
 			FreeIntervalPlan stage1, List<RankedTask> ranking, PlacementPolicy policy) {
+		return place(stage1, ranking, policy, List.of());
+	}
+
+	public static PlacementResult place(
+			FreeIntervalPlan stage1,
+			List<RankedTask> ranking,
+			PlacementPolicy policy,
+			List<TaskDependencyEdge> edges) {
 		List<ScheduledBlock> blocks = new ArrayList<>();
 		List<UnplacedWork> unplacedWork = new ArrayList<>();
 		PlacementCursor cursor = new PlacementCursor(stage1.freeIntervals());
+		Set<Long> rankedIds = new HashSet<>();
+		for (RankedTask task : ranking) {
+			rankedIds.add(task.sourceTaskId());
+		}
+		Map<Long, List<Long>> blockersByBlocked = indexBlockersByBlocked(edges);
+		Set<Long> fullyPlaced = new HashSet<>();
 
 		for (RankedTask task : ranking) {
+			long taskId = task.sourceTaskId();
 			Integer estimate = task.estimatedMinutes();
-			if (estimate == null) {
-				unplacedWork.add(new UnplacedWork(task.sourceTaskId(), UnplacedReason.NO_ESTIMATE, null));
+			if (estimate != null && estimate <= 0) {
+				fullyPlaced.add(taskId);
 				continue;
 			}
-			if (estimate <= 0) {
+			if (isBlockedByUnfinishedRankedBlocker(
+					taskId, blockersByBlocked, rankedIds, fullyPlaced)) {
+				unplacedWork.add(
+						new UnplacedWork(taskId, UnplacedReason.BLOCKED, estimate));
+				continue;
+			}
+			if (estimate == null) {
+				unplacedWork.add(new UnplacedWork(taskId, UnplacedReason.NO_ESTIMATE, null));
 				continue;
 			}
 			TaskPlacement placement =
 					policy.cadenceEnabled()
-							? placeTaskCadenceOn(stage1.freeIntervals(), cursor, task, estimate, policy)
-							: placeTaskCadenceOff(stage1.freeIntervals(), cursor, task, estimate, policy);
+							? placeTaskCadenceOn(
+									stage1.freeIntervals(), cursor, task, estimate, policy)
+							: placeTaskCadenceOff(
+									stage1.freeIntervals(), cursor, task, estimate, policy);
 			blocks.addAll(placement.blocks());
 			if (placement.remainingMinutes() > 0) {
 				unplacedWork.add(
 						new UnplacedWork(
-								task.sourceTaskId(),
+								taskId,
 								UnplacedReason.OUT_OF_TIME,
 								placement.remainingMinutes()));
+			} else {
+				fullyPlaced.add(taskId);
 			}
 		}
 
 		blocks.addAll(copyUnavailableSegments(stage1.unavailableSegments()));
 		blocks.sort(Comparator.comparing(ScheduledBlock::start));
 		return new PlacementResult(blocks, unplacedWork);
+	}
+
+	private static Map<Long, List<Long>> indexBlockersByBlocked(List<TaskDependencyEdge> edges) {
+		Map<Long, List<Long>> blockersByBlocked = new HashMap<>();
+		for (TaskDependencyEdge edge : edges) {
+			blockersByBlocked
+					.computeIfAbsent(edge.blockedId(), ignored -> new ArrayList<>())
+					.add(edge.blockerId());
+		}
+		return blockersByBlocked;
+	}
+
+	private static boolean isBlockedByUnfinishedRankedBlocker(
+			long taskId,
+			Map<Long, List<Long>> blockersByBlocked,
+			Set<Long> rankedIds,
+			Set<Long> fullyPlaced) {
+		for (Long blockerId : blockersByBlocked.getOrDefault(taskId, List.of())) {
+			if (rankedIds.contains(blockerId) && !fullyPlaced.contains(blockerId)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static TaskPlacement placeTaskCadenceOn(

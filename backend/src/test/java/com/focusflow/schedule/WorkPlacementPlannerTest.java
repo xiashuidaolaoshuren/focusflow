@@ -651,4 +651,167 @@ class WorkPlacementPlannerTest {
 								BlockKind.WORK, LocalTime.of(10, 30), LocalTime.of(10, 40), 7L, null));
 		assertThat(result.unplacedWork()).isEmpty();
 	}
+
+	@Test
+	void place_withUnestimatedBlocker_blocksDependentAndLaterTaskUsesGap() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking =
+				List.of(new RankedTask(1L, null), new RankedTask(2L, 60), new RankedTask(3L, 30));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(1L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 30), 3L, null));
+		assertThat(result.unplacedWork())
+				.containsExactly(
+						new UnplacedWork(1L, UnplacedReason.NO_ESTIMATE, null),
+						new UnplacedWork(2L, UnplacedReason.BLOCKED, 60));
+	}
+
+	@Test
+	void place_withPartlyPlacedBlocker_blocksDependentForFullRemainder() {
+		FreeIntervalPlan stage1 =
+				new FreeIntervalPlan(
+						List.of(new FreeInterval(LocalTime.of(9, 0), LocalTime.of(10, 0), false, false)),
+						List.of(),
+						60,
+						0,
+						0);
+		List<RankedTask> ranking =
+				List.of(new RankedTask(1L, 90), new RankedTask(2L, 45));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(1L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), 1L, null));
+		assertThat(result.unplacedWork())
+				.containsExactly(
+						new UnplacedWork(1L, UnplacedReason.OUT_OF_TIME, 30),
+						new UnplacedWork(2L, UnplacedReason.BLOCKED, 45));
+	}
+
+	@Test
+	void place_withFullyPlacedBlocker_placesDependentAfterBlocker() {
+		FreeIntervalPlan stage1 =
+				new FreeIntervalPlan(
+						List.of(new FreeInterval(LocalTime.of(9, 0), LocalTime.of(10, 30), false, false)),
+						List.of(),
+						90,
+						0,
+						0);
+		List<RankedTask> ranking =
+				List.of(new RankedTask(1L, 60), new RankedTask(2L, 90));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(1L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), 1L, null),
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(10, 30), 2L, null));
+		assertThat(result.unplacedWork())
+				.containsExactly(new UnplacedWork(2L, UnplacedReason.OUT_OF_TIME, 60));
+	}
+
+	@Test
+	void place_blockedUnknownEffortDependent_isBlockedNotNoEstimate() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking =
+				List.of(new RankedTask(1L, null), new RankedTask(2L, null));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(1L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks()).isEmpty();
+		assertThat(result.unplacedWork())
+				.containsExactly(
+						new UnplacedWork(1L, UnplacedReason.NO_ESTIMATE, null),
+						new UnplacedWork(2L, UnplacedReason.BLOCKED, null));
+	}
+
+	@Test
+	void place_transitiveBlockingThroughBlockedTask() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking =
+				List.of(
+						new RankedTask(1L, null),
+						new RankedTask(2L, 30),
+						new RankedTask(3L, 20));
+		List<TaskDependencyEdge> edges =
+				List.of(new TaskDependencyEdge(1L, 2L), new TaskDependencyEdge(2L, 3L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks()).isEmpty();
+		assertThat(result.unplacedWork())
+				.containsExactly(
+						new UnplacedWork(1L, UnplacedReason.NO_ESTIMATE, null),
+						new UnplacedWork(2L, UnplacedReason.BLOCKED, 30),
+						new UnplacedWork(3L, UnplacedReason.BLOCKED, 20));
+	}
+
+	@Test
+	void place_anyUnfinishedBlockerAmongSeveral_blocksDependent() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking =
+				List.of(
+						new RankedTask(1L, 60),
+						new RankedTask(2L, null),
+						new RankedTask(3L, 40));
+		List<TaskDependencyEdge> edges =
+				List.of(new TaskDependencyEdge(1L, 3L), new TaskDependencyEdge(2L, 3L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.unplacedWork())
+				.anySatisfy(
+						u ->
+								assertThat(u)
+										.isEqualTo(new UnplacedWork(3L, UnplacedReason.BLOCKED, 40)));
+	}
+
+	@Test
+	void place_blockerNotInRanking_ignored() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking = List.of(new RankedTask(2L, 30));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(99L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.blocks())
+				.containsExactly(
+						new ScheduledBlock(
+								BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(9, 30), 2L, null));
+		assertThat(result.unplacedWork()).isEmpty();
+	}
+
+	@Test
+	void place_zeroEstimateDependent_keepsNoUnplacedRow() {
+		FreeIntervalPlan stage1 = wholeWindow();
+		List<RankedTask> ranking =
+				List.of(new RankedTask(1L, null), new RankedTask(2L, 0));
+		List<TaskDependencyEdge> edges = List.of(new TaskDependencyEdge(1L, 2L));
+
+		PlacementResult result =
+				WorkPlacementPlanner.place(stage1, ranking, CADENCE_OFF, edges);
+
+		assertThat(result.unplacedWork())
+				.containsExactly(new UnplacedWork(1L, UnplacedReason.NO_ESTIMATE, null));
+		assertThat(result.blocks()).noneMatch(b -> Long.valueOf(2L).equals(b.sourceTaskId()));
+	}
 }

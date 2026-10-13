@@ -17,6 +17,15 @@ public final class SchedulePostconditionValidator {
 			FreeIntervalPlan stage1,
 			List<RankedTask> ranking,
 			PlacementResult result) {
+		validate(window, stage1, ranking, List.of(), result);
+	}
+
+	public static void validate(
+			WorkWindow window,
+			FreeIntervalPlan stage1,
+			List<RankedTask> ranking,
+			List<TaskDependencyEdge> edges,
+			PlacementResult result) {
 		List<ScheduledBlock> blocks = result.blocks();
 		validateWellFormedBlocks(blocks);
 		validateBlockShape(blocks);
@@ -24,6 +33,47 @@ public final class SchedulePostconditionValidator {
 		validateStage1Segments(stage1, blocks);
 		validateEstimateConservation(ranking, result);
 		validateTaskIdentity(ranking, result);
+		validateDependencyOrder(edges, blocks);
+	}
+
+	private static void validateDependencyOrder(
+			List<TaskDependencyEdge> edges, List<ScheduledBlock> blocks) {
+		for (TaskDependencyEdge edge : edges) {
+			LocalTime blockerLastEnd = lastWorkEnd(blocks, edge.blockerId());
+			LocalTime blockedFirstStart = firstWorkStart(blocks, edge.blockedId());
+			if (blockerLastEnd == null || blockedFirstStart == null) {
+				continue;
+			}
+			if (blockedFirstStart.isBefore(blockerLastEnd)) {
+				throw new SchedulePostconditionException(
+						SchedulePostconditionViolation.DEPENDENCY_ORDER,
+						"dependent work must start at or after the blocker's last session ends");
+			}
+		}
+	}
+
+	private static LocalTime lastWorkEnd(List<ScheduledBlock> blocks, long sourceTaskId) {
+		LocalTime lastEnd = null;
+		for (ScheduledBlock block : blocks) {
+			if (block.kind() == BlockKind.WORK && sourceTaskId == block.sourceTaskId()) {
+				if (lastEnd == null || block.end().isAfter(lastEnd)) {
+					lastEnd = block.end();
+				}
+			}
+		}
+		return lastEnd;
+	}
+
+	private static LocalTime firstWorkStart(List<ScheduledBlock> blocks, long sourceTaskId) {
+		LocalTime firstStart = null;
+		for (ScheduledBlock block : blocks) {
+			if (block.kind() == BlockKind.WORK && sourceTaskId == block.sourceTaskId()) {
+				if (firstStart == null || block.start().isBefore(firstStart)) {
+					firstStart = block.start();
+				}
+			}
+		}
+		return firstStart;
 	}
 
 	private record StageOneSegmentKey(
@@ -174,10 +224,22 @@ public final class SchedulePostconditionValidator {
 								"OUT_OF_TIME remainder must include minutes");
 					}
 					unplacedMinutes = unplaced.unplacedMinutes();
+				} else if (unplaced.reason() == UnplacedReason.BLOCKED) {
+					if (scheduledMinutes != 0) {
+						throw new SchedulePostconditionException(
+								SchedulePostconditionViolation.ESTIMATE_CONSERVATION,
+								"BLOCKED tasks must have no work blocks");
+					}
+					if (unplaced.unplacedMinutes() == null) {
+						throw new SchedulePostconditionException(
+								SchedulePostconditionViolation.ESTIMATE_CONSERVATION,
+								"BLOCKED known-effort tasks must include minutes");
+					}
+					unplacedMinutes = unplaced.unplacedMinutes();
 				} else {
 					throw new SchedulePostconditionException(
 							SchedulePostconditionViolation.ESTIMATE_CONSERVATION,
-							"positive-estimate tasks may only be unplaced as OUT_OF_TIME");
+							"positive-estimate tasks may only be unplaced as OUT_OF_TIME or BLOCKED");
 				}
 			}
 
@@ -247,13 +309,22 @@ public final class SchedulePostconditionValidator {
 							SchedulePostconditionViolation.TASK_IDENTITY,
 							"unestimated tasks must not have scheduled work");
 				}
-				if (unplacedForTask.size() != 1
-						|| unplacedForTask.get(0).reason() != UnplacedReason.NO_ESTIMATE) {
+				if (unplacedForTask.size() != 1) {
 					throw new SchedulePostconditionException(
 							SchedulePostconditionViolation.TASK_IDENTITY,
-							"unestimated tasks must have exactly one NO_ESTIMATE row");
+							"unestimated tasks must have exactly one unplaced row");
 				}
-				continue;
+				UnplacedReason reason = unplacedForTask.get(0).reason();
+				if (reason == UnplacedReason.NO_ESTIMATE) {
+					continue;
+				}
+				if (reason == UnplacedReason.BLOCKED
+						&& unplacedForTask.get(0).unplacedMinutes() == null) {
+					continue;
+				}
+				throw new SchedulePostconditionException(
+						SchedulePostconditionViolation.TASK_IDENTITY,
+						"unestimated tasks must have exactly one NO_ESTIMATE or BLOCKED row");
 			}
 
 			if (!hasWork && unplacedForTask.isEmpty()) {
