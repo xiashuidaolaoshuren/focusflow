@@ -105,6 +105,12 @@ public class TaskService {
 										checkpoint.getWorkDate(), checkpoint.getRecordedAt()));
 	}
 
+	public Optional<Long> latestCheckpointId(Task task) {
+		return remainingEffortCheckpointRepository
+				.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task)
+				.map(RemainingEffortCheckpoint::getId);
+	}
+
 	@Transactional
 	public TaskResponse updateForCurrentUser(Long taskId, UpdateTaskRequest request) {
 		requireNullOrPositiveEstimate(request.estimatedMinutes());

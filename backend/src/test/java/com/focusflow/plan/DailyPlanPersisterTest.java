@@ -11,6 +11,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.focusflow.ai.AiPlanItem;
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.RankingGroup;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.TaskEffortVersion;
@@ -30,6 +32,7 @@ import java.lang.reflect.Method;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,7 @@ class DailyPlanPersisterTest {
 		lenient()
 				.when(taskQueryService.findUnplannedWorkByOwnerIdAndWorkDate(any(), any()))
 				.thenReturn(List.of());
+		lenient().when(taskQueryService.findLinksByOwnerId(any())).thenReturn(List.of());
 		persister =
 				new DailyPlanPersister(
 						ownerSchedulingLock,
@@ -81,7 +85,8 @@ class DailyPlanPersisterTest {
 						Long.class,
 						List.class,
 						List.class,
-						DailyPlanSchedule.class);
+						DailyPlanSchedule.class,
+						PlanDependencyCapture.class);
 
 		assertThat(method.isAnnotationPresent(Transactional.class)).isTrue();
 	}
@@ -104,7 +109,7 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, null, aiItems, List.of(task), schedule);
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(task), schedule, emptyCapture());
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).saveAndFlush(captor.capture());
@@ -150,7 +155,14 @@ class DailyPlanPersisterTest {
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
 		DailyPlanResponse response =
-				persister.persistPlan(1L, planDate, null, aiItems, List.of(task), schedule);
+				persister.persistPlan(
+						1L,
+						planDate,
+						null,
+						aiItems,
+						List.of(task),
+						schedule,
+						captureMustContinue(task));
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).saveAndFlush(captor.capture());
@@ -205,7 +217,8 @@ class DailyPlanPersisterTest {
 										null,
 										List.of(new AiPlanItem(1L, 1)),
 										List.of(createTask(1L, "Captured", 60, TaskStatus.IN_PROGRESS)),
-										sampleSchedule()))
+										sampleSchedule(),
+										emptyCapture()))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(
 						ex ->
@@ -232,7 +245,8 @@ class DailyPlanPersisterTest {
 										9L,
 										List.of(new AiPlanItem(1L, 1)),
 										List.of(createTask(1L, "Captured", 60, TaskStatus.IN_PROGRESS)),
-										sampleSchedule()))
+										sampleSchedule(),
+										emptyCapture()))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(
 						ex ->
@@ -260,7 +274,7 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, 5L, aiItems, List.of(task), schedule);
+		persister.persistPlan(1L, planDate, 5L, aiItems, List.of(task), schedule, emptyCapture());
 
 		verify(dailyPlanRepository).delete(existing);
 		verify(dailyPlanRepository).save(any(DailyPlan.class));
@@ -284,7 +298,7 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, 5L, aiItems, List.of(task), sampleSchedule());
+		persister.persistPlan(1L, planDate, 5L, aiItems, List.of(task), sampleSchedule(), emptyCapture());
 
 		InOrder inOrder = inOrder(dailyPlanRepository);
 		inOrder.verify(dailyPlanRepository).delete(existing);
@@ -310,7 +324,8 @@ class DailyPlanPersisterTest {
 										null,
 										aiItems,
 										List.of(createTask(1L, "Captured", 60, TaskStatus.IN_PROGRESS)),
-										sampleSchedule()))
+										sampleSchedule(),
+										emptyCapture()))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(
 						ex -> {
@@ -362,7 +377,8 @@ class DailyPlanPersisterTest {
 						LocalTime.of(14, 0),
 						List.of(),
 						List.of(),
-						schedule);
+						schedule,
+						emptyCapture());
 
 		assertThat(existing.getRevisions()).hasSize(2);
 		DailyPlanRevision latest = existing.getLatestRevision();
@@ -393,7 +409,8 @@ class DailyPlanPersisterTest {
 										LocalTime.of(14, 0),
 										List.of(),
 										List.of(),
-										sampleSchedule()))
+										sampleSchedule(),
+										emptyCapture()))
 				.isInstanceOf(ConflictException.class)
 				.satisfies(
 						ex ->
@@ -468,7 +485,14 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), schedule);
+		persister.persistPlan(
+				1L,
+				planDate,
+				null,
+				aiItems,
+				List.of(captured),
+				schedule,
+				captureWithGroup(captured, RankingGroup.DUE_OR_OVERDUE));
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).save(captor.capture());
@@ -503,7 +527,7 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), sampleSchedule());
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), sampleSchedule(), emptyCapture());
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).save(captor.capture());
@@ -558,7 +582,7 @@ class DailyPlanPersisterTest {
 		when(dailyPlanRepository.saveAndFlush(any(DailyPlan.class)))
 				.thenAnswer(invocation -> invocation.getArgument(0));
 
-		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), schedule);
+		persister.persistPlan(1L, planDate, null, aiItems, List.of(captured), schedule, emptyCapture());
 
 		ArgumentCaptor<DailyPlan> captor = ArgumentCaptor.forClass(DailyPlan.class);
 		verify(dailyPlanRepository).save(captor.capture());
@@ -596,5 +620,21 @@ class DailyPlanPersisterTest {
 		task.setDueDate(dueDate);
 		ReflectionTestUtils.setField(task, "id", id);
 		return task;
+	}
+
+	private static PlanDependencyCapture emptyCapture() {
+		return new PlanDependencyCapture(List.of(), List.of(), Map.of());
+	}
+
+	private static PlanDependencyCapture captureMustContinue(Task task) {
+		return captureWithGroup(task, RankingGroup.MUST_CONTINUE);
+	}
+
+	private static PlanDependencyCapture captureWithGroup(Task task, RankingGroup group) {
+		long taskId = task.getId() != null ? task.getId() : 0L;
+		return new PlanDependencyCapture(
+				List.of(),
+				List.of(new InheritedAssignment(taskId, group, task.getDueDate(), taskId)),
+				Map.of());
 	}
 }

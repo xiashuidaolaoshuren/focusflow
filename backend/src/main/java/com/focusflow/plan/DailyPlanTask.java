@@ -69,6 +69,9 @@ public class DailyPlanTask {
 	@Column(name = "unplaced_minutes")
 	private Integer unplacedMinutes;
 
+	@Column(name = "captured_checkpoint_id")
+	private Long capturedCheckpointId;
+
 	public Long getId() {
 		return id;
 	}
@@ -179,5 +182,13 @@ public class DailyPlanTask {
 
 	public void setUnplacedMinutes(Integer unplacedMinutes) {
 		this.unplacedMinutes = unplacedMinutes;
+	}
+
+	public Long getCapturedCheckpointId() {
+		return capturedCheckpointId;
+	}
+
+	public void setCapturedCheckpointId(Long capturedCheckpointId) {
+		this.capturedCheckpointId = capturedCheckpointId;
 	}
 }

@@ -19,6 +19,7 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 				"revisions.blocks",
 				"revisions.blocks.dailyPlanTask",
 				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
 				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findByOwner_IdAndId(Long ownerId, Long planId);
@@ -111,6 +112,7 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 				"revisions.blocks",
 				"revisions.blocks.dailyPlanTask",
 				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
 				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(

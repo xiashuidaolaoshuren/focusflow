@@ -67,6 +67,12 @@ public class DailyPlanRevision {
 	@OrderBy("position ASC")
 	private final Set<DailyPlanBlock> blocks = new LinkedHashSet<>();
 
+	@OneToMany(
+			mappedBy = "revision",
+			cascade = CascadeType.ALL,
+			orphanRemoval = true)
+	private final Set<DailyPlanRevisionDependency> dependencies = new LinkedHashSet<>();
+
 	public Long getId() {
 		return id;
 	}
@@ -159,5 +165,14 @@ public class DailyPlanRevision {
 	public void addBlock(DailyPlanBlock block) {
 		blocks.add(block);
 		block.setRevision(this);
+	}
+
+	public Set<DailyPlanRevisionDependency> getDependencies() {
+		return dependencies;
+	}
+
+	public void addDependency(DailyPlanRevisionDependency dependency) {
+		dependencies.add(dependency);
+		dependency.setRevision(this);
 	}
 }

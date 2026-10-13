@@ -11,6 +11,7 @@ import com.focusflow.ai.AiPlanItem;
 import com.focusflow.plan.DailyPlan;
 import com.focusflow.plan.DailyPlanBlock;
 import com.focusflow.plan.DailyPlanPersister;
+import com.focusflow.plan.PlanDependencyCapture;
 import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
 import com.focusflow.plan.DailyPlanTask;
@@ -37,6 +38,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -1051,7 +1053,13 @@ class PostgresIntegrationTest {
 				transactionTemplate.execute(
 						status ->
 								dailyPlanPersister.persistPlan(
-										owner.getId(), planDate, existingId, aiItems, List.of(task), schedule));
+										owner.getId(),
+										planDate,
+										existingId,
+										aiItems,
+										List.of(task),
+										schedule,
+										new PlanDependencyCapture(List.of(), List.of(), Map.of())));
 
 		assertThat(response.id()).isNotEqualTo(existingId);
 		assertThat(dailyPlanRepository.findByOwner_IdAndId(owner.getId(), existingId)).isEmpty();
@@ -1314,7 +1322,8 @@ class PostgresIntegrationTest {
 										LocalTime.of(11, 0),
 										List.of(new AiPlanItem(task.getId(), 1)),
 										List.of(task),
-										schedule));
+										schedule,
+										new PlanDependencyCapture(List.of(), List.of(), Map.of())));
 
 		assertThat(response.id()).isEqualTo(plan.getId());
 		assertThat(response.revisions()).hasSize(2);

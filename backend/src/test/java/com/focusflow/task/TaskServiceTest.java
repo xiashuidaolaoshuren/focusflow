@@ -821,6 +821,28 @@ class TaskServiceTest {
 	}
 
 	@Test
+	void latestCheckpointId_returnsTheLatestCheckpointPrimaryKey() {
+		Task task = new Task();
+		RemainingEffortCheckpoint checkpoint = new RemainingEffortCheckpoint();
+		ReflectionTestUtils.setField(checkpoint, "id", 99L);
+		when(remainingEffortCheckpointRepository
+						.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task))
+				.thenReturn(Optional.of(checkpoint));
+
+		assertThat(taskService.latestCheckpointId(task)).contains(99L);
+	}
+
+	@Test
+	void latestCheckpointId_whenNoCheckpointExists_isEmpty() {
+		Task task = new Task();
+		when(remainingEffortCheckpointRepository
+						.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task))
+				.thenReturn(Optional.empty());
+
+		assertThat(taskService.latestCheckpointId(task)).isEmpty();
+	}
+
+	@Test
 	void deleteForCurrentUser_clearsCheckpointTaskReference() throws Exception {
 		when(currentUser.getCurrentUser())
 				.thenReturn(new UserContext(42L, "owner@example.com", "owner"));

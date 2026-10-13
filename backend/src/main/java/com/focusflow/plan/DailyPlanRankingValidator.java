@@ -1,11 +1,10 @@
 package com.focusflow.plan;
 
 import com.focusflow.ai.AiProviderException;
-import com.focusflow.task.Task;
-import com.focusflow.task.TaskStatus;
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.RankingGroup;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,19 +24,18 @@ public class DailyPlanRankingValidator {
 	}
 
 	public void validateOrder(
-			List<Task> candidates, LocalDate planDate, List<Long> orderedTaskIds) {
-		Map<Long, Task> candidateById = new HashMap<>();
+			List<InheritedAssignment> assignments, List<Long> orderedTaskIds) {
 		Map<Long, Integer> blockOf = new HashMap<>();
-		for (Task candidate : candidates) {
-			long id = candidate.getId() != null ? candidate.getId() : 0L;
-			candidateById.put(id, candidate);
-			blockOf.put(id, classifyBlock(candidate, planDate));
+		Set<Long> candidateIds = new HashSet<>();
+		for (InheritedAssignment assignment : assignments) {
+			candidateIds.add(assignment.taskId());
+			blockOf.put(assignment.taskId(), blockRank(assignment.group()));
 		}
 
 		Set<Long> seenTaskIds = new HashSet<>();
 		int highestBlockSeen = 0;
 		for (Long taskId : orderedTaskIds) {
-			if (!candidateById.containsKey(taskId)) {
+			if (!candidateIds.contains(taskId)) {
 				reject(
 						RankingRejectionReason.UNKNOWN_TASK,
 						"invalid task id in AI response: " + taskId);
@@ -83,17 +81,11 @@ public class DailyPlanRankingValidator {
 		throw new AiProviderException(message, reason);
 	}
 
-	private int classifyBlock(Task task, LocalDate planDate) {
-		if (task.getStatus() == TaskStatus.IN_PROGRESS) {
-			return 1;
-		}
-		if (task.getStatus() == TaskStatus.OPEN) {
-			LocalDate dueDate = task.getDueDate();
-			if (dueDate != null && !dueDate.isAfter(planDate)) {
-				return 2;
-			}
-			return 3;
-		}
-		throw new IllegalArgumentException("unexpected task status: " + task.getStatus());
+	private static int blockRank(RankingGroup group) {
+		return switch (group) {
+			case MUST_CONTINUE -> 1;
+			case DUE_OR_OVERDUE -> 2;
+			case OPTIONAL -> 3;
+		};
 	}
 }
