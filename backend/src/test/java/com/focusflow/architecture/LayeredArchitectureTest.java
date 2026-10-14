@@ -111,6 +111,17 @@ class LayeredArchitectureTest {
 					.because("dependency rules are pure: no Spring, JPA, or plan DTOs");
 
 	@ArchTest
+	static final ArchRule horizon_should_not_depend_on_framework_layers =
+			noClasses()
+					.that()
+					.resideInAPackage("com.focusflow.horizon")
+					.should()
+					.dependOnClassesThat()
+					.resideInAnyPackage(
+							"org.springframework..", "jakarta.persistence..", "..dto..")
+					.because("the horizon forecaster is pure: no Spring, JPA, or DTOs");
+
+	@ArchTest
 	static final ArchRule security_should_not_depend_on_auth_dtos =
 			noClasses()
 					.that()
