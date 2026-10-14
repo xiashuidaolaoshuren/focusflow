@@ -735,7 +735,9 @@ public final class HorizonForecaster {
 		List<TaskRef> upstreamBlockers = List.of();
 		List<TaskRef> unresolvedEffort = List.of();
 
-		if (isPlannable(task.status()) && task.dueDate() != null) {
+		Set<Long> plannableIds =
+				input.plannableTasks().stream().map(HorizonTask::taskId).collect(Collectors.toSet());
+		if (plannableIds.contains(task.taskId()) && task.dueDate() != null) {
 			status =
 					computeDeadlineStatus(
 							task,

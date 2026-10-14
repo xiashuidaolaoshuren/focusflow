@@ -1,6 +1,7 @@
 package com.focusflow.common.error;
 
 import com.focusflow.ai.AiProviderException;
+import com.focusflow.dependency.BrokenDependencyOrderException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -123,6 +124,19 @@ public class GlobalExceptionHandler {
 						request.getRequestURI(),
 						currentRequestId());
 		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+	}
+
+	@ExceptionHandler(BrokenDependencyOrderException.class)
+	public ResponseEntity<ApiErrorResponse> handleBrokenDependencyOrder(
+			BrokenDependencyOrderException ex, HttpServletRequest request) {
+		ApiErrorResponse body =
+				ApiErrorResponse.withoutDetails(
+						HttpStatus.INTERNAL_SERVER_ERROR.value(),
+						HttpStatus.INTERNAL_SERVER_ERROR.getReasonPhrase(),
+						ex.getMessage(),
+						request.getRequestURI(),
+						currentRequestId());
+		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
 	}
 
 	@ExceptionHandler(AiProviderException.class)
