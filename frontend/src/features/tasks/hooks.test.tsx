@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
 
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
   tasksQueryKey,
   useAddBlocker,
@@ -197,6 +198,9 @@ describe('useCreateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 })
 
@@ -258,6 +262,9 @@ describe('useUpdateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 
   it('refetches the task list on PROGRESS_CONFLICT without a success invalidation', async () => {
@@ -293,7 +300,10 @@ describe('useUpdateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
-    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(2)
     expect(result.current.isSuccess).toBe(false)
   })
 })
@@ -332,7 +342,10 @@ describe('useReassessRemainingEffort', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
-    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(2)
     expect(result.current.isSuccess).toBe(false)
   })
 })
@@ -375,6 +388,7 @@ describe('useAddBlocker', () => {
 
     expect(mockedAddBlocker).toHaveBeenCalledWith(1, { blockerTaskId: 2 })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: horizonQueryPrefix })
     expect(mockedMarkRegeneratePromptNeeded).not.toHaveBeenCalled()
   })
 })
@@ -405,6 +419,7 @@ describe('useRemoveBlocker', () => {
 
     expect(mockedRemoveBlocker).toHaveBeenCalledWith(1, 2)
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: horizonQueryPrefix })
     expect(mockedMarkRegeneratePromptNeeded).not.toHaveBeenCalled()
   })
 })
@@ -436,6 +451,9 @@ describe('useDeleteTask', () => {
     expect(mockedDeleteTask).toHaveBeenCalledWith(1)
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
     })
   })
 })

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { PublicLayout } from '@/components/layout/PublicLayout'
 import { ProtectedRoute } from '@/features/auth/ProtectedRoute'
+import { HorizonPage } from '@/features/horizon/HorizonPage'
 import { DashboardPage } from '@/routes/DashboardPage'
 import { LoginPage } from '@/routes/LoginPage'
 import { PlanDetailPage } from '@/routes/PlanDetailPage'
@@ -25,6 +26,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/plans" element={<PlanHistoryPage />} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
+          <Route path="/horizon" element={<HorizonPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

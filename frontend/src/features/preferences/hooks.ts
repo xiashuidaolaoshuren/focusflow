@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
   getSchedulingPreferences,
   updateSchedulingPreferences,
@@ -32,9 +33,12 @@ export function useUpdateSchedulingPreferences() {
       updateSchedulingPreferences(request),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({
-        queryKey: schedulingPreferencesQueryKey,
-      })
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: schedulingPreferencesQueryKey,
+        }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
+      ])
       toast.success('Scheduling preferences saved')
     },
   })

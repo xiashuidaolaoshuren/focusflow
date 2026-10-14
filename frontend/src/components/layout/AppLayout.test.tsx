@@ -30,6 +30,7 @@ function renderAppLayout(initialPath = '/dashboard') {
             <Routes>
               <Route element={<AppLayout />}>
                 <Route path="/dashboard" element={<div>Dashboard content</div>} />
+                <Route path="/horizon" element={<div>Horizon content</div>} />
                 <Route path="/settings" element={<div>Settings content</div>} />
               </Route>
             </Routes>
@@ -130,13 +131,22 @@ describe('AppLayout navigation', () => {
     vi.clearAllMocks()
   })
 
-  it('renders a Settings link in the sidebar', () => {
+  it('renders Horizon between Plans and Settings in the sidebar', () => {
     renderAppLayout()
 
-    expect(screen.getByRole('link', { name: /settings/i })).toHaveAttribute(
+    const links = screen.getAllByRole('link')
+    const labels = links.map((link) => link.textContent?.trim())
+    const plansIndex = labels.findIndex((label) => label === 'Plans')
+    const horizonIndex = labels.findIndex((label) => label === 'Horizon')
+    const settingsIndex = labels.findIndex((label) => label === 'Settings')
+
+    expect(screen.getByRole('link', { name: /horizon/i })).toHaveAttribute(
       'href',
-      '/settings',
+      '/horizon',
     )
+    expect(plansIndex).toBeGreaterThanOrEqual(0)
+    expect(horizonIndex).toBeGreaterThan(plansIndex)
+    expect(settingsIndex).toBeGreaterThan(horizonIndex)
   })
 })
 

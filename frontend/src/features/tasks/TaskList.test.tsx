@@ -28,11 +28,26 @@ vi.mock('@/features/tasks/hooks', async (importOriginal) => {
   }
 })
 
+vi.mock('@/features/horizon/hooks', () => ({
+  useHorizon: vi.fn(),
+}))
+
+import { useHorizon } from '@/features/horizon/hooks'
 import { useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
 
 const mockedUseTasks = vi.mocked(useTasks)
 const mockedUseUpdateTask = vi.mocked(useUpdateTask)
 const mockedUseDeleteTask = vi.mocked(useDeleteTask)
+const mockedUseHorizon = vi.mocked(useHorizon)
+
+function mockHorizonIdle() {
+  mockedUseHorizon.mockReturnValue({
+    horizon: null,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useHorizon>)
+}
 
 function renderTaskList(onEditTask = vi.fn(), onCreateTask = vi.fn()) {
   const queryClient = new QueryClient({
@@ -66,6 +81,7 @@ const sampleTask: TaskResponse = {
 
 describe('TaskList', () => {
   beforeEach(() => {
+    mockHorizonIdle()
     mockedUseUpdateTask.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -413,5 +429,125 @@ describe('TaskList', () => {
     expect(deleteMutate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /^delete task$/i }))
     expect(deleteMutate).toHaveBeenCalledWith(1)
+  })
+
+  it('shows deadline badges for at-risk, overdue, and cannot-forecast rows', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        sampleTask,
+        { ...sampleTask, id: 2, title: 'On track task' },
+        { ...sampleTask, id: 3, title: 'Beyond task' },
+        { ...sampleTask, id: 5, title: 'Blocked chain' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+    mockedUseHorizon.mockReturnValue({
+      horizon: {
+        currentDate: '2026-06-01',
+        currentTime: '09:00:00',
+        assumptions: {
+          pace: 'AS_PLANNED',
+          workingDays: ['MONDAY'],
+          horizonWorkingDays: 7,
+        },
+        days: [],
+        tasks: [
+          {
+            taskId: 1,
+            title: 'Write report',
+            status: 'OPEN',
+            dueDate: '2026-06-15',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'AT_RISK',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 2,
+            title: 'On track task',
+            status: 'OPEN',
+            dueDate: '2026-06-20',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'ON_TRACK',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 3,
+            title: 'Beyond task',
+            status: 'OPEN',
+            dueDate: '2026-07-01',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'BEYOND_HORIZON',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 5,
+            title: 'Blocked chain',
+            status: 'OPEN',
+            dueDate: '2026-06-15',
+            remainingEffortMinutes: null,
+            deadlineStatus: 'CANNOT_FORECAST',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [{ taskId: 9, title: 'Unknown effort' }],
+            segments: [],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useHorizon>)
+
+    renderTaskList()
+
+    expect(screen.getByText('At risk')).toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Beyond horizon')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Cannot forecast: Unknown effort'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows deadline forecast unavailable when the horizon query fails', () => {
+    const refetchHorizon = vi.fn()
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [sampleTask],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+    mockedUseHorizon.mockReturnValue({
+      horizon: null,
+      isPending: false,
+      isError: true,
+      refetch: refetchHorizon,
+    } as unknown as ReturnType<typeof useHorizon>)
+
+    renderTaskList()
+
+    expect(screen.getByText(/deadline forecast unavailable/i)).toBeInTheDocument()
+    expect(screen.getByText('Write report')).toBeInTheDocument()
+    const retryButtons = screen.getAllByRole('button', { name: /retry/i })
+    fireEvent.click(retryButtons[retryButtons.length - 1]!)
+    expect(refetchHorizon).toHaveBeenCalled()
   })
 })

@@ -6,6 +6,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,12 +15,14 @@ import { TaskActions } from '@/features/tasks/TaskActions'
 import { PriorityBadge } from '@/features/tasks/PriorityBadge'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { TaskMetaItem } from '@/features/tasks/TaskMetaItem'
+import { deadlineBadgeLabel } from '@/features/horizon/horizonGrid'
+import { useHorizon } from '@/features/horizon/hooks'
 import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
 import {
   countActiveBlockedBy,
   countActiveBlocks,
 } from '@/features/tasks/taskDependencyLinks'
-import type { TaskResponse } from '@/types/api'
+import type { DeadlineStatus, TaskResponse } from '@/types/api'
 
 function formatDueDate(dueDate: string | null): string {
   return dueDate ?? 'No due date'
@@ -38,6 +41,8 @@ function formatRemainingEffort(minutes: number | null): string {
 
 type TaskRowProps = {
   task: TaskResponse
+  deadlineBadge: string | null
+  deadlineStatus: DeadlineStatus | null | undefined
   onEditTask: (task: TaskResponse) => void
   onDelete: (task: TaskResponse) => void
   isDeleting: boolean
@@ -45,6 +50,8 @@ type TaskRowProps = {
 
 function TaskRow({
   task,
+  deadlineBadge,
+  deadlineStatus,
   onEditTask,
   onDelete,
   isDeleting,
@@ -80,6 +87,15 @@ function TaskRow({
           <TaskMetaItem category="remainingEffortMinutes" icon={ClockIcon}>
             {formatRemainingEffort(task.remainingEffortMinutes)}
           </TaskMetaItem>
+          {deadlineBadge != null ? (
+            <TaskMetaItem category="status" icon={CircleDotIcon}>
+              <Badge
+                variant={deadlineStatus === 'AT_RISK' ? 'secondary' : 'destructive'}
+              >
+                {deadlineBadge}
+              </Badge>
+            </TaskMetaItem>
+          ) : null}
           <RemainingEffortControl task={task} />
         </div>
         {blockedByCount > 0 ? (
@@ -140,7 +156,16 @@ export function TaskList({
   onCreateTask = () => undefined,
 }: TaskListProps) {
   const { isPending, isError, isEmpty, tasks, error, refetch } = useTasks()
+  const {
+    horizon,
+    isError: isHorizonError,
+    refetch: refetchHorizon,
+  } = useHorizon()
   const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask()
+
+  const horizonRowByTaskId = new Map(
+    (horizon?.tasks ?? []).map((row) => [row.taskId, row]),
+  )
 
   function handleDelete(task: TaskResponse) {
     deleteTask(task.id)
@@ -172,15 +197,43 @@ export function TaskList({
 
   return (
     <div className="flex flex-col gap-3">
-      {tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          onEditTask={onEditTask}
-          onDelete={handleDelete}
-          isDeleting={isDeleting}
-        />
-      ))}
+      {isHorizonError ? (
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>Deadline forecast unavailable</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => refetchHorizon()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {tasks.map((task) => {
+        const horizonRow = horizonRowByTaskId.get(task.id)
+        const deadlineBadge =
+          horizonRow != null
+            ? deadlineBadgeLabel(
+                horizonRow.deadlineStatus,
+                horizonRow.unresolvedEffort,
+              )
+            : null
+
+        return (
+          <TaskRow
+            key={task.id}
+            task={task}
+            deadlineBadge={deadlineBadge}
+            deadlineStatus={horizonRow?.deadlineStatus}
+            onEditTask={onEditTask}
+            onDelete={handleDelete}
+            isDeleting={isDeleting}
+          />
+        )
+      })}
     </div>
   )
 }

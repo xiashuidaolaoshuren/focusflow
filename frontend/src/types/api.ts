@@ -393,3 +393,77 @@ export type DailyPlanResponse = {
   offRailEarlyCompletions: ScheduledBlockResponse[]
   unplannedWork: UnplannedWorkResponse[]
 }
+
+/** Mirrors `com.focusflow.horizon.HorizonForecast.DayKind` */
+export type HorizonDayKind = 'SAVED' | 'FORECAST'
+
+/** Mirrors `com.focusflow.horizon.HorizonForecast.DeadlineStatus` */
+export type DeadlineStatus =
+  | 'OVERDUE'
+  | 'CANNOT_FORECAST'
+  | 'ON_TRACK'
+  | 'AT_RISK'
+  | 'BEYOND_HORIZON'
+
+/** Mirrors `com.focusflow.horizon.HorizonForecast.CreditExclusion` */
+export type CreditExclusion = 'DEPENDENCY' | 'CHECKPOINT'
+
+/** Mirrors `com.focusflow.horizon.HorizonForecast.UnplacedScope` */
+export type HorizonUnplacedScope = 'SAVED_SHORTFALL' | 'FORECAST'
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse.DependencyRef` */
+export type HorizonDependencyRef = {
+  taskId: number
+  title: string
+}
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse.SegmentResponse` */
+export type HorizonSegmentResponse = {
+  date: string
+  minutes: number
+  assumedCreditMinutes: number | null
+  creditExclusions: CreditExclusion[]
+  unplacedReason: UnplacedReason | null
+  unplacedMinutes: number | null
+  unplacedScope: HorizonUnplacedScope | null
+}
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse.TaskRowResponse` */
+export type HorizonTaskRowResponse = {
+  taskId: number
+  title: string
+  status: TaskStatus
+  dueDate: string | null
+  remainingEffortMinutes: number | null
+  deadlineStatus: DeadlineStatus | null
+  projectedFinishDate: string | null
+  waitingOn: HorizonDependencyRef[]
+  upstreamBlockers: HorizonDependencyRef[]
+  unresolvedEffort: HorizonDependencyRef[]
+  segments: HorizonSegmentResponse[]
+}
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse.DayResponse` */
+export type HorizonDayResponse = {
+  date: string
+  kind: HorizonDayKind
+  planId: number | null
+  needsRefresh: boolean | null
+  dependenciesIgnored: number[]
+}
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse.Assumptions` */
+export type HorizonAssumptions = {
+  pace: string
+  workingDays: DayOfWeek[]
+  horizonWorkingDays: number
+}
+
+/** Mirrors `com.focusflow.plan.dto.HorizonResponse` */
+export type HorizonResponse = {
+  currentDate: string
+  currentTime: string
+  assumptions: HorizonAssumptions
+  days: HorizonDayResponse[]
+  tasks: HorizonTaskRowResponse[]
+}

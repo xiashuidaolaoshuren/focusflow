@@ -15,6 +15,7 @@ import {
   recordBlockProgress,
   replanDailyPlan,
 } from '@/features/plans/api'
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { isPlanRefetchConflict } from '@/features/plans/planConflicts'
 import { tasksQueryKey } from '@/features/tasks/hooks'
 import type {
@@ -51,6 +52,7 @@ export function invalidatePlanQueries(
     queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
     queryClient.invalidateQueries({ queryKey: planDetailQueryKey(plan.id) }),
     queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
   ])
 }
 
@@ -64,6 +66,7 @@ function refetchPlanViews(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
     queryClient.invalidateQueries({ queryKey: plansDetailQueryPrefix }),
     queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
   ])
 }
 
@@ -124,6 +127,7 @@ export function useGeneratePlan() {
           queryKey: planByDateQueryKey(plan.planDate),
         }),
         queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
       ])
     },
   })
@@ -139,6 +143,7 @@ export function useDeletePlan() {
         queryClient.invalidateQueries({ queryKey: plansByDateQueryPrefix }),
         queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
         queryClient.invalidateQueries({ queryKey: planDetailQueryKey(id) }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
       ])
     },
   })
