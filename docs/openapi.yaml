@@ -1,5 +1,33 @@
 components:
   schemas:
+    AddBlockerRequest:
+      properties:
+        blockerTaskId:
+          format: "int64"
+          type: "integer"
+      required:
+      - "blockerTaskId"
+      type: "object"
+    Assumptions:
+      properties:
+        horizonWorkingDays:
+          format: "int32"
+          type: "integer"
+        pace:
+          type: "string"
+        workingDays:
+          items:
+            enum:
+            - "MONDAY"
+            - "TUESDAY"
+            - "WEDNESDAY"
+            - "THURSDAY"
+            - "FRIDAY"
+            - "SATURDAY"
+            - "SUNDAY"
+            type: "string"
+          type: "array"
+      type: "object"
     BlockProgressRequest:
       properties:
         actualMinutes:
@@ -24,6 +52,8 @@ components:
           - "PARTLY_DONE"
           - "SKIPPED"
           type: "string"
+      required:
+      - "outcome"
       type: "object"
     BlockProgressResponse:
       properties:
@@ -31,6 +61,19 @@ components:
           $ref: "#/components/schemas/DailyPlanResponse"
         task:
           $ref: "#/components/schemas/TaskResponse"
+      type: "object"
+    BlockedTask:
+      properties:
+        blockerSourceTaskIds:
+          items:
+            format: "int64"
+            type: "integer"
+          type: "array"
+        sourceTaskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
       type: "object"
     Checkpoint:
       properties:
@@ -200,6 +243,10 @@ components:
       type: "object"
     DailyPlanWarning:
       properties:
+        blockedTasks:
+          items:
+            $ref: "#/components/schemas/BlockedTask"
+          type: "array"
         freeMinutes:
           format: "int32"
           type: "integer"
@@ -217,6 +264,35 @@ components:
           items:
             $ref: "#/components/schemas/UnestimatedTask"
           type: "array"
+      type: "object"
+    DayResponse:
+      properties:
+        date:
+          format: "date"
+          type: "string"
+        dependenciesIgnored:
+          items:
+            format: "int64"
+            type: "integer"
+          type: "array"
+        kind:
+          enum:
+          - "SAVED"
+          - "FORECAST"
+          type: "string"
+        needsRefresh:
+          type: "boolean"
+        planId:
+          format: "int64"
+          type: "integer"
+      type: "object"
+    DependencyRef:
+      properties:
+        taskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
       type: "object"
     FixedBreakRequest:
       properties:
@@ -255,6 +331,25 @@ components:
           type: "integer"
       required:
       - "planDate"
+      type: "object"
+    HorizonResponse:
+      properties:
+        assumptions:
+          $ref: "#/components/schemas/Assumptions"
+        currentDate:
+          format: "date"
+          type: "string"
+        currentTime:
+          example: "14:30:00"
+          type: "string"
+        days:
+          items:
+            $ref: "#/components/schemas/DayResponse"
+          type: "array"
+        tasks:
+          items:
+            $ref: "#/components/schemas/TaskRowResponse"
+          type: "array"
       type: "object"
     LoginRequest:
       properties:
@@ -467,6 +562,18 @@ components:
         workDayStart:
           example: "14:30:00"
           type: "string"
+        workingDays:
+          items:
+            enum:
+            - "MONDAY"
+            - "TUESDAY"
+            - "WEDNESDAY"
+            - "THURSDAY"
+            - "FRIDAY"
+            - "SATURDAY"
+            - "SUNDAY"
+            type: "string"
+          type: "array"
       required:
       - "breakMinutes"
       - "bufferMinutes"
@@ -475,6 +582,7 @@ components:
       - "targetFocusMinutes"
       - "workDayEnd"
       - "workDayStart"
+      - "workingDays"
       type: "object"
     SchedulingPreferencesResponse:
       properties:
@@ -510,6 +618,51 @@ components:
         workDayStart:
           example: "14:30:00"
           type: "string"
+        workingDays:
+          items:
+            enum:
+            - "MONDAY"
+            - "TUESDAY"
+            - "WEDNESDAY"
+            - "THURSDAY"
+            - "FRIDAY"
+            - "SATURDAY"
+            - "SUNDAY"
+            type: "string"
+          type: "array"
+      type: "object"
+    SegmentResponse:
+      properties:
+        assumedCreditMinutes:
+          format: "int32"
+          type: "integer"
+        creditExclusions:
+          items:
+            enum:
+            - "DEPENDENCY"
+            - "CHECKPOINT"
+            type: "string"
+          type: "array"
+        date:
+          format: "date"
+          type: "string"
+        minutes:
+          format: "int32"
+          type: "integer"
+        unplacedMinutes:
+          format: "int32"
+          type: "integer"
+        unplacedReason:
+          enum:
+          - "NO_ESTIMATE"
+          - "OUT_OF_TIME"
+          - "BLOCKED"
+          type: "string"
+        unplacedScope:
+          enum:
+          - "SAVED_SHORTFALL"
+          - "FORECAST"
+          type: "string"
       type: "object"
     TaskEffortVersion:
       properties:
@@ -522,8 +675,31 @@ components:
       required:
       - "taskId"
       type: "object"
+    TaskLinkResponse:
+      properties:
+        status:
+          enum:
+          - "OPEN"
+          - "IN_PROGRESS"
+          - "DONE"
+          - "CANCELLED"
+          type: "string"
+        taskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
+      type: "object"
     TaskResponse:
       properties:
+        blockedBy:
+          items:
+            $ref: "#/components/schemas/TaskLinkResponse"
+          type: "array"
+        blocks:
+          items:
+            $ref: "#/components/schemas/TaskLinkResponse"
+          type: "array"
         description:
           type: "string"
         dueDate:
@@ -557,8 +733,59 @@ components:
         title:
           type: "string"
       type: "object"
+    TaskRowResponse:
+      properties:
+        deadlineStatus:
+          enum:
+          - "OVERDUE"
+          - "CANNOT_FORECAST"
+          - "ON_TRACK"
+          - "AT_RISK"
+          - "BEYOND_HORIZON"
+          type: "string"
+        dueDate:
+          format: "date"
+          type: "string"
+        projectedFinishDate:
+          format: "date"
+          type: "string"
+        remainingEffortMinutes:
+          format: "int32"
+          type: "integer"
+        segments:
+          items:
+            $ref: "#/components/schemas/SegmentResponse"
+          type: "array"
+        status:
+          enum:
+          - "OPEN"
+          - "IN_PROGRESS"
+          - "DONE"
+          - "CANCELLED"
+          type: "string"
+        taskId:
+          format: "int64"
+          type: "integer"
+        title:
+          type: "string"
+        unresolvedEffort:
+          items:
+            $ref: "#/components/schemas/DependencyRef"
+          type: "array"
+        upstreamBlockers:
+          items:
+            $ref: "#/components/schemas/DependencyRef"
+          type: "array"
+        waitingOn:
+          items:
+            $ref: "#/components/schemas/DependencyRef"
+          type: "array"
+      type: "object"
     TaskSnapshotResponse:
       properties:
+        capturedCheckpointId:
+          format: "int64"
+          type: "integer"
         capturedRemainingEffortMinutes:
           format: "int32"
           type: "integer"
@@ -570,6 +797,9 @@ components:
           type: "integer"
         mustInclude:
           type: "boolean"
+        neededForTaskId:
+          format: "int64"
+          type: "integer"
         priority:
           enum:
           - "LOW"
@@ -602,10 +832,16 @@ components:
       type: "object"
     UnplacedWorkResponse:
       properties:
+        blockerSourceTaskIds:
+          items:
+            format: "int64"
+            type: "integer"
+          type: "array"
         reason:
           enum:
           - "NO_ESTIMATE"
           - "OUT_OF_TIME"
+          - "BLOCKED"
           type: "string"
         taskSnapshot:
           $ref: "#/components/schemas/TaskSnapshotResponse"
@@ -1079,6 +1315,31 @@ paths:
           description: "OK"
       tags:
       - "daily-plan-controller"
+  /api/horizon:
+    get:
+      operationId: "horizon"
+      parameters:
+      - in: "query"
+        name: "currentDate"
+        required: false
+        schema:
+          format: "date"
+          type: "string"
+      - in: "query"
+        name: "currentTime"
+        required: false
+        schema:
+          format: "date-time"
+          type: "string"
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/HorizonResponse"
+          description: "OK"
+      tags:
+      - "horizon-controller"
   /api/scheduling-preferences:
     get:
       operationId: "getEffective"
@@ -1194,6 +1455,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/TaskResponse"
           description: "OK"
+      tags:
+      - "task-controller"
+  /api/tasks/{id}/blockers:
+    post:
+      operationId: "addBlocker"
+      parameters:
+      - in: "path"
+        name: "id"
+        required: true
+        schema:
+          format: "int64"
+          type: "integer"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddBlockerRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/TaskResponse"
+          description: "OK"
+      tags:
+      - "task-controller"
+  /api/tasks/{id}/blockers/{blockerId}:
+    delete:
+      operationId: "removeBlocker"
+      parameters:
+      - in: "path"
+        name: "id"
+        required: true
+        schema:
+          format: "int64"
+          type: "integer"
+      - in: "path"
+        name: "blockerId"
+        required: true
+        schema:
+          format: "int64"
+          type: "integer"
+      responses:
+        "204":
+          description: "No Content"
       tags:
       - "task-controller"
   /api/tasks/{id}/remaining-effort:

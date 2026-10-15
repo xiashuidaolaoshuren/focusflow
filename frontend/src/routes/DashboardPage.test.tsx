@@ -392,8 +392,6 @@ describe('DashboardPage', () => {
         dueDate: '2026-06-15',
         estimatedMinutes: 60,
         effortVersion: 0,
-        blockedBy: [],
-        blocks: [],
       },
     })
   })
