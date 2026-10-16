@@ -21,7 +21,9 @@ import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
 import {
   countActiveBlockedBy,
   countActiveBlocks,
+  liveNeededForLabel,
 } from '@/features/tasks/taskDependencyLinks'
+import { getLocalDateString } from '@/lib/planningDate'
 import type { DeadlineStatus, TaskResponse } from '@/types/api'
 
 function formatDueDate(dueDate: string | null): string {
@@ -43,6 +45,7 @@ type TaskRowProps = {
   task: TaskResponse
   deadlineBadge: string | null
   deadlineStatus: DeadlineStatus | null | undefined
+  neededFor: string | null
   onEditTask: (task: TaskResponse) => void
   onDelete: (task: TaskResponse) => void
   isDeleting: boolean
@@ -52,6 +55,7 @@ function TaskRow({
   task,
   deadlineBadge,
   deadlineStatus,
+  neededFor,
   onEditTask,
   onDelete,
   isDeleting,
@@ -106,6 +110,9 @@ function TaskRow({
         {blocksCount > 0 ? (
           <p className="text-sm text-muted-foreground">Blocks {blocksCount}</p>
         ) : null}
+        {neededFor != null ? (
+          <p className="text-sm text-muted-foreground">{neededFor}</p>
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -147,11 +154,13 @@ function TaskListEmpty({ onCreateTask }: { onCreateTask: () => void }) {
 }
 
 type TaskListProps = {
+  planningDate?: string
   onEditTask?: (task: TaskResponse) => void
   onCreateTask?: () => void
 }
 
 export function TaskList({
+  planningDate,
   onEditTask = () => undefined,
   onCreateTask = () => undefined,
 }: TaskListProps) {
@@ -163,6 +172,8 @@ export function TaskList({
   } = useHorizon()
   const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask()
 
+  const resolvedPlanningDate = planningDate ?? getLocalDateString()
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
   const horizonRowByTaskId = new Map(
     (horizon?.tasks ?? []).map((row) => [row.taskId, row]),
   )
@@ -228,6 +239,7 @@ export function TaskList({
             task={task}
             deadlineBadge={deadlineBadge}
             deadlineStatus={horizonRow?.deadlineStatus}
+            neededFor={liveNeededForLabel(task, taskById, resolvedPlanningDate)}
             onEditTask={onEditTask}
             onDelete={handleDelete}
             isDeleting={isDeleting}

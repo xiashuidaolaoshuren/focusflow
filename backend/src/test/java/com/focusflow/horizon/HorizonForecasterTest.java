@@ -207,7 +207,7 @@ class HorizonForecasterTest {
 
 		assertThat(row.segments().getFirst().creditExclusions())
 				.containsExactly(CreditExclusion.CHECKPOINT);
-		assertThat(row.segments().getFirst().assumedCreditMinutes()).isNull();
+		assertThat(row.segments().getFirst().assumedCreditMinutes()).isEqualTo(0);
 		assertThat(row.segments().get(1).assumedCreditMinutes()).isEqualTo(30);
 	}
 
@@ -239,6 +239,7 @@ class HorizonForecasterTest {
 
 		assertThat(row.segments().getFirst().creditExclusions())
 				.containsExactly(CreditExclusion.DEPENDENCY, CreditExclusion.CHECKPOINT);
+		assertThat(row.segments().getFirst().assumedCreditMinutes()).isEqualTo(0);
 		assertThat(forecast.days().getFirst().dependenciesIgnored()).containsExactly(2L);
 	}
 
@@ -270,6 +271,7 @@ class HorizonForecasterTest {
 
 		assertThat(row.segments().getFirst().creditExclusions())
 				.containsExactly(CreditExclusion.DEPENDENCY);
+		assertThat(row.segments().getFirst().assumedCreditMinutes()).isEqualTo(0);
 		assertThat(row.segments())
 				.filteredOn(segment -> segment.assumedCreditMinutes() != null)
 				.last()
@@ -431,7 +433,7 @@ class HorizonForecasterTest {
 	}
 
 	@Test
-	void forecast_atRiskAndUnknownEffortRowsNeverListThemselvesAsCauses() {
+	void forecast_unknownEffortRowNamesItselfAndKeepsUpstreamEmpty() {
 		LocalDate due = LocalDate.of(2026, 6, 3);
 		HorizonTask big =
 				new HorizonTask(
@@ -447,7 +449,9 @@ class HorizonForecasterTest {
 		assertThat(row(forecast, 1L).deadlineStatus()).isEqualTo(DeadlineStatus.AT_RISK);
 		assertThat(row(forecast, 1L).upstreamBlockers()).isEmpty();
 		assertThat(row(forecast, 2L).deadlineStatus()).isEqualTo(DeadlineStatus.CANNOT_FORECAST);
-		assertThat(row(forecast, 2L).unresolvedEffort()).isEmpty();
+		assertThat(row(forecast, 2L).unresolvedEffort())
+				.extracting(HorizonForecast.TaskRef::taskId, HorizonForecast.TaskRef::title)
+				.containsExactly(org.assertj.core.groups.Tuple.tuple(2L, "NoEstimate"));
 		assertThat(row(forecast, 2L).upstreamBlockers()).isEmpty();
 	}
 

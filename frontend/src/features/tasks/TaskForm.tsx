@@ -129,7 +129,12 @@ export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
       ? tasks.filter((candidate) => candidate.id !== task.id)
       : []
 
-  const blockedBy = task?.blockedBy ?? []
+  const blockedBy =
+    (isEditMode && task != null
+      ? tasks.find((candidate) => candidate.id === task.id)?.blockedBy
+      : undefined) ??
+    task?.blockedBy ??
+    []
 
   function handleAddBlocker() {
     if (task == null || selectedBlockerId === '') {

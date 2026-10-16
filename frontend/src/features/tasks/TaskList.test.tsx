@@ -49,7 +49,11 @@ function mockHorizonIdle() {
   } as unknown as ReturnType<typeof useHorizon>)
 }
 
-function renderTaskList(onEditTask = vi.fn(), onCreateTask = vi.fn()) {
+function renderTaskList(
+  onEditTask = vi.fn(),
+  onCreateTask = vi.fn(),
+  planningDate?: string,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -59,7 +63,11 @@ function renderTaskList(onEditTask = vi.fn(), onCreateTask = vi.fn()) {
     onCreateTask,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <TaskList onEditTask={onEditTask} onCreateTask={onCreateTask} />
+        <TaskList
+          onEditTask={onEditTask}
+          onCreateTask={onCreateTask}
+          planningDate={planningDate}
+        />
       </QueryClientProvider>,
     ),
   }
@@ -223,6 +231,89 @@ describe('TaskList', () => {
 
     expect(screen.getByText('Unknown remaining')).toBeInTheDocument()
     expect(screen.queryByText('0 min remaining')).not.toBeInTheDocument()
+  })
+
+  it('shows Needed for on a task promoted by a live dependency', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Write report', status: 'OPEN' }],
+        },
+        { ...sampleTask, id: 2, title: 'Write report', dueDate: '2026-06-15' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(
+      screen.getByText('Needed for Write report (due 2026-06-15)'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show Needed for when both tasks already share the ranking group', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          status: 'IN_PROGRESS',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Continue too', status: 'IN_PROGRESS' }],
+        },
+        {
+          ...sampleTask,
+          id: 2,
+          title: 'Continue too',
+          status: 'IN_PROGRESS',
+          dueDate: '2026-06-15',
+        },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(screen.queryByText(/needed for/i)).not.toBeInTheDocument()
+  })
+
+  it('honors the planning date prop when deciding promotion', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Write report', status: 'OPEN' }],
+        },
+        { ...sampleTask, id: 2, title: 'Write report', dueDate: '2026-06-20' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList(vi.fn(), vi.fn(), '2026-06-20')
+
+    expect(
+      screen.getByText('Needed for Write report (due 2026-06-20)'),
+    ).toBeInTheDocument()
   })
 
   it('sends effortVersion without remainingEffortMinutes when status changes to In progress', () => {

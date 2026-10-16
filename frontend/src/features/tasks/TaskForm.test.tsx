@@ -477,7 +477,10 @@ describe('TaskForm', () => {
   it('lists finished blockers and offers other owner tasks in the add control', async () => {
     mockedUseTasks.mockReturnValue({
       tasks: [
-        sampleTask,
+        {
+          ...sampleTask,
+          blockedBy: [{ taskId: 3, title: 'Finished blocker', status: 'DONE' }],
+        },
         {
           id: 2,
           title: 'Prerequisite',
@@ -521,6 +524,46 @@ describe('TaskForm', () => {
     fireEvent.click(screen.getByRole('combobox', { name: /add blocker/i }))
     expect(await screen.findByRole('option', { name: /prerequisite/i })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /write report/i })).not.toBeInTheDocument()
+  })
+
+  it('reflects a blocker that arrives from the refreshed task list', () => {
+    mockedUseTasks.mockReturnValue({
+      tasks: [
+        {
+          ...sampleTask,
+          blockedBy: [{ taskId: 2, title: 'Prerequisite', status: 'OPEN' }],
+        },
+        { ...sampleTask, id: 2, title: 'Prerequisite' },
+      ],
+      isPending: false,
+      isError: false,
+      isEmpty: false,
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskForm(vi.fn(), sampleTask)
+
+    expect(
+      screen.getByRole('button', { name: 'Remove blocker Prerequisite' }),
+    ).toBeInTheDocument()
+  })
+
+  it('drops a blocker the refreshed task list no longer contains', () => {
+    mockedUseTasks.mockReturnValue({
+      tasks: [sampleTask],
+      isPending: false,
+      isError: false,
+      isEmpty: false,
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskForm(vi.fn(), {
+      ...sampleTask,
+      blockedBy: [{ taskId: 2, title: 'Prerequisite', status: 'OPEN' }],
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Remove blocker Prerequisite' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(/no blockers yet/i)).toBeInTheDocument()
   })
 
   it('shows dependency error codes beside the blocker control without clearing the form', async () => {

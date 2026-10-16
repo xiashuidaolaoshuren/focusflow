@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 
 import {
@@ -15,12 +16,17 @@ import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { useHorizon } from '@/features/horizon/hooks'
 import {
   barPercent,
+  dashboardHref,
+  forecastHeaderCopy,
   formatDueDateTitle,
+  HORIZON_PACE_COPY,
   isDueDateColumn,
   longestFullWorkWindow,
+  savedConflictCopy,
   segmentAriaLabel,
   segmentCellCopy,
   timeSpanMinutes,
+  upstreamCopy,
   waitingOnCopy,
 } from '@/features/horizon/horizonGrid'
 import type {
@@ -48,6 +54,7 @@ function HorizonPageSkeleton() {
 export function HorizonPage() {
   const { horizon, isPending, isError, error, refetch } = useHorizon()
   const { preferences } = useSchedulingPreferences()
+  const [highlightedTaskIds, setHighlightedTaskIds] = useState<number[]>([])
 
   const savedPlanIds =
     horizon?.days
@@ -116,6 +123,7 @@ export function HorizonPage() {
         <p className="text-sm text-muted-foreground">
           Seven working days from {horizon.currentDate} at {horizon.currentTime}.
         </p>
+        <p className="text-sm text-muted-foreground">{HORIZON_PACE_COPY}</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -139,6 +147,11 @@ export function HorizonPage() {
               days={horizon.days}
               columnDates={columnDates}
               scaleMinutes={scaleMinutes}
+              highlighted={highlightedTaskIds.includes(task.taskId)}
+              onHighlightBlockers={() =>
+                setHighlightedTaskIds(task.waitingOn.map((ref) => ref.taskId))
+              }
+              onClearHighlight={() => setHighlightedTaskIds([])}
             />
           ))}
         </div>
@@ -148,6 +161,7 @@ export function HorizonPage() {
 }
 
 function DayHeader({ day }: { day: HorizonDayResponse }) {
+  const conflictCopy = savedConflictCopy(day)
   return (
     <div
       className={`bg-background p-2 text-center text-sm ${
@@ -158,6 +172,19 @@ function DayHeader({ day }: { day: HorizonDayResponse }) {
       <Badge variant={day.kind === 'SAVED' ? 'secondary' : 'outline'}>
         {day.kind === 'SAVED' ? 'Saved' : 'Forecast'}
       </Badge>
+      {day.kind === 'FORECAST' ? (
+        <div className="space-y-1 pt-1 text-left text-xs text-muted-foreground">
+          <p>{forecastHeaderCopy()}</p>
+          <a className="underline" href={dashboardHref(day.date)}>
+            Open {day.date} in the dashboard
+          </a>
+        </div>
+      ) : null}
+      {conflictCopy != null ? (
+        <p className="pt-1 text-left text-xs text-muted-foreground">
+          {conflictCopy}
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -167,6 +194,9 @@ type HorizonTaskRowProps = {
   days: HorizonDayResponse[]
   columnDates: string[]
   scaleMinutes: number
+  highlighted: boolean
+  onHighlightBlockers: () => void
+  onClearHighlight: () => void
 }
 
 function HorizonTaskRow({
@@ -174,18 +204,35 @@ function HorizonTaskRow({
   days,
   columnDates,
   scaleMinutes,
+  highlighted,
+  onHighlightBlockers,
+  onClearHighlight,
 }: HorizonTaskRowProps) {
   const waitingOn = waitingOnCopy(task)
+  const upstream = upstreamCopy(task)
 
   return (
-    <>
-      <div className="sticky left-0 z-10 space-y-1 bg-background p-2 text-sm">
+    <div
+      style={{ display: 'contents' }}
+      data-testid={`horizon-row-${task.taskId}`}
+      data-highlighted={highlighted ? 'true' : undefined}
+      onMouseEnter={onHighlightBlockers}
+      onMouseLeave={onClearHighlight}
+    >
+      <div
+        className={`sticky left-0 z-10 space-y-1 p-2 text-sm ${
+          highlighted ? 'bg-muted' : 'bg-background'
+        }`}
+      >
         <div className="font-medium">{task.title}</div>
         <div className="text-muted-foreground">
           Due {formatDueDateTitle(task.dueDate)}
         </div>
         {waitingOn != null ? (
           <div className="text-xs text-muted-foreground">{waitingOn}</div>
+        ) : null}
+        {upstream != null ? (
+          <div className="text-xs text-muted-foreground">{upstream}</div>
         ) : null}
       </div>
       {days.map((day) => {
@@ -201,10 +248,11 @@ function HorizonTaskRow({
             segment={segment}
             scaleMinutes={scaleMinutes}
             showDueMarker={showDueMarker}
+            highlighted={highlighted}
           />
         )
       })}
-    </>
+    </div>
   )
 }
 
@@ -214,6 +262,7 @@ type HorizonSegmentCellProps = {
   segment: HorizonSegmentResponse | undefined
   scaleMinutes: number
   showDueMarker: boolean
+  highlighted: boolean
 }
 
 function HorizonSegmentCell({
@@ -222,10 +271,15 @@ function HorizonSegmentCell({
   segment,
   scaleMinutes,
   showDueMarker,
+  highlighted,
 }: HorizonSegmentCellProps) {
   if (segment == null) {
     return (
-      <div className="bg-background p-2 text-xs text-muted-foreground">
+      <div
+        className={`p-2 text-xs text-muted-foreground ${
+          highlighted ? 'bg-muted' : 'bg-background'
+        }`}
+      >
         {showDueMarker ? <span className="font-medium">Due</span> : null}
       </div>
     )
@@ -237,7 +291,9 @@ function HorizonSegmentCell({
 
   return (
     <div
-      className={`bg-background p-2 text-xs ${day.kind === 'SAVED' ? 'bg-muted/20' : ''}`}
+      className={`p-2 text-xs ${day.kind === 'SAVED' ? 'bg-muted/20' : 'bg-background'} ${
+        highlighted ? 'bg-muted' : ''
+      }`}
     >
       {showDueMarker ? (
         <div className="mb-1 font-medium text-primary">Due</div>

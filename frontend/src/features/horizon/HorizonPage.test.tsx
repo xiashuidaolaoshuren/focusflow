@@ -1,8 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { HorizonPage } from '@/features/horizon/HorizonPage'
+import {
+  forecastHeaderCopy,
+  HORIZON_PACE_COPY,
+  savedConflictCopy,
+} from '@/features/horizon/horizonGrid'
 import type { HorizonResponse, SchedulingPreferencesResponse } from '@/types/api'
 
 vi.mock('@/features/horizon/hooks', () => ({
@@ -104,6 +109,51 @@ function renderHorizonPage() {
   )
 }
 
+const conflictedHorizon: HorizonResponse = {
+  ...horizon,
+  days: [
+    { ...horizon.days[0], dependenciesIgnored: [10] },
+    horizon.days[1],
+  ],
+  tasks: [
+    {
+      ...horizon.tasks[0],
+      waitingOn: [{ taskId: 2, title: 'Blocker' }],
+      upstreamBlockers: [{ taskId: 3, title: 'Upstream' }],
+    },
+    {
+      ...horizon.tasks[0],
+      taskId: 2,
+      title: 'Blocker',
+      deadlineStatus: null,
+      waitingOn: [],
+      upstreamBlockers: [],
+      segments: [],
+    },
+    {
+      ...horizon.tasks[0],
+      taskId: 3,
+      title: 'Upstream',
+      deadlineStatus: null,
+      waitingOn: [],
+      upstreamBlockers: [],
+      segments: [],
+    },
+  ],
+}
+
+function mockHorizon(horizonResponse: HorizonResponse) {
+  mockedUseHorizon.mockReturnValue({
+    horizon: horizonResponse,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useHorizon>)
+  mockedUseSchedulingPreferences.mockReturnValue({
+    preferences,
+  } as ReturnType<typeof useSchedulingPreferences>)
+}
+
 describe('HorizonPage', () => {
   it('renders saved and forecast headers with task rows and accessible segments', () => {
     mockedUseHorizon.mockReturnValue({
@@ -160,5 +210,55 @@ describe('HorizonPage', () => {
 
     expect(screen.getByText(/could not load horizon/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument()
+  })
+
+  it('states the as-planned assumption and explains a saved conflict', () => {
+    mockHorizon(conflictedHorizon)
+
+    renderHorizonPage()
+
+    expect(screen.getByText(HORIZON_PACE_COPY)).toBeInTheDocument()
+    expect(
+      screen.getByText(savedConflictCopy(conflictedHorizon.days[0]) as string),
+    ).toBeInTheDocument()
+  })
+
+  it('marks a forecast header with the fixed order and a dashboard link', () => {
+    mockHorizon(horizon)
+
+    renderHorizonPage()
+
+    expect(screen.getByText(forecastHeaderCopy())).toBeInTheDocument()
+    expect(
+      screen.getByRole('link', { name: /open 2026-06-02 in the dashboard/i }),
+    ).toHaveAttribute('href', '/dashboard?date=2026-06-02')
+  })
+
+  it('names the upstream cause and highlights the blocker rows on hover', () => {
+    mockHorizon(conflictedHorizon)
+
+    renderHorizonPage()
+
+    expect(screen.getByText('Waiting on Blocker')).toBeInTheDocument()
+    expect(screen.getByText('Upstream cause: Upstream')).toBeInTheDocument()
+
+    fireEvent.mouseEnter(screen.getByTestId('horizon-row-10'))
+
+    expect(screen.getByTestId('horizon-row-2')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+    expect(screen.getByTestId('horizon-row-3')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+    expect(screen.getByTestId('horizon-row-10')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+
+    fireEvent.mouseLeave(screen.getByTestId('horizon-row-10'))
+
+    expect(screen.getByTestId('horizon-row-2')).not.toHaveAttribute(
+      'data-highlighted',
+    )
   })
 })

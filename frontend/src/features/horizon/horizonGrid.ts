@@ -132,6 +132,34 @@ export function waitingOnCopy(task: HorizonTaskRowResponse): string | null {
   return `Waiting on ${titles}`
 }
 
+export const HORIZON_PACE_COPY =
+  'Eligible unrecorded sessions on saved plans are assumed completed as planned; a dependency conflict or an assessment that already covers the session is excluded, and recording skipped or partly done work updates the rest of the horizon.'
+
+export function savedConflictCopy(day: HorizonDayResponse): string | null {
+  if (day.kind !== 'SAVED' || day.dependenciesIgnored.length === 0) {
+    return null
+  }
+  return 'A saved session conflicts with a current dependency. Generating again applies the current rules, and this plan is left as saved.'
+}
+
+export function forecastHeaderCopy(): string {
+  return 'Fixed order: must-continue, then due or overdue, then optional. Generating a Daily plan for this date can choose a different order inside those groups.'
+}
+
+export function dashboardHref(date: string): string {
+  return `/dashboard?date=${date}`
+}
+
+export function upstreamCopy(
+  task: Pick<HorizonTaskRowResponse, 'upstreamBlockers'>,
+): string | null {
+  if (task.upstreamBlockers.length === 0) {
+    return null
+  }
+  const titles = task.upstreamBlockers.map((ref) => ref.title).join(', ')
+  return `Upstream cause: ${titles}`
+}
+
 export function deadlineBadgeLabel(
   deadlineStatus: HorizonTaskRowResponse['deadlineStatus'],
   unresolvedEffort: HorizonTaskRowResponse['unresolvedEffort'],

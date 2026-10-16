@@ -103,6 +103,25 @@ class InheritedRankingTest {
 	}
 
 	@Test
+	void assign_sameGroupPairNamesSelfSoNoLabelIsShown() {
+		List<RankingCandidate> candidates =
+				List.of(
+						new RankingCandidate(1L, TaskStatus.IN_PROGRESS, null),
+						new RankingCandidate(2L, TaskStatus.IN_PROGRESS, PLAN_DATE));
+		List<DependencyLink> links = List.of(new DependencyLink(1L, 2L, true));
+
+		List<InheritedAssignment> assignments =
+				InheritedRanking.assign(candidates, links, PLAN_DATE, Set.of());
+
+		assertThat(assignmentFor(assignments, 1L))
+				.satisfies(
+						a -> {
+							assertThat(a.group()).isEqualTo(RankingGroup.MUST_CONTINUE);
+							assertThat(a.neededForTaskId()).isEqualTo(1L);
+						});
+	}
+
+	@Test
 	void assign_forecastMustContinuePropagatesToUnfinishedBlocker() {
 		List<RankingCandidate> candidates =
 				List.of(

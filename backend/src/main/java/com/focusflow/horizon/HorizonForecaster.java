@@ -334,6 +334,9 @@ public final class HorizonForecaster {
 						}
 					}
 				}
+				if (!exclusions.isEmpty()) {
+					assumedCredit = 0;
+				}
 			}
 
 			addSegment(
@@ -897,6 +900,10 @@ public final class HorizonForecaster {
 		Set<Long> chain = activeChain(taskId, input.links(), taskById);
 		List<TaskRef> upstream = new ArrayList<>();
 		List<TaskRef> unresolved = new ArrayList<>();
+		HorizonTask own = taskById.get(taskId);
+		if (own != null && own.remainingEffortMinutes() == null) {
+			unresolved.add(new TaskRef(taskId, own.title()));
+		}
 		for (long id : chain) {
 			if (id == taskId) {
 				continue;

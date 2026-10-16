@@ -40,7 +40,16 @@ public final class InheritedRanking {
 				inheritedGroup = inheritedGroup.mostUrgent(own);
 				earliestDue = earliestDueDate(earliestDue, member.dueDate());
 			}
-			long neededForTaskId = selectNeededFor(chainTaskIds, candidateById, planDate, forecastMustContinueIds, inheritedGroup);
+			long neededForTaskId =
+					ownGroup(candidateById.get(candidate.taskId()), planDate, forecastMustContinueIds)
+									== inheritedGroup
+							? candidate.taskId()
+							: selectNeededFor(
+									chainTaskIds,
+									candidateById,
+									planDate,
+									forecastMustContinueIds,
+									inheritedGroup);
 			assignments.add(
 					new InheritedAssignment(
 							candidate.taskId(), inheritedGroup, earliestDue, neededForTaskId));

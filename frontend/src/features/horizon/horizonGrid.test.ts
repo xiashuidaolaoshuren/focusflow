@@ -4,13 +4,18 @@ import type { HorizonDayResponse, HorizonSegmentResponse } from '@/types/api'
 
 import {
   barPercent,
+  dashboardHref,
   deadlineBadgeLabel,
+  forecastHeaderCopy,
   formatDueDateTitle,
+  HORIZON_PACE_COPY,
   isDueDateColumn,
   longestFullWorkWindow,
+  savedConflictCopy,
   segmentAriaLabel,
   segmentCellCopy,
   timeSpanMinutes,
+  upstreamCopy,
 } from '@/features/horizon/horizonGrid'
 
 describe('longestFullWorkWindow', () => {
@@ -83,6 +88,22 @@ describe('segmentCellCopy', () => {
       '30 min credited of 60 min displayed (checkpoint)',
     ])
   })
+
+  it('states a fully excluded saved session as zero credited', () => {
+    const segment: HorizonSegmentResponse = {
+      date: '2026-06-01',
+      minutes: 60,
+      assumedCreditMinutes: 0,
+      creditExclusions: ['CHECKPOINT'],
+      unplacedReason: null,
+      unplacedMinutes: null,
+      unplacedScope: null,
+    }
+    expect(segmentCellCopy(segment)).toEqual([
+      '60 min',
+      '0 min credited of 60 min displayed (checkpoint)',
+    ])
+  })
 })
 
 describe('segmentAriaLabel', () => {
@@ -112,6 +133,56 @@ describe('due date helpers', () => {
       true,
     )
     expect(isDueDateColumn('2026-06-07', ['2026-06-01'])).toBe(false)
+  })
+})
+
+describe('horizon copy helpers', () => {
+  const savedDay: HorizonDayResponse = {
+    date: '2026-06-01',
+    kind: 'SAVED',
+    planId: 10,
+    needsRefresh: false,
+    dependenciesIgnored: [],
+  }
+  const forecastDay: HorizonDayResponse = {
+    date: '2026-06-02',
+    kind: 'FORECAST',
+    planId: null,
+    needsRefresh: null,
+    dependenciesIgnored: [],
+  }
+
+  it('states the as-planned pace assumption in one sentence', () => {
+    expect(HORIZON_PACE_COPY).toBe(
+      'Eligible unrecorded sessions on saved plans are assumed completed as planned; a dependency conflict or an assessment that already covers the session is excluded, and recording skipped or partly done work updates the rest of the horizon.',
+    )
+  })
+
+  it('explains a saved column that ignores a dependency', () => {
+    expect(savedConflictCopy(savedDay)).toBeNull()
+    expect(savedConflictCopy(forecastDay)).toBeNull()
+    expect(savedConflictCopy({ ...savedDay, dependenciesIgnored: [7] })).toBe(
+      'A saved session conflicts with a current dependency. Generating again applies the current rules, and this plan is left as saved.',
+    )
+  })
+
+  it('names the fixed forecast order and links the matching dashboard date', () => {
+    expect(forecastHeaderCopy()).toBe(
+      'Fixed order: must-continue, then due or overdue, then optional. Generating a Daily plan for this date can choose a different order inside those groups.',
+    )
+    expect(dashboardHref('2026-06-02')).toBe('/dashboard?date=2026-06-02')
+  })
+
+  it('names the upstream cause when one exists', () => {
+    expect(upstreamCopy({ upstreamBlockers: [] })).toBeNull()
+    expect(
+      upstreamCopy({
+        upstreamBlockers: [
+          { taskId: 1, title: 'Upstream' },
+          { taskId: 2, title: 'Other' },
+        ],
+      }),
+    ).toBe('Upstream cause: Upstream, Other')
   })
 })
 
