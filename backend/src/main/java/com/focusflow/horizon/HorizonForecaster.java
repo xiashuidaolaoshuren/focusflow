@@ -81,6 +81,17 @@ public final class HorizonForecaster {
 					segmentsByTask);
 
 			if (column.saved() != null) {
+				if (column.date().equals(firstWorkingDay)) {
+					rowOrderFromFirstWorkingDay =
+							List.copyOf(
+									computeForecastOrder(
+													input,
+													column.date(),
+													assumedCreditBeforeColumn,
+													forecastPlacedBeforeColumn,
+													runningRemainder)
+											.orderedTaskIds());
+				}
 				List<Long> ignored =
 						processSavedDay(
 								column.date(),
@@ -102,7 +113,7 @@ public final class HorizonForecaster {
 								forecastPlacedBeforeColumn,
 								runningRemainder);
 				if (column.date().equals(firstWorkingDay)) {
-				 rowOrderFromFirstWorkingDay = List.copyOf(order.orderedTaskIds());
+					rowOrderFromFirstWorkingDay = List.copyOf(order.orderedTaskIds());
 				}
 				applyForecastDay(
 						input,
@@ -289,24 +300,30 @@ public final class HorizonForecaster {
 			Integer assumedCredit = null;
 
 			if (task != null && isPlannable(task.status()) && !sessionConsumesNothing(session)) {
-				if (!checkpointEligible(
-						date,
-						session,
-						input.latestCheckpointByTaskId().get(session.sourceTaskId()))) {
-					exclusions.add(CreditExclusion.CHECKPOINT);
-				} else if (!blockerSatisfiedAt(
-						session.sourceTaskId(),
-						session.start(),
-						input,
-						startingRemainder,
-						assumedCreditBeforeColumn,
-						priorSessions,
-						taskById)) {
+				boolean checkpointOk =
+						checkpointEligible(
+								date,
+								session,
+								input.latestCheckpointByTaskId().get(session.sourceTaskId()));
+				boolean blockerOk =
+						blockerSatisfiedAt(
+								session.sourceTaskId(),
+								session.start(),
+								input,
+								startingRemainder,
+								assumedCreditBeforeColumn,
+								priorSessions,
+								taskById);
+				if (!blockerOk) {
 					exclusions.add(CreditExclusion.DEPENDENCY);
 					if (!dependenciesIgnored.contains(session.sourceTaskId())) {
 						dependenciesIgnored.add(session.sourceTaskId());
 					}
-				} else {
+				}
+				if (!checkpointOk) {
+					exclusions.add(CreditExclusion.CHECKPOINT);
+				}
+				if (checkpointOk && blockerOk) {
 					Integer remainder = runningRemainder.get(session.sourceTaskId());
 					if (remainder != null && remainder > 0) {
 						assumedCredit = Math.min(minutes, remainder);
@@ -881,6 +898,9 @@ public final class HorizonForecaster {
 		List<TaskRef> upstream = new ArrayList<>();
 		List<TaskRef> unresolved = new ArrayList<>();
 		for (long id : chain) {
+			if (id == taskId) {
+				continue;
+			}
 			HorizonTask member = taskById.get(id);
 			if (member == null) {
 				continue;

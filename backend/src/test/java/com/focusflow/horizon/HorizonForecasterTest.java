@@ -212,6 +212,37 @@ class HorizonForecasterTest {
 	}
 
 	@Test
+	void forecast_sessionFailingBothCheckpointAndDependencyCarriesBothExclusions() {
+		HorizonTask blocker = inProgressTask(1L, "Blocker", 60);
+		HorizonTask blocked = openTask(2L, "Blocked", 40);
+		HorizonInput input =
+				new HorizonInput(
+						MONDAY,
+						LocalTime.of(9, 0),
+						defaultPreferences(),
+						List.of(blocker, blocked),
+						List.of(),
+						List.of(new DependencyLink(1L, 2L, true)),
+						Map.of(2L, new LatestCheckpoint(5L, MONDAY)),
+						Map.of(),
+						List.of(
+								savedDay(
+										MONDAY,
+										1L,
+										List.of(
+												session(2L, "09:00", "09:30", false, false, false, 4L),
+												session(1L, "09:30", "10:30", false, false, false, null),
+												session(2L, "10:30", "11:00", false, false, false, null)))));
+
+		HorizonForecast forecast = HorizonForecaster.forecast(input);
+		HorizonForecast.HorizonTaskRow row = row(forecast, 2L);
+
+		assertThat(row.segments().getFirst().creditExclusions())
+				.containsExactly(CreditExclusion.DEPENDENCY, CreditExclusion.CHECKPOINT);
+		assertThat(forecast.days().getFirst().dependenciesIgnored()).containsExactly(2L);
+	}
+
+	@Test
 	void forecast_dependencyBlocksEarlySessionButLaterSameDaySessionCanCredit() {
 		HorizonTask blocker = inProgressTask(1L, "Blocker", 60);
 		HorizonTask blocked = openTask(2L, "Blocked", 40);
@@ -258,6 +289,43 @@ class HorizonForecasterTest {
 
 		assertThat(forecast.tasks()).extracting(HorizonForecast.HorizonTaskRow::taskId)
 				.containsSubsequence(1L, 2L);
+	}
+
+	@Test
+	void forecast_savedFirstWorkingDayStillOrdersRowsByForecastRank() {
+		HorizonTask savedOnlyOnPlan = openTask(1L, "Saved", 30);
+		HorizonTask inProgress = inProgressTask(2L, "Continue", 30);
+		HorizonTask optional = openTask(3L, "Later", 30);
+		HorizonTask savedOnly = openTask(99L, "Ghost", null);
+		HorizonInput input =
+				new HorizonInput(
+						MONDAY,
+						LocalTime.of(9, 0),
+						defaultPreferences(),
+						List.of(inProgress, optional),
+						List.of(savedOnlyOnPlan, savedOnly),
+						List.of(),
+						Map.of(),
+						Map.of(),
+						List.of(
+								savedDay(
+										MONDAY,
+										10L,
+										List.of(
+												session(
+														1L,
+														"09:00",
+														"09:30",
+														false,
+														false,
+														false,
+														null)))));
+
+		HorizonForecast forecast = HorizonForecaster.forecast(input);
+
+		assertThat(forecast.tasks())
+				.extracting(HorizonForecast.HorizonTaskRow::taskId)
+				.containsExactly(2L, 3L, 99L, 1L);
 	}
 
 	@Test
@@ -360,6 +428,27 @@ class HorizonForecasterTest {
 		HorizonForecast forecast = HorizonForecaster.forecast(input);
 
 		assertThat(row(forecast, 7L).segments()).isEmpty();
+	}
+
+	@Test
+	void forecast_atRiskAndUnknownEffortRowsNeverListThemselvesAsCauses() {
+		LocalDate due = LocalDate.of(2026, 6, 3);
+		HorizonTask big =
+				new HorizonTask(
+						1L, "Big", TaskStatus.OPEN, TaskPriority.MEDIUM, due, 3000);
+		HorizonTask noEstimate =
+				new HorizonTask(
+						2L, "NoEstimate", TaskStatus.OPEN, TaskPriority.MEDIUM, due, null);
+		HorizonInput input =
+				baseInput(MONDAY, LocalTime.of(9, 0), List.of(), List.of(big, noEstimate));
+
+		HorizonForecast forecast = HorizonForecaster.forecast(input);
+
+		assertThat(row(forecast, 1L).deadlineStatus()).isEqualTo(DeadlineStatus.AT_RISK);
+		assertThat(row(forecast, 1L).upstreamBlockers()).isEmpty();
+		assertThat(row(forecast, 2L).deadlineStatus()).isEqualTo(DeadlineStatus.CANNOT_FORECAST);
+		assertThat(row(forecast, 2L).unresolvedEffort()).isEmpty();
+		assertThat(row(forecast, 2L).upstreamBlockers()).isEmpty();
 	}
 
 	private static HorizonForecast.HorizonTaskRow row(HorizonForecast forecast, long taskId) {
