@@ -1,7 +1,9 @@
 package com.focusflow.preferences;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Set;
 
 public record EffectiveSchedulingPreferences(
 		LocalTime workDayStart,
@@ -13,4 +15,5 @@ public record EffectiveSchedulingPreferences(
 		int bufferMinutes,
 		LocalTime peakStart,
 		LocalTime peakEnd,
-		List<EffectiveFixedBreak> fixedBreaks) {}
+		List<EffectiveFixedBreak> fixedBreaks,
+		Set<DayOfWeek> workingDays) {}

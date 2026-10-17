@@ -25,6 +25,14 @@ class SchedulePostconditionValidatorTest {
 		SchedulePostconditionValidator.validate(WINDOW, stage1, ranking, result);
 	}
 
+	private static void validate(
+			FreeIntervalPlan stage1,
+			List<RankedTask> ranking,
+			List<TaskDependencyEdge> edges,
+			PlacementResult result) {
+		SchedulePostconditionValidator.validate(WINDOW, stage1, ranking, edges, result);
+	}
+
 	@Test
 	void validate_withValidEmptySchedule_doesNotThrow() {
 		assertThatCode(() -> validate(new PlacementResult(List.of(), List.of())))
@@ -553,5 +561,152 @@ class SchedulePostconditionValidatorTest {
 	private static ScheduledBlock labeledBlock(
 			BlockKind kind, String label, LocalTime start, LocalTime end) {
 		return new ScheduledBlock(kind, start, end, null, label);
+	}
+
+	@Test
+	void validate_withBlockedKnownEffort_doesNotThrow() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(),
+						List.of(new UnplacedWork(1L, UnplacedReason.BLOCKED, 45)));
+
+		assertThatCode(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 45)),
+										result))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void validate_withBlockedUnknownEffort_doesNotThrow() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(),
+						List.of(new UnplacedWork(1L, UnplacedReason.BLOCKED, null)));
+
+		assertThatCode(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, null)),
+										result))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void validate_withPartlyBlockedWorkAndBlockedRow_throwsEstimateConservation() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(workBlock(1L, LocalTime.of(9, 0), LocalTime.of(10, 0))),
+						List.of(new UnplacedWork(1L, UnplacedReason.BLOCKED, 45)));
+
+		assertThatThrownBy(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 45)),
+										result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.ESTIMATE_CONSERVATION);
+	}
+
+	@Test
+	void validate_withBlockedKnownEffortNullMinutes_throwsEstimateConservation() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(),
+						List.of(new UnplacedWork(1L, UnplacedReason.BLOCKED, null)));
+
+		assertThatThrownBy(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 45)),
+										result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.ESTIMATE_CONSERVATION);
+	}
+
+	@Test
+	void validate_withDependentStartingBeforeBlockerEnds_throwsDependencyOrder() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								workBlock(2L, LocalTime.of(9, 0), LocalTime.of(9, 30)),
+								workBlock(1L, LocalTime.of(10, 0), LocalTime.of(11, 0))),
+						List.of());
+
+		assertThatThrownBy(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 60), new RankedTask(2L, 30)),
+										List.of(new TaskDependencyEdge(1L, 2L)),
+										result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.DEPENDENCY_ORDER);
+	}
+
+	@Test
+	void validate_withDependentStartingAtBlockerEnd_doesNotThrow() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(
+								workBlock(1L, LocalTime.of(9, 0), LocalTime.of(10, 0)),
+								workBlock(2L, LocalTime.of(10, 0), LocalTime.of(11, 0))),
+						List.of());
+
+		assertThatCode(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 60), new RankedTask(2L, 60)),
+										List.of(new TaskDependencyEdge(1L, 2L)),
+										result))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void validate_withBlockedDependent_skipsDependencyOrderCheck() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(workBlock(1L, LocalTime.of(9, 0), LocalTime.of(10, 0))),
+						List.of(new UnplacedWork(2L, UnplacedReason.BLOCKED, 60)));
+
+		assertThatCode(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, 60), new RankedTask(2L, 60)),
+										List.of(new TaskDependencyEdge(1L, 2L)),
+										result))
+				.doesNotThrowAnyException();
+	}
+
+	@Test
+	void validate_withBlockedUnknownEffortWithWork_throwsTaskIdentity() {
+		PlacementResult result =
+				new PlacementResult(
+						List.of(workBlock(1L, LocalTime.of(9, 0), LocalTime.of(10, 0))),
+						List.of(new UnplacedWork(1L, UnplacedReason.BLOCKED, null)));
+
+		assertThatThrownBy(
+						() ->
+								validate(
+										emptyStage1(),
+										List.of(new RankedTask(1L, null)),
+										result))
+				.isInstanceOf(SchedulePostconditionException.class)
+				.extracting(
+						ex -> ((SchedulePostconditionException) ex).violation())
+				.isEqualTo(SchedulePostconditionViolation.TASK_IDENTITY);
 	}
 }

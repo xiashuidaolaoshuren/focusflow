@@ -4,9 +4,12 @@ import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.preferences.dto.FixedBreakRequest;
 import com.focusflow.preferences.dto.SchedulingPreferencesRequest;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 final class SchedulingPreferencesValidator {
 
@@ -38,6 +41,20 @@ final class SchedulingPreferencesValidator {
 
 		validatePeakWindow(request);
 		validateFixedBreaks(request);
+		validateWorkingDays(request);
+	}
+
+	private static void validateWorkingDays(SchedulingPreferencesRequest request) {
+		List<DayOfWeek> workingDays = request.workingDays();
+		if (workingDays == null || workingDays.isEmpty()) {
+			throw new BadRequestException("working days must not be empty");
+		}
+		Set<DayOfWeek> seen = new HashSet<>();
+		for (DayOfWeek day : workingDays) {
+			if (!seen.add(day)) {
+				throw new BadRequestException("working days must not contain duplicates");
+			}
+		}
 	}
 
 	private static void validatePeakWindow(SchedulingPreferencesRequest request) {

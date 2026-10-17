@@ -1,6 +1,7 @@
 package com.focusflow.preferences;
 
 import java.util.List;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,7 +34,8 @@ public class SchedulingPreferencesQueryService {
 				SchedulingPreferenceDefaults.BUFFER_MINUTES,
 				null,
 				null,
-				List.of());
+				List.of(),
+				WorkingDaysPreference.defaultWorkingDaySet());
 	}
 
 	private EffectiveSchedulingPreferences toEffective(SchedulingPreferences preferences) {
@@ -56,6 +58,8 @@ public class SchedulingPreferencesQueryService {
 				preferences.getBufferMinutes(),
 				preferences.getPeakStart(),
 				preferences.getPeakEnd(),
-				fixedBreaks);
+				fixedBreaks,
+				WorkingDaysPreference.fromEntity(preferences).stream()
+						.collect(Collectors.toUnmodifiableSet()));
 	}
 }

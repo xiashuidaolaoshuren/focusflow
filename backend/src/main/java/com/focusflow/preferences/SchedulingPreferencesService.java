@@ -64,6 +64,7 @@ public class SchedulingPreferencesService {
 		preferences.setPeakStart(request.peakStart());
 		preferences.setPeakEnd(request.peakEnd());
 		replaceFixedBreaks(preferences, request.fixedBreaks());
+		WorkingDaysPreference.applyToEntity(preferences, request.workingDays());
 	}
 
 	private void replaceFixedBreaks(
@@ -94,6 +95,7 @@ public class SchedulingPreferencesService {
 				null,
 				null,
 				List.of(),
+				WorkingDaysPreference.defaultWorkingDays(),
 				false);
 	}
 
@@ -117,6 +119,7 @@ public class SchedulingPreferencesService {
 												breakItem.getStartTime(),
 												breakItem.getEndTime()))
 						.toList(),
+				WorkingDaysPreference.fromEntity(preferences),
 				persisted);
 	}
 }

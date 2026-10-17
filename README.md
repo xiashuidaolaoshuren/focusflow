@@ -43,13 +43,15 @@ The Gradle wrapper is included, so a global Gradle installation is not required.
 
    `.\gradlew.bat bootRun` loads the repo-root `.env` into the Spring process automatically. You do not need `echo $env:OPENAI_*` to show values in your shell; restart `bootRun` after editing `.env`. Shell or CI environment variables still take precedence when set.
 
-4. In one terminal, run the backend. On a fresh PostgreSQL database, Flyway applies migrations automatically at startup (`V1__baseline.sql`, then `V2__scheduling_foundations.sql`, then `V3__scheduled_day.sql`). Do not set `SPRING_JPA_HIBERNATE_DDL_AUTO=update` — schema changes belong in Flyway migrations under `backend/src/main/resources/db/migration/`.
+4. In one terminal, run the backend. On a fresh PostgreSQL database, Flyway applies migrations automatically at startup through `V7__dependencies_and_horizon.sql` (see migration notes below). Do not set `SPRING_JPA_HIBERNATE_DDL_AUTO=update` — schema changes belong in Flyway migrations under `backend/src/main/resources/db/migration/`.
 
    **V2 note:** `V2__scheduling_foundations.sql` adds scheduling preferences, fixed breaks, and commitments tables. It also converts any legacy `tasks.estimated_minutes` values of zero or below to `NULL`, then enforces that estimates must be null or positive.
 
    **V3 warning (backup first):** `V3__scheduled_day.sql` is destructive for Daily plans. It deletes every row in `daily_plans` and `daily_plan_items`, drops the legacy item/warning columns, and replaces them with scheduled-day tasks and clock blocks. Tasks, users, preferences, and commitments are kept. **Back up the database before upgrading any database that contains Daily plans you care about.**
 
    **V5 note:** `V5__progress_and_revisions.sql` is non-destructive. It keeps Daily plans, tasks, preferences, and commitments. Each existing plan receives one schedule revision with its current metrics moved onto that revision. Tasks gain live remaining effort backfilled from their whole-task estimate. Nullable scheduling-snapshot columns are added but left empty for migrated plans; V5 does not invent cadence or fixed-break history from current preferences.
+
+   **V7 note:** `V7__dependencies_and_horizon.sql` is forward-only and non-destructive. It deletes no rows. It adds `task_dependencies` and `daily_plan_revision_dependencies`, a nullable `captured_checkpoint_id` on `daily_plan_tasks` (no foreign key), and seven weekday columns on `scheduling_preferences` defaulting to Monday through Friday. Existing preference rows backfill to Monday through Friday. Migrated Daily plan revisions have no dependency snapshot rows and a null captured checkpoint id until a later release maps and uses those fields.
 
    **Existing pre-Flyway database (keep your data):**
 

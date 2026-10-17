@@ -80,6 +80,8 @@ const sampleTask = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 0,
+  blockedBy: [],
+  blocks: [],
 }
 
 const dashboardSamplePlan = samplePlan

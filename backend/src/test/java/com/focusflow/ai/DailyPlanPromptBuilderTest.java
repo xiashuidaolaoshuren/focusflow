@@ -197,7 +197,9 @@ class DailyPlanPromptBuilderTest {
 		assertThat(prompt).contains("Plan date: 2026-06-01");
 		assertThat(prompt)
 				.contains(
-						"Open tasks with dueDate on or before the plan date are due-or-overdue and must be included before optional work.");
+						"Use each task's labeled block= value instead of recomputing urgency from status or due date.");
+		assertThat(prompt)
+				.contains("Place each task after every id listed in its blockedBy= list");
 	}
 
 	@Test

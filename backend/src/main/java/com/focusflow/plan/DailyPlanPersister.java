@@ -2,6 +2,9 @@ package com.focusflow.plan;
 
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.common.error.ConflictException;
+import com.focusflow.dependency.DependencyLink;
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.RankingGroup;
 import com.focusflow.common.error.NotFoundException;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.TaskEffortVersion;
@@ -18,9 +21,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
@@ -52,7 +57,8 @@ public class DailyPlanPersister {
 			Long replacePlanId,
 			List<AiPlanItem> aiItems,
 			List<Task> capturedTasks,
-			DailyPlanSchedule schedule) {
+			DailyPlanSchedule schedule,
+			PlanDependencyCapture capture) {
 		User owner = ownerSchedulingLock.lockCurrentOwner();
 		Optional<DailyPlan> latestPlan =
 				dailyPlanRepository.findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
@@ -88,7 +94,8 @@ public class DailyPlanPersister {
 										task -> task.getId() != null ? task.getId() : 0L,
 										Function.identity(),
 										(first, second) -> first));
-		DailyPlan plan = buildPlan(owner, planDate, aiItems, capturedById, taskById, schedule);
+		DailyPlan plan =
+				buildPlan(owner, planDate, aiItems, capturedById, taskById, schedule, capture);
 		dailyPlanRepository.save(plan);
 		dailyPlanRepository.flush();
 
@@ -122,7 +129,8 @@ public class DailyPlanPersister {
 			List<AiPlanItem> aiItems,
 			Map<Long, Task> capturedById,
 			Map<Long, Task> taskById,
-			DailyPlanSchedule schedule) {
+			DailyPlanSchedule schedule,
+			PlanDependencyCapture capture) {
 		Instant createdAt = Instant.now();
 		DailyPlan plan = new DailyPlan();
 		plan.setOwner(owner);
@@ -162,12 +170,15 @@ public class DailyPlanPersister {
 										Function.identity(),
 										(first, second) -> first));
 
+		Map<Long, RankingGroup> groupByTaskId = groupByTaskId(capture);
+		Set<Long> candidateIds = new HashSet<>(capturedById.keySet());
 		for (AiPlanItem aiItem : aiItems) {
 			Task captured = capturedById.get(aiItem.taskId());
 			Task reference = taskById.get(aiItem.taskId());
+			long sourceTaskId = captured.getId() != null ? captured.getId() : 0L;
 			DailyPlanTask planTask = new DailyPlanTask();
 			planTask.setRank(aiItem.position());
-			planTask.setSourceTaskId(captured.getId() != null ? captured.getId() : 0L);
+			planTask.setSourceTaskId(sourceTaskId);
 			planTask.setTaskReference(reference);
 			planTask.setTaskTitle(captured.getTitle());
 			planTask.setTaskPriority(captured.getPriority());
@@ -175,7 +186,9 @@ public class DailyPlanPersister {
 			planTask.setTaskDueDate(captured.getDueDate());
 			planTask.setTaskEstimatedMinutes(captured.getEstimatedMinutes());
 			planTask.setCapturedRemainingEffortMinutes(captured.getRemainingEffortMinutes());
-			planTask.setMustInclude(PlanMustIncludeRules.isMustInclude(captured, planDate));
+			RankingGroup group = groupByTaskId.getOrDefault(sourceTaskId, RankingGroup.OPTIONAL);
+			planTask.setMustInclude(PlanMustIncludeRules.isInheritedMustInclude(group));
+			planTask.setCapturedCheckpointId(capture.checkpointIdByTaskId().get(sourceTaskId));
 			UnplacedWork unplaced = unplacedBySourceId.get(planTask.getSourceTaskId());
 			if (unplaced != null) {
 				planTask.setUnplacedReason(unplaced.reason());
@@ -183,6 +196,7 @@ public class DailyPlanPersister {
 			}
 			revision.addTask(planTask);
 		}
+		addDependencySnapshots(revision, capture.links(), candidateIds);
 
 		plan.addRevision(revision);
 		return plan;
@@ -196,7 +210,8 @@ public class DailyPlanPersister {
 			LocalTime effectiveCutoff,
 			List<AiPlanItem> aiItems,
 			List<Task> capturedTasks,
-			DailyPlanSchedule schedule) {
+			DailyPlanSchedule schedule,
+			PlanDependencyCapture capture) {
 		User owner = ownerSchedulingLock.lockCurrentOwner();
 		Long ownerId = owner.getId();
 		DailyPlan plan =
@@ -207,6 +222,8 @@ public class DailyPlanPersister {
 		List<Task> plannableTasks = taskQueryService.findPlannableTasksByOwnerId(ownerId);
 		PlanReplanFreshness.validate(
 				expectedRevisionId, effortVersions, latestRevision, plannableTasks);
+		Set<Long> candidateIds = candidateIdsFrom(capturedTasks);
+		validateCapturedLinksUnchanged(ownerId, capture.links(), candidateIds);
 
 		List<Long> selectedTaskIds = aiItems.stream().map(AiPlanItem::taskId).toList();
 		List<Task> reloadedTasks = taskQueryService.findOwnedTasksByIds(ownerId, selectedTaskIds);
@@ -230,7 +247,13 @@ public class DailyPlanPersister {
 
 		DailyPlanRevision revision =
 				buildAppendedRevision(
-						plan, effectiveCutoff, aiItems, capturedById, taskById, schedule);
+						plan,
+						effectiveCutoff,
+						aiItems,
+						capturedById,
+						taskById,
+						schedule,
+						capture);
 		plan.addRevision(revision);
 		dailyPlanRepository.saveAndFlush(plan);
 
@@ -270,7 +293,8 @@ public class DailyPlanPersister {
 			List<AiPlanItem> aiItems,
 			Map<Long, Task> capturedById,
 			Map<Long, Task> taskById,
-			DailyPlanSchedule schedule) {
+			DailyPlanSchedule schedule,
+			PlanDependencyCapture capture) {
 		Instant createdAt = Instant.now();
 		int nextRevisionNumber = plan.getLatestRevision().getRevisionNumber() + 1;
 		DailyPlanRevision revision = new DailyPlanRevision();
@@ -291,13 +315,15 @@ public class DailyPlanPersister {
 										Function.identity(),
 										(first, second) -> first));
 
-		LocalDate planDate = plan.getPlanDate();
+		Map<Long, RankingGroup> groupByTaskId = groupByTaskId(capture);
+		Set<Long> candidateIds = new HashSet<>(capturedById.keySet());
 		for (AiPlanItem aiItem : aiItems) {
 			Task reference = taskById.get(aiItem.taskId());
 			Task captured = capturedById.getOrDefault(aiItem.taskId(), reference);
+			long sourceTaskId = reference.getId() != null ? reference.getId() : 0L;
 			DailyPlanTask planTask = new DailyPlanTask();
 			planTask.setRank(aiItem.position());
-			planTask.setSourceTaskId(reference.getId() != null ? reference.getId() : 0L);
+			planTask.setSourceTaskId(sourceTaskId);
 			planTask.setTaskReference(reference);
 			planTask.setTaskTitle(captured.getTitle());
 			planTask.setTaskPriority(captured.getPriority());
@@ -305,7 +331,9 @@ public class DailyPlanPersister {
 			planTask.setTaskDueDate(captured.getDueDate());
 			planTask.setTaskEstimatedMinutes(captured.getEstimatedMinutes());
 			planTask.setCapturedRemainingEffortMinutes(reference.getRemainingEffortMinutes());
-			planTask.setMustInclude(PlanMustIncludeRules.isMustInclude(reference, planDate));
+			RankingGroup group = groupByTaskId.getOrDefault(sourceTaskId, RankingGroup.OPTIONAL);
+			planTask.setMustInclude(PlanMustIncludeRules.isInheritedMustInclude(group));
+			planTask.setCapturedCheckpointId(capture.checkpointIdByTaskId().get(sourceTaskId));
 			UnplacedWork unplaced = unplacedBySourceId.get(planTask.getSourceTaskId());
 			if (unplaced != null) {
 				planTask.setUnplacedReason(unplaced.reason());
@@ -313,7 +341,67 @@ public class DailyPlanPersister {
 			}
 			revision.addTask(planTask);
 		}
+		addDependencySnapshots(revision, capture.links(), candidateIds);
 
 		return revision;
 	}
+
+	private static Map<Long, RankingGroup> groupByTaskId(PlanDependencyCapture capture) {
+		Map<Long, RankingGroup> groups = new HashMap<>();
+		for (InheritedAssignment assignment : capture.assignments()) {
+			groups.put(assignment.taskId(), assignment.group());
+		}
+		return groups;
+	}
+
+	private static Set<Long> candidateIdsFrom(List<Task> capturedTasks) {
+		Set<Long> candidateIds = new HashSet<>();
+		for (Task task : capturedTasks) {
+			candidateIds.add(task.getId() != null ? task.getId() : 0L);
+		}
+		return candidateIds;
+	}
+
+	private void validateCapturedLinksUnchanged(
+			Long ownerId, List<DependencyLink> capturedLinks, Set<Long> candidateIds) {
+		Set<DependencyPair> capturedPairs = activeCandidatePairs(capturedLinks, candidateIds);
+		Set<DependencyPair> livePairs =
+				activeCandidatePairs(
+						taskQueryService.findLinksByOwnerId(ownerId), candidateIds);
+		if (!capturedPairs.equals(livePairs)) {
+			throw new ConflictException("PLAN_CHANGED", "dependency links changed");
+		}
+	}
+
+	private static void addDependencySnapshots(
+			DailyPlanRevision revision, List<DependencyLink> links, Set<Long> candidateIds) {
+		for (DependencyLink link : links) {
+			if (!link.blockerPlannable()) {
+				continue;
+			}
+			if (!candidateIds.contains(link.blockerId()) || !candidateIds.contains(link.blockedId())) {
+				continue;
+			}
+			DailyPlanRevisionDependency dependency = new DailyPlanRevisionDependency();
+			dependency.setBlockedSourceTaskId(link.blockedId());
+			dependency.setBlockerSourceTaskId(link.blockerId());
+			revision.addDependency(dependency);
+		}
+	}
+
+	private static Set<DependencyPair> activeCandidatePairs(
+			List<DependencyLink> links, Set<Long> candidateIds) {
+		Set<DependencyPair> pairs = new HashSet<>();
+		for (DependencyLink link : links) {
+			if (!link.blockerPlannable()) {
+				continue;
+			}
+			if (candidateIds.contains(link.blockerId()) && candidateIds.contains(link.blockedId())) {
+				pairs.add(new DependencyPair(link.blockerId(), link.blockedId()));
+			}
+		}
+		return pairs;
+	}
+
+	private record DependencyPair(long blockerId, long blockedId) {}
 }

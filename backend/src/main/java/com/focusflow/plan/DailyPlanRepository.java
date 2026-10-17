@@ -1,6 +1,7 @@
 package com.focusflow.plan;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,7 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 				"revisions.blocks",
 				"revisions.blocks.dailyPlanTask",
 				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
 				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findByOwner_IdAndId(Long ownerId, Long planId);
@@ -111,8 +113,23 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 				"revisions.blocks",
 				"revisions.blocks.dailyPlanTask",
 				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
 				"fixedBreakSnapshots"
 			})
 	Optional<DailyPlan> findFirstByOwner_IdAndPlanDateOrderByCreatedAtDescIdDesc(
 			Long ownerId, LocalDate planDate);
+
+	@EntityGraph(
+			attributePaths = {
+				"revisions",
+				"revisions.tasks",
+				"revisions.tasks.taskReference",
+				"revisions.blocks",
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
+				"fixedBreakSnapshots"
+			})
+	List<DailyPlan> findByOwner_IdAndPlanDateBetween(
+			Long ownerId, LocalDate planDateStart, LocalDate planDateEnd);
 }

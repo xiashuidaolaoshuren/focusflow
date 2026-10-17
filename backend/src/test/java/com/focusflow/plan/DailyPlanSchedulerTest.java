@@ -2,6 +2,9 @@ package com.focusflow.plan;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.RankingGroup;
+import com.focusflow.plan.PlanDependencyCapture;
 import com.focusflow.preferences.EffectiveFixedBreak;
 import com.focusflow.preferences.EffectiveSchedulingPreferences;
 import com.focusflow.preferences.SchedulingPreferenceDefaults;
@@ -17,6 +20,8 @@ import com.focusflow.task.TaskStatus;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -67,11 +72,16 @@ class DailyPlanSchedulerTest {
 								new EffectiveFixedBreak(
 										"Lunch",
 										LocalTime.of(12, 0),
-										LocalTime.of(13, 0))));
+										LocalTime.of(13, 0))),
+						Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 		List<CommitmentWindow> commitments =
 				List.of(new CommitmentWindow("Standup", LocalTime.of(10, 0), LocalTime.of(11, 0)));
 
-		DailyPlanSchedule schedule = scheduler.compose(planDate, List.of(task), preferences, commitments);
+		PlanDependencyCapture capture =
+				captureAssignments(
+						new InheritedAssignment(7L, RankingGroup.MUST_CONTINUE, null, 7L));
+		DailyPlanSchedule schedule =
+				scheduler.compose(planDate, List.of(task), preferences, commitments, capture);
 
 		assertThat(schedule.freeMinutes()).isEqualTo(420);
 		assertThat(schedule.requiredMinutes()).isEqualTo(30L);
@@ -131,12 +141,18 @@ class DailyPlanSchedulerTest {
 		Task futureDue = createTask(9L, 25, 25, TaskStatus.OPEN);
 		futureDue.setDueDate(LocalDate.of(2026, 6, 5));
 
+		PlanDependencyCapture capture =
+				captureAssignments(
+						new InheritedAssignment(7L, RankingGroup.MUST_CONTINUE, null, 7L),
+						new InheritedAssignment(8L, RankingGroup.MUST_CONTINUE, null, 8L),
+						new InheritedAssignment(9L, RankingGroup.OPTIONAL, null, 9L));
 		DailyPlanSchedule schedule =
 				scheduler.compose(
 						planDate,
 						List.of(inProgress, unknownRemainder, futureDue),
 						defaultPreferences(),
-						List.of());
+						List.of(),
+						capture);
 
 		assertThat(schedule.requiredMinutes()).isEqualTo(40L);
 	}
@@ -158,7 +174,8 @@ class DailyPlanSchedulerTest {
 						null,
 						List.of(
 								new EffectiveFixedBreak(
-										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))));
+										"Lunch", LocalTime.of(12, 0), LocalTime.of(13, 0))),
+						Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 
 		DailyPlanSchedule schedule =
 				scheduler.compose(planDate, List.of(task), preferences, List.of());
@@ -186,7 +203,8 @@ class DailyPlanSchedulerTest {
 				SchedulingPreferenceDefaults.BUFFER_MINUTES,
 				null,
 				null,
-				List.of());
+				List.of(),
+				Set.copyOf(SchedulingPreferenceDefaults.WORKING_DAYS));
 	}
 
 	private Task createTask(long id, int estimatedMinutes, TaskStatus status) {
@@ -203,5 +221,9 @@ class DailyPlanSchedulerTest {
 		task.setStatus(status);
 		task.setPriority(TaskPriority.MEDIUM);
 		return task;
+	}
+
+	private static PlanDependencyCapture captureAssignments(InheritedAssignment... assignments) {
+		return new PlanDependencyCapture(List.of(), List.of(assignments), Map.of());
 	}
 }

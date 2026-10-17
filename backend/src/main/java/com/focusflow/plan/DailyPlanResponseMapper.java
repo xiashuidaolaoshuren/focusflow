@@ -1,5 +1,9 @@
 package com.focusflow.plan;
 
+import com.focusflow.dependency.DependencyLink;
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.InheritedRanking;
+import com.focusflow.dependency.RankingCandidate;
 import com.focusflow.effort.WorkOutcome;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanWarning;
@@ -14,13 +18,16 @@ import com.focusflow.schedule.RevisionBlock;
 import com.focusflow.schedule.RevisionView;
 import com.focusflow.schedule.UnplacedReason;
 import com.focusflow.task.TaskQueryService;
+import com.focusflow.task.TaskStatus;
 import com.focusflow.task.UnplannedWork;
 import com.focusflow.task.dto.UnplannedWorkResponse;
 import java.time.LocalTime;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -38,19 +45,21 @@ public class DailyPlanResponseMapper {
 		List<RevisionView> revisionViews = toRevisionViews(plan);
 		ComposedDay composedDay = ComposedDay.compose(plan.getWindowStart(), revisionViews);
 		Map<BlockKey, DailyPlanBlock> blockLookup = buildBlockLookup(plan);
+		Map<Long, Long> neededForByTaskId =
+				neededForByTaskId(latestRevision, plan.getPlanDate());
 		List<ScheduledBlockResponse> composedRail =
 				composedDay.rail().stream()
 						.map(
 								segment ->
 										toComposedBlockResponse(
-												plan, segment, blockLookup))
+												plan, segment, blockLookup, neededForByTaskId))
 						.toList();
 		List<ScheduledBlockResponse> offRailEarlyCompletions =
 				composedDay.offRailEarlyCompletions().stream()
 						.map(
 								revisionBlock ->
 										toOffRailBlockResponse(
-												plan, revisionBlock, blockLookup))
+												plan, revisionBlock, blockLookup, neededForByTaskId))
 						.toList();
 		List<UnplannedWorkResponse> unplannedWork = toUnplannedWorkResponses(plan);
 		int knownActualMinutes =
@@ -70,13 +79,20 @@ public class DailyPlanResponseMapper {
 						.map(
 								block ->
 										toBlockResponse(
-												plan, block, sessionCounts, sessionProgress))
+												plan,
+												block,
+												sessionCounts,
+												sessionProgress,
+												neededForByTaskId))
 						.toList();
 		List<UnplacedWorkResponse> unplacedWork =
 				latestRevision.getTasks().stream()
 						.filter(task -> task.getUnplacedReason() != null)
 						.sorted(Comparator.comparingInt(DailyPlanTask::getRank))
-						.map(this::toUnplacedWorkResponse)
+						.map(
+								task ->
+										toUnplacedWorkResponse(
+												latestRevision, task, neededForByTaskId))
 						.toList();
 
 		return new DailyPlanResponse(
@@ -119,18 +135,26 @@ public class DailyPlanResponseMapper {
 						.toList();
 		Map<DailyPlanTask, SessionProgress> sessionProgress = new HashMap<>();
 		Map<DailyPlanTask, Integer> sessionCounts = computeSessionCounts(sortedBlocks);
+		Map<Long, Long> neededForByTaskId = neededForByTaskId(revision, plan.getPlanDate());
 		List<ScheduledBlockResponse> blocks =
 				sortedBlocks.stream()
 						.map(
 								block ->
 										toBlockResponse(
-												plan, block, sessionCounts, sessionProgress))
+												plan,
+												block,
+												sessionCounts,
+												sessionProgress,
+												neededForByTaskId))
 						.toList();
 		List<UnplacedWorkResponse> unplacedWork =
 				revision.getTasks().stream()
 						.filter(task -> task.getUnplacedReason() != null)
 						.sorted(Comparator.comparingInt(DailyPlanTask::getRank))
-						.map(this::toUnplacedWorkResponse)
+						.map(
+								task ->
+										toUnplacedWorkResponse(
+												revision, task, neededForByTaskId))
 						.toList();
 		return new PlanRevisionResponse(
 				revision.getId(),
@@ -179,7 +203,10 @@ public class DailyPlanResponseMapper {
 	}
 
 	private ScheduledBlockResponse toComposedBlockResponse(
-			DailyPlan plan, RailSegment segment, Map<BlockKey, DailyPlanBlock> blockLookup) {
+			DailyPlan plan,
+			RailSegment segment,
+			Map<BlockKey, DailyPlanBlock> blockLookup,
+			Map<Long, Long> neededForByTaskId) {
 		DailyPlanBlock block =
 				blockLookup.get(
 						new BlockKey(
@@ -202,7 +229,7 @@ public class DailyPlanResponseMapper {
 					segment.end(),
 					segment.sessionIndex(),
 					segment.sessionCount(),
-					toTaskSnapshot(block.getDailyPlanTask()),
+					toTaskSnapshot(block.getDailyPlanTask(), neededForByTaskId),
 					null,
 					block.getId(),
 					revisionId,
@@ -230,7 +257,10 @@ public class DailyPlanResponseMapper {
 	}
 
 	private ScheduledBlockResponse toOffRailBlockResponse(
-			DailyPlan plan, RevisionBlock revisionBlock, Map<BlockKey, DailyPlanBlock> blockLookup) {
+			DailyPlan plan,
+			RevisionBlock revisionBlock,
+			Map<BlockKey, DailyPlanBlock> blockLookup,
+			Map<Long, Long> neededForByTaskId) {
 		DailyPlanBlock block =
 				blockLookup.get(
 						new BlockKey(
@@ -245,7 +275,8 @@ public class DailyPlanResponseMapper {
 		Map<DailyPlanTask, Integer> sessionCounts =
 				computeSessionCounts(List.of(block));
 		Map<DailyPlanTask, SessionProgress> sessionProgress = new HashMap<>();
-		return toBlockResponse(plan, block, sessionCounts, sessionProgress);
+		return toBlockResponse(
+				plan, block, sessionCounts, sessionProgress, neededForByTaskId);
 	}
 
 	private List<UnplannedWorkResponse> toUnplannedWorkResponses(DailyPlan plan) {
@@ -299,12 +330,82 @@ public class DailyPlanResponseMapper {
 										new DailyPlanWarning.UnestimatedTask(
 												task.getSourceTaskId(), task.getTaskTitle()))
 						.toList();
+		List<DailyPlanWarning.BlockedTask> blockedTasks =
+				revision.getTasks().stream()
+						.filter(
+								task ->
+										task.isMustInclude()
+												&& task.getUnplacedReason() == UnplacedReason.BLOCKED)
+						.map(
+								task ->
+										new DailyPlanWarning.BlockedTask(
+												task.getSourceTaskId(),
+												task.getTaskTitle(),
+												blockerSourceTaskIds(revision, task.getSourceTaskId())))
+						.toList();
 		return new DailyPlanWarning(
 				revision.getRequiredMinutes(),
 				revision.getFreeMinutes(),
 				revision.getScheduledWorkMinutes(),
 				outOfTimeTasks,
-				unestimatedTasks);
+				unestimatedTasks,
+				blockedTasks);
+	}
+
+	private static List<Long> blockerSourceTaskIds(DailyPlanRevision revision, long blockedId) {
+		return revision.getDependencies().stream()
+				.filter(dep -> dep.getBlockedSourceTaskId() == blockedId)
+				.map(DailyPlanRevisionDependency::getBlockerSourceTaskId)
+				.sorted()
+				.toList();
+	}
+
+	private static Map<Long, Long> neededForByTaskId(
+			DailyPlanRevision revision, LocalDate planDate) {
+		List<RankingCandidate> candidates =
+				revision.getTasks().stream()
+						.map(
+								task ->
+										new RankingCandidate(
+												task.getSourceTaskId(),
+												task.getTaskStatus(),
+												task.getTaskDueDate()))
+						.toList();
+		List<DependencyLink> links = snapshotLinks(revision);
+		Map<Long, Long> neededFor = new HashMap<>();
+		for (InheritedAssignment assignment :
+				InheritedRanking.assign(candidates, links, planDate, Set.of())) {
+			if (assignment.neededForTaskId() != assignment.taskId()) {
+				neededFor.put(assignment.taskId(), assignment.neededForTaskId());
+			}
+		}
+		return neededFor;
+	}
+
+	private static List<DependencyLink> snapshotLinks(DailyPlanRevision revision) {
+		return revision.getDependencies().stream()
+				.map(
+						dep ->
+								new DependencyLink(
+										dep.getBlockerSourceTaskId(),
+										dep.getBlockedSourceTaskId(),
+										snapshotBlockerPlannable(
+												revision, dep.getBlockerSourceTaskId())))
+				.toList();
+	}
+
+	private static boolean snapshotBlockerPlannable(
+			DailyPlanRevision revision, long blockerSourceTaskId) {
+		return revision.getTasks().stream()
+				.filter(task -> task.getSourceTaskId() == blockerSourceTaskId)
+				.findFirst()
+				.map(DailyPlanResponseMapper::isPlannableStatus)
+				.orElse(false);
+	}
+
+	private static boolean isPlannableStatus(DailyPlanTask task) {
+		TaskStatus status = task.getTaskStatus();
+		return status == TaskStatus.OPEN || status == TaskStatus.IN_PROGRESS;
 	}
 
 	private Map<DailyPlanTask, Integer> computeSessionCounts(List<DailyPlanBlock> blocks) {
@@ -321,7 +422,8 @@ public class DailyPlanResponseMapper {
 			DailyPlan plan,
 			DailyPlanBlock block,
 			Map<DailyPlanTask, Integer> sessionCounts,
-			Map<DailyPlanTask, SessionProgress> sessionProgress) {
+			Map<DailyPlanTask, SessionProgress> sessionProgress,
+			Map<Long, Long> neededForByTaskId) {
 		Long revisionId = block.getRevision() != null ? block.getRevision().getId() : null;
 		WorkOutcome outcome =
 				block.getOutcome() != null ? WorkOutcome.valueOf(block.getOutcome()) : null;
@@ -338,7 +440,7 @@ public class DailyPlanResponseMapper {
 					block.getEndTime(),
 					sessionIndex,
 					sessionCount,
-					toTaskSnapshot(task),
+					toTaskSnapshot(task, neededForByTaskId),
 					null,
 					block.getId(),
 					revisionId,
@@ -365,12 +467,23 @@ public class DailyPlanResponseMapper {
 				displayState);
 	}
 
-	private UnplacedWorkResponse toUnplacedWorkResponse(DailyPlanTask task) {
+	private UnplacedWorkResponse toUnplacedWorkResponse(
+			DailyPlanRevision revision,
+			DailyPlanTask task,
+			Map<Long, Long> neededForByTaskId) {
+		List<Long> blockerSourceTaskIds =
+				task.getUnplacedReason() == UnplacedReason.BLOCKED
+						? blockerSourceTaskIds(revision, task.getSourceTaskId())
+						: List.of();
 		return new UnplacedWorkResponse(
-				task.getUnplacedReason(), task.getUnplacedMinutes(), toTaskSnapshot(task));
+				task.getUnplacedReason(),
+				task.getUnplacedMinutes(),
+				toTaskSnapshot(task, neededForByTaskId),
+				blockerSourceTaskIds);
 	}
 
-	private TaskSnapshotResponse toTaskSnapshot(DailyPlanTask task) {
+	private TaskSnapshotResponse toTaskSnapshot(
+			DailyPlanTask task, Map<Long, Long> neededForByTaskId) {
 		if (task == null) {
 			return null;
 		}
@@ -383,7 +496,9 @@ public class DailyPlanResponseMapper {
 				task.getTaskDueDate(),
 				task.getTaskEstimatedMinutes(),
 				task.getCapturedRemainingEffortMinutes(),
-				task.isMustInclude());
+				task.isMustInclude(),
+				task.getCapturedCheckpointId(),
+				neededForByTaskId.get(task.getSourceTaskId()));
 	}
 
 	private record BlockKey(

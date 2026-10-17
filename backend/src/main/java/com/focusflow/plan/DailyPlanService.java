@@ -4,6 +4,7 @@ import com.focusflow.ai.AiDailyPlanRequest;
 import com.focusflow.ai.AiDailyPlanResponse;
 import com.focusflow.ai.AiPlanItem;
 import com.focusflow.ai.AiPlanTask;
+import com.focusflow.ai.AiProviderException;
 import com.focusflow.ai.DailyPlanAiClient;
 import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
@@ -23,16 +24,26 @@ import com.focusflow.schedule.ElapsedWork;
 import com.focusflow.schedule.ElapsedWorkRules;
 import com.focusflow.schedule.ReplanWindow;
 import com.focusflow.security.CurrentUser;
+import com.focusflow.dependency.BrokenDependencyOrderException;
+import com.focusflow.dependency.DependencyLink;
+import com.focusflow.dependency.DependencyOrderRepair;
+import com.focusflow.dependency.InheritedAssignment;
+import com.focusflow.dependency.InheritedRanking;
+import com.focusflow.dependency.RankingCandidate;
+import com.focusflow.dependency.RankingGroup;
 import com.focusflow.task.Task;
 import com.focusflow.task.TaskQueryService;
+import com.focusflow.task.TaskService;
 import com.focusflow.user.OwnerSchedulingLock;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -43,6 +54,7 @@ public class DailyPlanService {
 
 	private final DailyPlanAiClient aiClient;
 	private final TaskQueryService taskQueryService;
+	private final TaskService taskService;
 	private final CurrentUser currentUser;
 	private final DailyPlanRepository dailyPlanRepository;
 	private final DailyPlanPersister persister;
@@ -56,6 +68,7 @@ public class DailyPlanService {
 	public DailyPlanService(
 			DailyPlanAiClient aiClient,
 			TaskQueryService taskQueryService,
+			TaskService taskService,
 			CurrentUser currentUser,
 			DailyPlanRepository dailyPlanRepository,
 			DailyPlanPersister persister,
@@ -67,6 +80,7 @@ public class DailyPlanService {
 			CommitmentQueryService commitmentQueryService) {
 		this.aiClient = aiClient;
 		this.taskQueryService = taskQueryService;
+		this.taskService = taskService;
 		this.currentUser = currentUser;
 		this.dailyPlanRepository = dailyPlanRepository;
 		this.persister = persister;
@@ -118,21 +132,25 @@ public class DailyPlanService {
 				commitmentQueryService.windowsFor(ownerId, planDate);
 		EffectiveSchedulingPreferences preferences =
 				CapturedSchedulingPreferences.fromPlan(plan, effectiveCutoff);
+		PlanDependencyCapture capture =
+				new PlanDependencyCapture(List.of(), List.of(), Map.of());
 		List<AiPlanItem> aiItems;
 		List<Task> rankedTasks;
 		if (plannableTasks.isEmpty()) {
 			aiItems = List.of();
 			rankedTasks = List.of();
 		} else {
-			List<AiPlanTask> aiTasks = plannableTasks.stream().map(this::toAiPlanTask).toList();
+			capture = captureDependencies(plannableTasks, ownerId, planDate);
+			List<AiPlanTask> aiTasks = toAiPlanTasks(plannableTasks, capture);
 			AiDailyPlanResponse aiResponse =
 					aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
-			rankingValidator.validateOrder(plannableTasks, planDate, aiResponse.taskIds());
-			rankedTasks = orderTasksByAiRanking(plannableTasks, aiResponse.taskIds());
-			aiItems = toPositionedPlanItems(aiResponse.taskIds());
+			PlanPipelineResult pipeline =
+					applyAiRanking(plannableTasks, capture, aiResponse.taskIds());
+			rankedTasks = pipeline.rankedTasks();
+			aiItems = pipeline.aiItems();
 		}
 		DailyPlanSchedule schedule =
-				scheduler.compose(planDate, rankedTasks, preferences, commitments);
+				scheduler.compose(planDate, rankedTasks, preferences, commitments, capture);
 		return persister.appendRevision(
 				planId,
 				request.expectedRevisionId(),
@@ -140,7 +158,8 @@ public class DailyPlanService {
 				effectiveCutoff,
 				aiItems,
 				rankedTasks,
-				schedule);
+				schedule,
+				capture);
 	}
 
 	public DailyPlanResponse generate(GeneratePlanRequest request) {
@@ -160,14 +179,49 @@ public class DailyPlanService {
 		EffectiveSchedulingPreferences preferences =
 				schedulingPreferencesQueryService.effectiveFor(ownerId);
 		List<CommitmentWindow> commitments = commitmentQueryService.windowsFor(ownerId, planDate);
-		List<AiPlanTask> aiTasks = activeTasks.stream().map(this::toAiPlanTask).toList();
+		PlanDependencyCapture capture = captureDependencies(activeTasks, ownerId, planDate);
+		List<AiPlanTask> aiTasks = toAiPlanTasks(activeTasks, capture);
 		AiDailyPlanResponse aiResponse = aiClient.generate(new AiDailyPlanRequest(aiTasks, planDate));
-		rankingValidator.validateOrder(activeTasks, planDate, aiResponse.taskIds());
-		List<Task> rankedTasks = orderTasksByAiRanking(activeTasks, aiResponse.taskIds());
-		List<AiPlanItem> aiItems = toPositionedPlanItems(aiResponse.taskIds());
-		DailyPlanSchedule schedule = scheduler.compose(planDate, rankedTasks, preferences, commitments);
+		PlanPipelineResult pipeline =
+				applyAiRanking(activeTasks, capture, aiResponse.taskIds());
+		DailyPlanSchedule schedule =
+				scheduler.compose(
+						planDate,
+						pipeline.rankedTasks(),
+						preferences,
+						commitments,
+						capture);
 		return persister.persistPlan(
-				ownerId, planDate, request.replacePlanId(), aiItems, rankedTasks, schedule);
+				ownerId,
+				planDate,
+				request.replacePlanId(),
+				pipeline.aiItems(),
+				pipeline.rankedTasks(),
+				schedule,
+				capture);
+	}
+
+	private record PlanPipelineResult(List<Task> rankedTasks, List<AiPlanItem> aiItems) {}
+
+	private PlanPipelineResult applyAiRanking(
+			List<Task> plannableTasks,
+			PlanDependencyCapture capture,
+			List<Long> modelOrder) {
+		rankingValidator.validateOrder(capture.assignments(), modelOrder);
+		Map<Long, RankingGroup> groupsByTaskId = new HashMap<>();
+		for (InheritedAssignment assignment : capture.assignments()) {
+			groupsByTaskId.put(assignment.taskId(), assignment.group());
+		}
+		List<Long> repairedIds;
+		try {
+			repairedIds =
+					DependencyOrderRepair.repair(modelOrder, capture.links(), groupsByTaskId);
+		} catch (BrokenDependencyOrderException ex) {
+			throw new AiProviderException(ex.getMessage());
+		}
+		return new PlanPipelineResult(
+				orderTasksByAiRanking(plannableTasks, repairedIds),
+				toPositionedPlanItems(repairedIds));
 	}
 
 	private List<Task> orderTasksByAiRanking(List<Task> activeTasks, List<Long> orderedTaskIds) {
@@ -253,15 +307,63 @@ public class DailyPlanService {
 				Boolean.TRUE.equals(projection.getNeedsRefresh()));
 	}
 
-	private AiPlanTask toAiPlanTask(Task task) {
-		return new AiPlanTask(
-				task.getId() != null ? task.getId() : 0L,
-				task.getTitle(),
-				task.getDescription(),
-				task.getPriority(),
-				task.getDueDate(),
-				task.getEstimatedMinutes(),
-				task.getRemainingEffortMinutes(),
-				task.getStatus());
+	private PlanDependencyCapture captureDependencies(
+			List<Task> plannableTasks, Long ownerId, LocalDate planDate) {
+		List<DependencyLink> links = taskQueryService.findLinksByOwnerId(ownerId);
+		List<RankingCandidate> candidates =
+				plannableTasks.stream()
+						.map(
+								task ->
+										new RankingCandidate(
+												task.getId() != null ? task.getId() : 0L,
+												task.getStatus(),
+												task.getDueDate()))
+						.toList();
+		List<InheritedAssignment> assignments =
+				InheritedRanking.assign(candidates, links, planDate, Set.of());
+		Map<Long, Long> checkpointIdByTaskId = new HashMap<>();
+		for (Task task : plannableTasks) {
+			long taskId = task.getId() != null ? task.getId() : 0L;
+			taskService
+					.latestCheckpointId(task)
+					.ifPresent(id -> checkpointIdByTaskId.put(taskId, id));
+		}
+		return new PlanDependencyCapture(links, assignments, checkpointIdByTaskId);
+	}
+
+	private List<AiPlanTask> toAiPlanTasks(List<Task> tasks, PlanDependencyCapture capture) {
+		Map<Long, InheritedAssignment> assignmentByTaskId = new HashMap<>();
+		for (InheritedAssignment assignment : capture.assignments()) {
+			assignmentByTaskId.put(assignment.taskId(), assignment);
+		}
+		return tasks.stream()
+				.map(
+						task -> {
+							long taskId = task.getId() != null ? task.getId() : 0L;
+							InheritedAssignment assignment = assignmentByTaskId.get(taskId);
+							RankingGroup block =
+									assignment != null ? assignment.group() : RankingGroup.OPTIONAL;
+							List<Long> blockedBy = activeBlockerIds(taskId, capture.links());
+							return new AiPlanTask(
+									taskId,
+									task.getTitle(),
+									task.getDescription(),
+									task.getPriority(),
+									task.getDueDate(),
+									task.getEstimatedMinutes(),
+									task.getRemainingEffortMinutes(),
+									task.getStatus(),
+									block,
+									blockedBy);
+						})
+				.toList();
+	}
+
+	private static List<Long> activeBlockerIds(long taskId, List<DependencyLink> links) {
+		return links.stream()
+				.filter(link -> link.blockedId() == taskId && link.blockerPlannable())
+				.map(DependencyLink::blockerId)
+				.sorted()
+				.toList();
 	}
 }

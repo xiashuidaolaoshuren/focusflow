@@ -16,7 +16,10 @@ import {
 import {
   createTaskMutationKey,
   formUpdateTaskMutationKey,
+  useAddBlocker,
   useCreateTask,
+  useRemoveBlocker,
+  useTasks,
   useUpdateTask,
 } from '@/features/tasks/hooks'
 import { ESTIMATE_LOCK_COPY, canReturnToOpen, hasVisibleProgress } from '@/features/tasks/taskEffort'
@@ -76,9 +79,19 @@ export function TaskFormSubmitButton({ isEditMode }: TaskFormSubmitButtonProps) 
   )
 }
 
+const DEPENDENCY_ERROR_CODES = new Set([
+  'SELF_DEPENDENCY',
+  'DEPENDENCY_EXISTS',
+  'DEPENDENCY_CYCLE',
+])
+
 export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
   const isEditMode = task != null
   const [conflictMessage, setConflictMessage] = useState<string | null>(null)
+  const [selectedBlockerId, setSelectedBlockerId] = useState<string>('')
+  const { tasks } = useTasks()
+  const addBlockerMutation = useAddBlocker()
+  const removeBlockerMutation = useRemoveBlocker()
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? 'MEDIUM')
@@ -101,6 +114,48 @@ export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
     isError &&
     error instanceof Error &&
     !(error instanceof ApiError && error.code === 'PROGRESS_CONFLICT')
+
+  const blockerMutationError =
+    addBlockerMutation.error ?? removeBlockerMutation.error
+  const blockerErrorCode =
+    blockerMutationError instanceof ApiError
+      ? blockerMutationError.code
+      : null
+  const showBlockerError =
+    blockerErrorCode != null && DEPENDENCY_ERROR_CODES.has(blockerErrorCode)
+
+  const pickerTasks =
+    isEditMode && task != null
+      ? tasks.filter((candidate) => candidate.id !== task.id)
+      : []
+
+  const blockedBy =
+    (isEditMode && task != null
+      ? tasks.find((candidate) => candidate.id === task.id)?.blockedBy
+      : undefined) ??
+    task?.blockedBy ??
+    []
+
+  function handleAddBlocker() {
+    if (task == null || selectedBlockerId === '') {
+      return
+    }
+    addBlockerMutation.mutate(
+      { id: task.id, blockerTaskId: Number.parseInt(selectedBlockerId, 10) },
+      {
+        onSuccess: () => {
+          setSelectedBlockerId('')
+        },
+      },
+    )
+  }
+
+  function handleRemoveBlocker(blockerId: number) {
+    if (task == null) {
+      return
+    }
+    removeBlockerMutation.mutate({ id: task.id, blockerId })
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -286,6 +341,70 @@ export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
           <p className="text-sm text-muted-foreground">{ESTIMATE_LOCK_COPY}</p>
         ) : null}
       </div>
+      {isEditMode && task != null ? (
+        <div className="flex flex-col gap-2">
+          <Label>Blocked by</Label>
+          {blockedBy.length > 0 ? (
+            <ul className="flex flex-col gap-1 text-sm">
+              {blockedBy.map((link) => (
+                <li
+                  key={link.taskId}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span>
+                    {link.title} ({link.status.replace('_', ' ').toLowerCase()})
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remove blocker ${link.title}`}
+                    disabled={removeBlockerMutation.isPending}
+                    onClick={() => handleRemoveBlocker(link.taskId)}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No blockers yet.</p>
+          )}
+          <Select
+            value={selectedBlockerId}
+            onValueChange={(value) => setSelectedBlockerId(value ?? '')}
+          >
+            <SelectTrigger aria-label="Add blocker" className="w-full">
+              <SelectValue placeholder="Choose a task to block this one" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {pickerTasks.map((candidate) => (
+                  <SelectItem key={candidate.id} value={String(candidate.id)}>
+                    {candidate.title}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={
+              selectedBlockerId === '' || addBlockerMutation.isPending
+            }
+            onClick={handleAddBlocker}
+          >
+            Add blocker
+          </Button>
+          {showBlockerError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {blockerErrorCode}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       </div>
     </form>
   )

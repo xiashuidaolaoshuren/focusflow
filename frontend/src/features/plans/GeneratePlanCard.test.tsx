@@ -55,6 +55,8 @@ const liveTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 2,
+  blockedBy: [],
+  blocks: [],
 }
 const mockedGetPlanByDate = vi.mocked(getPlanByDate)
 const mockedToastSuccess = vi.mocked(toast.success)

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import type { UserResponse } from '@/types/api'
+import type { SchedulingPreferencesResponse, UserResponse } from '@/types/api'
 
 vi.mock('@/features/auth/api', () => ({
   getCurrentUser: vi.fn(),
@@ -27,15 +27,23 @@ vi.mock('@/features/preferences/api', () => ({
   updateSchedulingPreferences: vi.fn(),
 }))
 
+vi.mock('@/features/horizon/hooks', () => ({
+  useHorizon: vi.fn(),
+  horizonQueryPrefix: ['horizon'],
+  horizonQueryKey: vi.fn(),
+}))
+
 import { getCurrentUser } from '@/features/auth/api'
+import { useHorizon } from '@/features/horizon/hooks'
 import { getSchedulingPreferences } from '@/features/preferences/api'
 import { listTasks } from '@/features/tasks/api'
 
 const mockedGetCurrentUser = vi.mocked(getCurrentUser)
 const mockedGetSchedulingPreferences = vi.mocked(getSchedulingPreferences)
 const mockedListTasks = vi.mocked(listTasks)
+const mockedUseHorizon = vi.mocked(useHorizon)
 
-const defaultPreferences = {
+const defaultPreferences: SchedulingPreferencesResponse = {
   workDayStart: '09:00:00',
   workDayEnd: '18:00:00',
   cadenceEnabled: true,
@@ -46,6 +54,13 @@ const defaultPreferences = {
   peakStart: null,
   peakEnd: null,
   fixedBreaks: [],
+  workingDays: [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ],
   persisted: false,
 }
 
@@ -91,6 +106,24 @@ describe('App auth routing', () => {
   beforeEach(() => {
     mockedListTasks.mockResolvedValue([])
     mockedGetSchedulingPreferences.mockResolvedValue(defaultPreferences)
+    mockedUseHorizon.mockReturnValue({
+      horizon: {
+        currentDate: '2026-06-01',
+        currentTime: '09:00:00',
+        assumptions: {
+          pace: 'AS_PLANNED',
+          workingDays: defaultPreferences.workingDays,
+          horizonWorkingDays: 7,
+        },
+        days: [],
+        tasks: [],
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+      currentDate: '2026-06-01',
+      currentTime: '09:00',
+    } as unknown as ReturnType<typeof useHorizon>)
   })
 
   it('redirects unauthenticated users away from protected routes', async () => {
@@ -194,6 +227,33 @@ describe('App auth routing', () => {
       expect(
         screen.getByRole('heading', { name: /scheduling preferences/i }),
       ).toBeInTheDocument()
+    })
+  })
+
+  it('redirects unauthenticated users away from /horizon', async () => {
+    mockedGetCurrentUser.mockResolvedValue(null)
+
+    renderApp('/horizon')
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /sign in/i }),
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('heading', { name: /^horizon$/i })).not.toBeInTheDocument()
+  })
+
+  it('allows authenticated users to access /horizon', async () => {
+    mockedGetCurrentUser.mockResolvedValue({
+      id: 1,
+      email: 'user@example.com',
+      username: 'user',
+    })
+
+    renderApp('/horizon')
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /^horizon$/i })).toBeInTheDocument()
     })
   })
 })

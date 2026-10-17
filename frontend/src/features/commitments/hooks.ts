@@ -6,6 +6,7 @@ import {
   listCommitments,
   updateCommitment,
 } from '@/features/commitments/api'
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import type { CommitmentRequest } from '@/types/api'
 
@@ -41,6 +42,7 @@ export function useCreateCommitment(planDate: string) {
         queryClient.invalidateQueries({
           queryKey: commitmentsQueryKey(commitment.commitmentDate),
         }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
       ])
     },
   })
@@ -66,6 +68,7 @@ export function useUpdateCommitment(planDate: string) {
         queryClient.invalidateQueries({
           queryKey: commitmentsQueryKey(commitment.commitmentDate),
         }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
       ])
     },
   })
@@ -78,9 +81,12 @@ export function useDeleteCommitment(planDate: string) {
     mutationFn: (id: number) => deleteCommitment(id),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({
-        queryKey: commitmentsQueryKey(planDate),
-      })
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: commitmentsQueryKey(planDate),
+        }),
+        queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
+      ])
     },
   })
 }

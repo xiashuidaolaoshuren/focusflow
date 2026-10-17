@@ -13,4 +13,31 @@ public record TaskSnapshotResponse(
 		LocalDate dueDate,
 		Integer estimatedMinutes,
 		Integer capturedRemainingEffortMinutes,
-		boolean mustInclude) {}
+		boolean mustInclude,
+		Long capturedCheckpointId,
+		Long neededForTaskId) {
+
+	public TaskSnapshotResponse(
+			long sourceTaskId,
+			Long taskReferenceId,
+			String title,
+			TaskPriority priority,
+			TaskStatus status,
+			LocalDate dueDate,
+			Integer estimatedMinutes,
+			Integer capturedRemainingEffortMinutes,
+			boolean mustInclude) {
+		this(
+				sourceTaskId,
+				taskReferenceId,
+				title,
+				priority,
+				status,
+				dueDate,
+				estimatedMinutes,
+				capturedRemainingEffortMinutes,
+				mustInclude,
+				null,
+				null);
+	}
+}

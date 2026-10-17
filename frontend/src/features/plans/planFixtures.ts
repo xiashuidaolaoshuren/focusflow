@@ -16,6 +16,8 @@ export const sampleTaskSnapshot: TaskSnapshotResponse = {
   estimatedMinutes: 45,
   capturedRemainingEffortMinutes: 45,
   mustInclude: true,
+  capturedCheckpointId: null,
+  neededForTaskId: null,
 }
 
 export const sampleWorkBlock: WorkBlockResponse = {
@@ -136,6 +138,7 @@ export const warningPlan: DailyPlanResponse = {
       },
     ],
     unestimatedTasks: [{ sourceTaskId: 11, title: 'Tidy up' }],
+    blockedTasks: [],
   },
   blocks: [sampleWorkBlock],
   unplacedWork: [],
@@ -155,6 +158,7 @@ export const unplacedPlan: DailyPlanResponse = {
     {
       reason: 'NO_ESTIMATE',
       unplacedMinutes: null,
+      blockerSourceTaskIds: [],
       taskSnapshot: {
         ...sampleTaskSnapshot,
         sourceTaskId: 12,
@@ -166,6 +170,7 @@ export const unplacedPlan: DailyPlanResponse = {
     {
       reason: 'OUT_OF_TIME',
       unplacedMinutes: 30,
+      blockerSourceTaskIds: [],
       taskSnapshot: {
         ...sampleTaskSnapshot,
         sourceTaskId: 13,

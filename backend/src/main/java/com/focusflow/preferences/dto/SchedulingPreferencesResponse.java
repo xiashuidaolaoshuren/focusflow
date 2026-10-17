@@ -1,5 +1,6 @@
 package com.focusflow.preferences.dto;
 
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -14,4 +15,5 @@ public record SchedulingPreferencesResponse(
 		LocalTime peakStart,
 		LocalTime peakEnd,
 		List<FixedBreakResponse> fixedBreaks,
+		List<DayOfWeek> workingDays,
 		boolean persisted) {}

@@ -21,6 +21,13 @@ const defaultPreferences: SchedulingPreferencesResponse = {
   peakStart: null,
   peakEnd: null,
   fixedBreaks: [],
+  workingDays: [
+    'MONDAY',
+    'TUESDAY',
+    'WEDNESDAY',
+    'THURSDAY',
+    'FRIDAY',
+  ],
   persisted: false,
 }
 
@@ -66,6 +73,13 @@ describe('updateSchedulingPreferences', () => {
       peakEnd: '12:00:00',
       fixedBreaks: [
         { label: 'Lunch', startTime: '12:00:00', endTime: '13:00:00' },
+      ],
+      workingDays: [
+        'MONDAY',
+        'TUESDAY',
+        'WEDNESDAY',
+        'THURSDAY',
+        'FRIDAY',
       ],
     }
     const saved: SchedulingPreferencesResponse = {

@@ -120,6 +120,9 @@ Clients should branch on `code`, not `message` copy.
 | `REPLAN_LEGACY_SNAPSHOT` | **409** | The plan has no complete scheduling snapshot (migrated from before revisions) |
 | `REPLAN_NOT_TODAY` | **409** | The plan date is not the client-supplied current date |
 | `REPLAN_WINDOW_ENDED` | **409** | The cutoff is at or after the original window end |
+| `SELF_DEPENDENCY` | **400** | `blockerTaskId` is the same task |
+| `DEPENDENCY_EXISTS` | **409** | That blocker/blocked pair already exists |
+| `DEPENDENCY_CYCLE` | **409** | The new link would close a cycle, including through a Done or Cancelled task |
 
 Invalid AI ranking returns **502** with `code` null. The server records bounded rejection reasons (`UNKNOWN_TASK`, `DUPLICATE_TASK`, `BLOCK_ORDER`, `MISSING_BLOCK_1`, `MISSING_BLOCK_2`, `MISSING_OPTIONAL`) in Micrometer only.
 
@@ -142,9 +145,14 @@ Invalid AI ranking returns **502** with `code` null. The server records bounded 
 | `TaskPriority` | `LOW`, `MEDIUM`, `HIGH` |
 | `TaskStatus` | `OPEN`, `IN_PROGRESS`, `DONE`, `CANCELLED` |
 | `BlockKind` | `WORK`, `CADENCE_BREAK`, `FIXED_BREAK`, `COMMITMENT`, `BUFFER` |
-| `UnplacedReason` | `NO_ESTIMATE`, `OUT_OF_TIME` |
+| `UnplacedReason` | `NO_ESTIMATE`, `OUT_OF_TIME`, `BLOCKED` |
 | `WorkOutcome` | `DONE`, `PARTLY_DONE`, `SKIPPED` |
 | `BlockDisplayState` | `ACTIONABLE`, `HISTORICAL`, `SUPERSEDED`, `NO_LONGER_NEEDED` |
+| `DayOfWeek` | `MONDAY`, `TUESDAY`, `WEDNESDAY`, `THURSDAY`, `FRIDAY`, `SATURDAY`, `SUNDAY` |
+| `HorizonDayKind` | `SAVED`, `FORECAST` |
+| `DeadlineStatus` | `OVERDUE`, `CANNOT_FORECAST`, `ON_TRACK`, `AT_RISK`, `BEYOND_HORIZON` |
+| `CreditExclusion` | `DEPENDENCY`, `CHECKPOINT` |
+| `UnplacedScope` | `SAVED_SHORTFALL`, `FORECAST` |
 
 ### `UserResponse`
 
@@ -167,6 +175,18 @@ Invalid AI ranking returns **502** with `code` null. The server records bounded 
 | `estimatedMinutes` | integer \| null | yes | Null or positive. Whole-task estimate |
 | `remainingEffortMinutes` | integer \| null | yes | Current estimate of time still needed; null means unknown |
 | `effortVersion` | integer | yes | Monotonic; send back as `effortVersion` on progress writes |
+| `blockedBy` | `TaskLinkResponse[]` | yes | Tasks that block this one, ordered by `taskId`. Empty when none |
+| `blocks` | `TaskLinkResponse[]` | yes | Tasks this one blocks, ordered by `taskId`. Empty when none |
+
+### `TaskLinkResponse`
+
+One end of a finish-to-start link.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `taskId` | integer | yes | The other task |
+| `title` | string | yes | |
+| `status` | `TaskStatus` | yes | |
 
 ### `TaskSnapshotResponse`
 
@@ -182,7 +202,9 @@ Frozen task fields captured at plan generation. Work blocks reference this snaps
 | `dueDate` | string (date) \| null | yes | |
 | `estimatedMinutes` | integer \| null | yes | |
 | `capturedRemainingEffortMinutes` | integer \| null | yes | Remaining effort this revision scheduled; null when unknown |
-| `mustInclude` | boolean | yes | `IN_PROGRESS`, or `OPEN` with due date on/before plan date |
+| `mustInclude` | boolean | yes | Captured inherited group is not optional: in progress, due on or before the plan date, or a blocker that inherits that urgency |
+| `capturedCheckpointId` | integer \| null | yes | Latest remaining-effort checkpoint id captured with this revision; null when none |
+| `neededForTaskId` | integer \| null | yes | Task whose urgency this snapshot inherited; null when the task's own group applies |
 
 ### `ScheduledBlockResponse`
 
@@ -211,9 +233,10 @@ Ranked task that could not be fully scheduled.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `reason` | `UnplacedReason` | yes | |
-| `unplacedMinutes` | integer \| null | yes | Minutes that did not fit when `OUT_OF_TIME` |
+| `reason` | `UnplacedReason` | yes | `BLOCKED` means an active blocker was not fully placed |
+| `unplacedMinutes` | integer \| null | yes | Minutes that did not fit when `OUT_OF_TIME` or `BLOCKED` |
 | `taskSnapshot` | `TaskSnapshotResponse` | yes | |
+| `blockerSourceTaskIds` | integer[] | yes | Direct blockers from this revision's dependency snapshot when `reason` is `BLOCKED`; otherwise empty |
 
 ### `DailyPlanWarning`
 
@@ -226,10 +249,13 @@ Derived on read when must-include snapshots have unplaced work. Not persisted as
 | `scheduledWorkMinutes` | integer | yes |
 | `outOfTimeTasks` | array | yes |
 | `unestimatedTasks` | array | yes |
+| `blockedTasks` | array | yes |
 
 `outOfTimeTasks[]`: `{ "sourceTaskId": number, "title": string, "unplacedMinutes": number }`
 
 `unestimatedTasks[]`: `{ "sourceTaskId": number, "title": string }`
+
+`blockedTasks[]`: `{ "sourceTaskId": number, "title": string, "blockerSourceTaskIds": number[] }` — must-include snapshots unplaced as `BLOCKED`, with blocker ids from that revision's dependency snapshot.
 
 ### `DailyPlanResponse`
 
@@ -396,6 +422,7 @@ Effective scheduling settings for the current user.
 | `peakStart` | string (time) \| null | yes | Optional visual band |
 | `peakEnd` | string (time) \| null | yes | |
 | `fixedBreaks` | array | yes | `{ label, startTime, endTime }` |
+| `workingDays` | `DayOfWeek[]` | yes | Weekdays the horizon treats as working days. In-code default is Monday through Friday |
 | `persisted` | boolean | yes | `false` when serving in-code defaults only |
 
 ### `SchedulingPreferencesRequest`
@@ -640,6 +667,42 @@ Delete task. Snapshots, recorded outcomes, unplanned work, and checkpoints survi
 
 ---
 
+### `POST /api/tasks/{id}/blockers`
+
+Add a finish-to-start link: `{id}` is the blocked task. The link stays when either task is Done or Cancelled. Only a link whose blocker and blocked task are both plannable constrains a new schedule. Adding or removing a link does not change `effortVersion` and does not set `needsRefresh` on a saved plan.
+
+**Request body — `AddBlockerRequest`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `blockerTaskId` | integer | yes | Task that must finish before `{id}` can be placed |
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `TaskResponse` for the blocked task, including the new link |
+| **400** | `code`: `SELF_DEPENDENCY` |
+| **401** | Not authenticated |
+| **404** | Unknown or other-owner task. `message`: `task not found` |
+| **409** | `code`: `DEPENDENCY_EXISTS` or `DEPENDENCY_CYCLE` |
+
+---
+
+### `DELETE /api/tasks/{id}/blockers/{blockerId}`
+
+Remove that link. Missing links return **404**.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **204** | Empty |
+| **401** | Not authenticated |
+| **404** | `message`: `dependency not found` |
+
+---
+
 ## Scheduling preferences
 
 All routes require session. `PUT` requires CSRF.
@@ -668,7 +731,7 @@ Replace the saved preferences aggregate (including the full fixed-break list).
 | Status | Body |
 |--------|------|
 | **200** | `SchedulingPreferencesResponse` with `persisted: true` |
-| **400** | Validation failed (work window, peak window, fixed breaks, cadence fields, minute alignment) |
+| **400** | Validation failed (work window, peak window, fixed breaks, cadence fields, minute alignment, or `workingDays` empty, duplicated, or unknown) |
 | **401** | Not authenticated |
 
 ---
@@ -1010,6 +1073,48 @@ Owner-scoped hard delete. Removes the plan, its revisions, task snapshots, and s
 
 ---
 
+## Horizon
+
+### `GET /api/horizon?currentDate=&currentTime=`
+
+Read-only forecast for the current owner. The server does not take the owner scheduling lock, call the provider, or write anything. Both query parameters are required even though the generated OpenAPI marks them optional: the service rejects a missing value. `currentTime` must be minute-aligned. The horizon page sends the client's current date and minute-aligned time. There is no start-date picker, and another date is not a historical reconstruction.
+
+**Query parameters**
+
+| Name | Type | Required | Notes |
+|------|------|----------|-------|
+| `currentDate` | string (date) | yes | `YYYY-MM-DD` |
+| `currentTime` | string (time) | yes | Minute-aligned; seconds must be zero |
+
+**Response body — `HorizonResponse`**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `currentDate` | string (date) | yes | Echo of the query date |
+| `currentTime` | string (time) | yes | Echo of the query time |
+| `assumptions` | object | yes | `{ "pace": "AS_PLANNED", "workingDays": DayOfWeek[], "horizonWorkingDays": 7 }` |
+| `days` | `DayResponse[]` | yes | Next seven `workingDays`, plus a non-working day in that span that already has a saved plan |
+| `tasks` | `TaskRowResponse[]` | yes | Every plannable task, plus a task that appears only on a saved column |
+
+`DayResponse`: `date`, `kind` (`SAVED` or `FORECAST`), `planId` (null on a forecast day), `needsRefresh` (null on a forecast day; the saved plan's freshness otherwise), `dependenciesIgnored` (source task ids with a displayed session that starts before a live active blocker is satisfied). Listing an id there does not set `needsRefresh` and does not change the saved plan.
+
+`TaskRowResponse`: `taskId`, `title`, `status`, `dueDate`, `remainingEffortMinutes`, `deadlineStatus`, `projectedFinishDate` (first day credited work reaches zero; null when unknown), `waitingOn`, `upstreamBlockers`, `unresolvedEffort`, `segments`. The three dependency lists are `{ taskId, title }`. `waitingOn` names direct active blockers still unfinished at the due date, or at the horizon end when the due date is later. `unresolvedEffort` names unknown effort in the active chain. Deadline precedence is `OVERDUE`, `CANNOT_FORECAST`, `ON_TRACK`, `AT_RISK`, then `BEYOND_HORIZON`.
+
+`segments[]` is one cell per date: `minutes` (displayed), `assumedCreditMinutes` (null when the day is not a saved-credit decision, `0` when the session was excluded entirely), `creditExclusions` (`DEPENDENCY` and/or `CHECKPOINT` when assumed credit is below displayed minutes), `unplacedReason`, `unplacedMinutes`, and `unplacedScope` (`SAVED_SHORTFALL` or `FORECAST`). Eligible unrecorded sessions on saved plans are assumed completed as planned. A session that conflicts with a current dependency, or that falls on or before a checkpoint its revision did not capture, is excluded.
+
+The read is not subject to `PLAN_CANDIDATE_LIMIT`. A forecast repair that would move a later ranking group ahead of an earlier one returns **500** with the invariant message and no `code`, and no partial forecast.
+
+**Responses**
+
+| Status | Body |
+|--------|------|
+| **200** | `HorizonResponse` |
+| **400** | Missing `currentDate` or `currentTime`, or a time that is not minute-aligned |
+| **401** | Not authenticated |
+| **500** | Broken dependency order; message only, `code` omitted |
+
+---
+
 ## Unplanned work
 
 All routes require session. Mutations require CSRF.
@@ -1087,6 +1192,8 @@ sequenceDiagram
   Api-->>Client: 200 UserResponse plus JSESSIONID
   Client->>Api: GET /api/scheduling-preferences
   Api-->>Client: 200 effective preferences
+  Client->>Api: GET /api/horizon?currentDate=2026-06-01&currentTime=09:00:00
+  Api-->>Client: 200 HorizonResponse
   Client->>Api: GET /api/daily-plans/by-date?planDate=2026-06-01
   Api-->>Client: 200 DailyPlanResponse or 204 empty
   Client->>Api: POST /api/daily-plans/generate with planDate
@@ -1114,6 +1221,6 @@ For curl/Postman:
 1. `GET /api/auth/me` through the Vite proxy (401 seeds `XSRF-TOKEN`).
 2. Read `XSRF-TOKEN` from the cookie jar.
 3. Send `POST`/`PUT`/`DELETE` with `X-XSRF-TOKEN: <token>` and the same cookie jar.
-4. Load a day with `GET /api/daily-plans/by-date?planDate=YYYY-MM-DD` (treat **204** as “no plan yet”).
+4. Load a day with `GET /api/daily-plans/by-date?planDate=YYYY-MM-DD` (treat **204** as “no plan yet”). Load the forecast with `GET /api/horizon?currentDate=YYYY-MM-DD&currentTime=HH:mm:ss`.
 5. Record an outcome with `PUT /api/daily-plans/{planId}/blocks/{blockId}/progress`, echoing the block's `progressVersion` as `expectedProgressVersion`; on **409** `PROGRESS_CONFLICT` refetch the plan and the task before retrying.
 6. Re-plan with `POST /api/daily-plans/{id}/replan`, echoing the latest `revisions[].id` as `expectedRevisionId` and one `effortVersions` entry per current plannable task.

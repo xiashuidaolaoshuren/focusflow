@@ -77,9 +77,8 @@ public class TaskService {
 
 	public List<TaskResponse> listForCurrentUser() {
 		Long ownerId = currentUser.getCurrentUser().id();
-		return taskRepository.findByOwner_IdOrderByDueDateAsc(ownerId).stream()
-				.map(taskResponseMapper::toResponse)
-				.toList();
+		return taskResponseMapper.toResponses(
+				taskRepository.findByOwner_IdOrderByDueDateAsc(ownerId));
 	}
 
 	public TaskResponse getForCurrentUser(Long taskId) {
@@ -104,6 +103,12 @@ public class TaskService {
 						checkpoint ->
 								new CheckpointOrder(
 										checkpoint.getWorkDate(), checkpoint.getRecordedAt()));
+	}
+
+	public Optional<Long> latestCheckpointId(Task task) {
+		return remainingEffortCheckpointRepository
+				.findFirstByTaskReference_IdOrderByWorkDateDescRecordedAtDesc(task)
+				.map(RemainingEffortCheckpoint::getId);
 	}
 
 	@Transactional

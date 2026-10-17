@@ -1,5 +1,6 @@
 package com.focusflow.ai;
 
+import com.focusflow.dependency.RankingGroup;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,9 +19,11 @@ public class DailyPlanPromptBuilder {
 		prompt.append(
 				"- When priority is equal, prefer the sooner due date. Use title and description only to break ties when both priority and due date are equal.\n");
 		prompt.append(
-				"- Return every listed task id exactly once, in block order: must-continue (in-progress), then due-or-overdue open tasks, then optional work.\n");
+				"- Use each task's labeled block= value instead of recomputing urgency from status or due date.\n");
 		prompt.append(
-				"- Open tasks with dueDate on or before the plan date are due-or-overdue and must be included before optional work.\n");
+				"- Return every listed task id exactly once, in block order: must-continue, then due-or-overdue, then optional.\n");
+		prompt.append(
+				"- Place each task after every id listed in its blockedBy= list (when present).\n");
 		prompt.append(
 				"- When priority and due date are equal, prefer tasks that have estimates.\n");
 		prompt.append("Return an ordered daily plan using only the listed task ids.");
@@ -48,8 +51,22 @@ public class DailyPlanPromptBuilder {
 			line.append(", remainingEffortMinutes=").append(task.remainingEffortMinutes());
 		}
 		line.append(", status=").append(task.status());
+		if (task.block() != null) {
+			line.append(", block=").append(blockLabel(task.block()));
+		}
+		if (task.blockedBy() != null && !task.blockedBy().isEmpty()) {
+			line.append(", blockedBy=").append(String.join(",", task.blockedBy().stream().map(String::valueOf).toList()));
+		}
 		line.append(')');
 		return line.toString();
+	}
+
+	private static String blockLabel(RankingGroup block) {
+		return switch (block) {
+			case MUST_CONTINUE -> "must-continue";
+			case DUE_OR_OVERDUE -> "due-or-overdue";
+			case OPTIONAL -> "optional";
+		};
 	}
 
 	private static String truncateDescription(String description) {

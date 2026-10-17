@@ -6,6 +6,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,8 +15,16 @@ import { TaskActions } from '@/features/tasks/TaskActions'
 import { PriorityBadge } from '@/features/tasks/PriorityBadge'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { TaskMetaItem } from '@/features/tasks/TaskMetaItem'
+import { deadlineBadgeLabel } from '@/features/horizon/horizonGrid'
+import { useHorizon } from '@/features/horizon/hooks'
 import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
-import type { TaskResponse } from '@/types/api'
+import {
+  countActiveBlockedBy,
+  countActiveBlocks,
+  liveNeededForLabel,
+} from '@/features/tasks/taskDependencyLinks'
+import { getLocalDateString } from '@/lib/planningDate'
+import type { DeadlineStatus, TaskResponse } from '@/types/api'
 
 function formatDueDate(dueDate: string | null): string {
   return dueDate ?? 'No due date'
@@ -34,6 +43,9 @@ function formatRemainingEffort(minutes: number | null): string {
 
 type TaskRowProps = {
   task: TaskResponse
+  deadlineBadge: string | null
+  deadlineStatus: DeadlineStatus | null | undefined
+  neededFor: string | null
   onEditTask: (task: TaskResponse) => void
   onDelete: (task: TaskResponse) => void
   isDeleting: boolean
@@ -41,10 +53,16 @@ type TaskRowProps = {
 
 function TaskRow({
   task,
+  deadlineBadge,
+  deadlineStatus,
+  neededFor,
   onEditTask,
   onDelete,
   isDeleting,
 }: TaskRowProps) {
+  const blockedByCount = countActiveBlockedBy(task)
+  const blocksCount = countActiveBlocks(task)
+
   return (
     <Card size="sm">
       <CardContent className="flex flex-col gap-2 py-3">
@@ -73,8 +91,28 @@ function TaskRow({
           <TaskMetaItem category="remainingEffortMinutes" icon={ClockIcon}>
             {formatRemainingEffort(task.remainingEffortMinutes)}
           </TaskMetaItem>
+          {deadlineBadge != null ? (
+            <TaskMetaItem category="status" icon={CircleDotIcon}>
+              <Badge
+                variant={deadlineStatus === 'AT_RISK' ? 'secondary' : 'destructive'}
+              >
+                {deadlineBadge}
+              </Badge>
+            </TaskMetaItem>
+          ) : null}
           <RemainingEffortControl task={task} />
         </div>
+        {blockedByCount > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Blocked by {blockedByCount}
+          </p>
+        ) : null}
+        {blocksCount > 0 ? (
+          <p className="text-sm text-muted-foreground">Blocks {blocksCount}</p>
+        ) : null}
+        {neededFor != null ? (
+          <p className="text-sm text-muted-foreground">{neededFor}</p>
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -116,16 +154,29 @@ function TaskListEmpty({ onCreateTask }: { onCreateTask: () => void }) {
 }
 
 type TaskListProps = {
+  planningDate?: string
   onEditTask?: (task: TaskResponse) => void
   onCreateTask?: () => void
 }
 
 export function TaskList({
+  planningDate,
   onEditTask = () => undefined,
   onCreateTask = () => undefined,
 }: TaskListProps) {
   const { isPending, isError, isEmpty, tasks, error, refetch } = useTasks()
+  const {
+    horizon,
+    isError: isHorizonError,
+    refetch: refetchHorizon,
+  } = useHorizon()
   const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask()
+
+  const resolvedPlanningDate = planningDate ?? getLocalDateString()
+  const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const horizonRowByTaskId = new Map(
+    (horizon?.tasks ?? []).map((row) => [row.taskId, row]),
+  )
 
   function handleDelete(task: TaskResponse) {
     deleteTask(task.id)
@@ -157,15 +208,44 @@ export function TaskList({
 
   return (
     <div className="flex flex-col gap-3">
-      {tasks.map((task) => (
-        <TaskRow
-          key={task.id}
-          task={task}
-          onEditTask={onEditTask}
-          onDelete={handleDelete}
-          isDeleting={isDeleting}
-        />
-      ))}
+      {isHorizonError ? (
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>Deadline forecast unavailable</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => refetchHorizon()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {tasks.map((task) => {
+        const horizonRow = horizonRowByTaskId.get(task.id)
+        const deadlineBadge =
+          horizonRow != null
+            ? deadlineBadgeLabel(
+                horizonRow.deadlineStatus,
+                horizonRow.unresolvedEffort,
+              )
+            : null
+
+        return (
+          <TaskRow
+            key={task.id}
+            task={task}
+            deadlineBadge={deadlineBadge}
+            deadlineStatus={horizonRow?.deadlineStatus}
+            neededFor={liveNeededForLabel(task, taskById, resolvedPlanningDate)}
+            onEditTask={onEditTask}
+            onDelete={handleDelete}
+            isDeleting={isDeleting}
+          />
+        )
+      })}
     </div>
   )
 }

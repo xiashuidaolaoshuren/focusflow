@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import {
+  addBlocker,
   createTask,
   deleteTask,
   listTasks,
   reassessRemainingEffort,
+  removeBlocker,
   updateTask,
 } from '@/features/tasks/api'
 import { isProgressConflict } from '@/features/tasks/taskEffortConflict'
@@ -33,6 +36,15 @@ export type UseReassessRemainingEffortOptions = {
   onEffortConflict?: () => void
 }
 
+function invalidateTasksAndHorizon(
+  queryClient: ReturnType<typeof useQueryClient>,
+) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
+  ])
+}
+
 export function useTasks() {
   const query = useQuery({
     queryKey: tasksQueryKey,
@@ -54,7 +66,7 @@ export function useCreateTask() {
     mutationFn: (request: CreateTaskRequest) => createTask(request),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+      await invalidateTasksAndHorizon(queryClient)
     },
   })
 }
@@ -73,13 +85,42 @@ export function useUpdateTask(options?: UseUpdateTaskOptions) {
     }) => updateTask(id, request),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+      await invalidateTasksAndHorizon(queryClient)
     },
     onError: async (error) => {
       if (isProgressConflict(error)) {
-        await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+        await invalidateTasksAndHorizon(queryClient)
         options?.onEffortConflict?.()
       }
+    },
+  })
+}
+
+export function useAddBlocker() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      blockerTaskId,
+    }: {
+      id: number
+      blockerTaskId: number
+    }) => addBlocker(id, { blockerTaskId }),
+    onSuccess: async () => {
+      await invalidateTasksAndHorizon(queryClient)
+    },
+  })
+}
+
+export function useRemoveBlocker() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, blockerId }: { id: number; blockerId: number }) =>
+      removeBlocker(id, blockerId),
+    onSuccess: async () => {
+      await invalidateTasksAndHorizon(queryClient)
     },
   })
 }
@@ -91,7 +132,7 @@ export function useDeleteTask() {
     mutationFn: (id: number) => deleteTask(id),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+      await invalidateTasksAndHorizon(queryClient)
     },
   })
 }
@@ -112,11 +153,11 @@ export function useReassessRemainingEffort(
     }) => reassessRemainingEffort(id, request),
     onSuccess: async () => {
       markRegeneratePromptNeeded()
-      await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+      await invalidateTasksAndHorizon(queryClient)
     },
     onError: async (error) => {
       if (isProgressConflict(error)) {
-        await queryClient.invalidateQueries({ queryKey: tasksQueryKey })
+        await invalidateTasksAndHorizon(queryClient)
         options?.onEffortConflict?.()
       }
     },

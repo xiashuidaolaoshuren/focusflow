@@ -27,8 +27,15 @@ import { PLAN_CONFLICT_MESSAGE } from '@/features/plans/planConflicts'
 import { UnplannedWorkForm } from '@/features/plans/UnplannedWorkForm'
 import { useDeleteUnplannedWork } from '@/features/plans/hooks'
 import { useTasks } from '@/features/tasks/hooks'
+import {
+  formatNeededFor,
+  formatWaitingOn,
+  indexSnapshotTitles,
+  type SnapshotTitleInfo,
+} from '@/features/plans/planSnapshotCopy'
 import type {
   DailyPlanResponse,
+  ScheduledBlockResponse,
   TaskResponse,
   UnplacedWorkResponse,
   WorkBlockResponse,
@@ -72,12 +79,52 @@ function DailyPlanViewSkeleton({ title }: { title: string }) {
   )
 }
 
-function buildUnplacedCopy(entry: UnplacedWorkResponse): string {
+function buildUnplacedCopy(
+  entry: UnplacedWorkResponse,
+  titleIndex: Map<number, SnapshotTitleInfo>,
+): string {
+  const title = entry.taskSnapshot.title
+  const neededSuffix = (() => {
+    const neededFor = formatNeededFor(entry.taskSnapshot, titleIndex)
+    return neededFor != null ? ` · ${neededFor}` : ''
+  })()
+
   if (entry.reason === 'NO_ESTIMATE') {
-    return `${entry.taskSnapshot.title}: no estimate — add one to put it on the clock`
+    return `${title}: no estimate — add one to put it on the clock${neededSuffix}`
   }
 
-  return `${entry.taskSnapshot.title}: out of time — ${entry.unplacedMinutes ?? 0} min unplaced`
+  if (entry.reason === 'BLOCKED') {
+    const waitingOn = formatWaitingOn(entry.blockerSourceTaskIds, titleIndex)
+    return `${title}: Waiting on ${waitingOn} — ${entry.unplacedMinutes ?? 0} min unplaced${neededSuffix}`
+  }
+
+  return `${title}: out of time — ${entry.unplacedMinutes ?? 0} min unplaced${neededSuffix}`
+}
+
+function neededForNotesFromRail(
+  rail: ScheduledBlockResponse[],
+  titleIndex: Map<number, SnapshotTitleInfo>,
+): string[] {
+  const seen = new Set<number>()
+  const notes: string[] = []
+
+  for (const block of rail) {
+    if (block.kind !== 'WORK') {
+      continue
+    }
+    const sourceTaskId = block.taskSnapshot.sourceTaskId
+    if (seen.has(sourceTaskId)) {
+      continue
+    }
+    const neededFor = formatNeededFor(block.taskSnapshot, titleIndex)
+    if (neededFor == null) {
+      continue
+    }
+    seen.add(sourceTaskId)
+    notes.push(`${block.taskSnapshot.title}: ${neededFor}`)
+  }
+
+  return notes
 }
 
 function formatClockTime(time: string): string {
@@ -272,6 +319,8 @@ export function DailyPlanView({
       ? plan.composedRail
       : (plan.revisions.find((revision) => revision.id === selectedRevisionId)
           ?.blocks ?? plan.composedRail)
+  const snapshotTitles = indexSnapshotTitles(plan)
+  const neededForNotes = neededForNotesFromRail(rail, snapshotTitles)
 
   return (
     <Card>
@@ -298,7 +347,12 @@ export function DailyPlanView({
         </Alert>
       ) : null}
 
-      {plan.warning != null ? <PlanWarningAlert warning={plan.warning} /> : null}
+      {plan.warning != null ? (
+        <PlanWarningAlert
+          warning={plan.warning}
+          snapshotTitles={snapshotTitles}
+        />
+      ) : null}
 
         {showReducedBufferNote ? (
           <p className="text-sm text-muted-foreground">
@@ -312,6 +366,14 @@ export function DailyPlanView({
           plan={{ ...plan, blocks: rail }}
           onBlockClick={setSelectedBlock}
         />
+
+        {neededForNotes.length > 0 ? (
+          <ul aria-label="Inherited urgency" className="flex flex-col gap-1 text-sm">
+            {neededForNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        ) : null}
 
         {hasRecordedWork(plan) ? (
           <RecordedWorkSection plan={plan} tasks={tasks} />
@@ -344,7 +406,7 @@ export function DailyPlanView({
                   key={`${entry.reason}-${entry.taskSnapshot.sourceTaskId}`}
                   className="rounded-md border border-dashed border-border px-3 py-2 text-sm"
                 >
-                  {buildUnplacedCopy(entry)}
+                  {buildUnplacedCopy(entry, snapshotTitles)}
                 </li>
               ))}
             </ul>

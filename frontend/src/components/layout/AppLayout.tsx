@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
+  CalendarRangeIcon,
   LayoutDashboardIcon,
   ListIcon,
   SettingsIcon,
@@ -72,6 +73,16 @@ export function AppLayout() {
                   >
                     <ListIcon />
                     <span>Plans</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={<NavLink to="/horizon" />}
+                    isActive={location.pathname === '/horizon'}
+                    tooltip="Horizon"
+                  >
+                    <CalendarRangeIcon />
+                    <span>Horizon</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>

@@ -571,6 +571,64 @@ class DailyPlanResponseMapperTest {
 	}
 
 	@Test
+	void toResponse_unplacedBlockedWork_includesBlockerSourceTaskIdsFromRevisionDependencies() {
+		DailyPlan plan = scheduledPlan();
+		DailyPlanRevision revision = plan.getLatestRevision();
+
+		DailyPlanRevisionDependency firstBlocker = new DailyPlanRevisionDependency();
+		firstBlocker.setBlockedSourceTaskId(20L);
+		firstBlocker.setBlockerSourceTaskId(10L);
+		revision.addDependency(firstBlocker);
+		DailyPlanRevisionDependency secondBlocker = new DailyPlanRevisionDependency();
+		secondBlocker.setBlockedSourceTaskId(20L);
+		secondBlocker.setBlockerSourceTaskId(11L);
+		revision.addDependency(secondBlocker);
+
+		planTask(
+				revision,
+				1,
+				20L,
+				20L,
+				"Blocked work",
+				TaskPriority.MEDIUM,
+				TaskStatus.OPEN,
+				null,
+				60,
+				true,
+				UnplacedReason.BLOCKED,
+				60);
+		planTask(
+				revision,
+				2,
+				30L,
+				30L,
+				"Out of time",
+				TaskPriority.MEDIUM,
+				TaskStatus.OPEN,
+				null,
+				45,
+				true,
+				UnplacedReason.OUT_OF_TIME,
+				15);
+
+		DailyPlanResponse response = mapper.toResponse(plan);
+
+		UnplacedWorkResponse blocked =
+				response.unplacedWork().stream()
+						.filter(entry -> entry.reason() == UnplacedReason.BLOCKED)
+						.findFirst()
+						.orElseThrow();
+		UnplacedWorkResponse outOfTime =
+				response.unplacedWork().stream()
+						.filter(entry -> entry.reason() == UnplacedReason.OUT_OF_TIME)
+						.findFirst()
+						.orElseThrow();
+
+		assertThat(blocked.blockerSourceTaskIds()).containsExactly(10L, 11L);
+		assertThat(outOfTime.blockerSourceTaskIds()).isEmpty();
+	}
+
+	@Test
 	void toResponse_exposesCapturedRemainingEffortOnTheTaskSnapshot() {
 		DailyPlan plan = scheduledPlan();
 		DailyPlanRevision revision = plan.getLatestRevision();

@@ -7,6 +7,7 @@ import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
 import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
   planByDateQueryKey,
   planDetailQueryKey,
@@ -124,6 +125,9 @@ describe('useGeneratePlan', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ['plans', 'list'],
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
     })
   })
 
@@ -294,6 +298,9 @@ describe('useDeletePlan', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: planDetailQueryKey(1),
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 })
 
@@ -313,6 +320,8 @@ describe('useRecordBlockProgress', () => {
         estimatedMinutes: 60,
         remainingEffortMinutes: 25,
         effortVersion: 1,
+        blockedBy: [],
+        blocks: [],
       },
       plan: samplePlan,
     })
@@ -362,6 +371,9 @@ describe('useRecordBlockProgress', () => {
       queryKey: planDetailQueryKey(samplePlan.id),
     })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 
   it('refetches the plan views and reports a PROGRESS_CONFLICT', async () => {
@@ -412,6 +424,9 @@ describe('useRecordBlockProgress', () => {
       queryKey: plansDetailQueryPrefix,
     })
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
     expect(onConflict).toHaveBeenCalled()
   })
 })
@@ -463,6 +478,9 @@ describe('useReplan', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: planDetailQueryKey(samplePlan.id),
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 
   it('refreshes the plan views when a re-plan loses to a newer change', async () => {
@@ -503,6 +521,9 @@ describe('useReplan', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: plansDetailQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
     })
   })
 })

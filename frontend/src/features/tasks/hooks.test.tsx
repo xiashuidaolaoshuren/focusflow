@@ -6,14 +6,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
 
+import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
   tasksQueryKey,
+  useAddBlocker,
   useCreateTask,
   useDeleteTask,
   useReassessRemainingEffort,
+  useRemoveBlocker,
   useTasks,
   useUpdateTask,
 } from '@/features/tasks/hooks'
+
+vi.mock('@/features/plans/regeneratePrompt', () => ({
+  markRegeneratePromptNeeded: vi.fn(),
+}))
 
 vi.mock('@/features/tasks/api', () => ({
   listTasks: vi.fn(),
@@ -21,13 +28,19 @@ vi.mock('@/features/tasks/api', () => ({
   updateTask: vi.fn(),
   deleteTask: vi.fn(),
   reassessRemainingEffort: vi.fn(),
+  addBlocker: vi.fn(),
+  removeBlocker: vi.fn(),
 }))
 
+import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
+
 import {
+  addBlocker,
   createTask,
   deleteTask,
   listTasks,
   reassessRemainingEffort,
+  removeBlocker,
   updateTask,
 } from '@/features/tasks/api'
 
@@ -36,6 +49,9 @@ const mockedCreateTask = vi.mocked(createTask)
 const mockedUpdateTask = vi.mocked(updateTask)
 const mockedDeleteTask = vi.mocked(deleteTask)
 const mockedReassessRemainingEffort = vi.mocked(reassessRemainingEffort)
+const mockedAddBlocker = vi.mocked(addBlocker)
+const mockedRemoveBlocker = vi.mocked(removeBlocker)
+const mockedMarkRegeneratePromptNeeded = vi.mocked(markRegeneratePromptNeeded)
 
 const progressConflictError = new ApiError({
   status: 409,
@@ -81,6 +97,8 @@ describe('useTasks', () => {
         estimatedMinutes: 30,
         remainingEffortMinutes: 30,
         effortVersion: 0,
+        blockedBy: [],
+        blocks: [],
       },
     ]
     mockedListTasks.mockResolvedValue(tasks)
@@ -143,6 +161,8 @@ describe('useCreateTask', () => {
       estimatedMinutes: 45,
       remainingEffortMinutes: 45,
       effortVersion: 0,
+      blockedBy: [],
+      blocks: [],
     }
     mockedCreateTask.mockResolvedValue(created)
 
@@ -178,6 +198,9 @@ describe('useCreateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 })
 
@@ -197,6 +220,8 @@ describe('useUpdateTask', () => {
       estimatedMinutes: 60,
       remainingEffortMinutes: 25,
       effortVersion: 2,
+      blockedBy: [],
+      blocks: [],
     }
     mockedUpdateTask.mockResolvedValue(updated)
 
@@ -237,6 +262,9 @@ describe('useUpdateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
   })
 
   it('refetches the task list on PROGRESS_CONFLICT without a success invalidation', async () => {
@@ -272,7 +300,10 @@ describe('useUpdateTask', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
-    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(2)
     expect(result.current.isSuccess).toBe(false)
   })
 })
@@ -311,8 +342,85 @@ describe('useReassessRemainingEffort', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
     })
-    expect(invalidateSpy).toHaveBeenCalledTimes(1)
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
+    })
+    expect(invalidateSpy).toHaveBeenCalledTimes(2)
     expect(result.current.isSuccess).toBe(false)
+  })
+})
+
+describe('useAddBlocker', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('invalidates the task list on success and does not mark a plan refresh', async () => {
+    mockedAddBlocker.mockResolvedValue({
+      id: 1,
+      title: 'Blocked task',
+      description: null,
+      priority: 'HIGH',
+      status: 'OPEN',
+      dueDate: null,
+      estimatedMinutes: 30,
+      remainingEffortMinutes: 30,
+      effortVersion: 0,
+      blockedBy: [{ taskId: 2, title: 'Blocker', status: 'OPEN' }],
+      blocks: [],
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useAddBlocker(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({ id: 1, blockerTaskId: 2 })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockedAddBlocker).toHaveBeenCalledWith(1, { blockerTaskId: 2 })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: horizonQueryPrefix })
+    expect(mockedMarkRegeneratePromptNeeded).not.toHaveBeenCalled()
+  })
+})
+
+describe('useRemoveBlocker', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('invalidates the task list on success and does not mark a plan refresh', async () => {
+    mockedRemoveBlocker.mockResolvedValue(undefined)
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useRemoveBlocker(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate({ id: 1, blockerId: 2 })
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(mockedRemoveBlocker).toHaveBeenCalledWith(1, 2)
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: tasksQueryKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: horizonQueryPrefix })
+    expect(mockedMarkRegeneratePromptNeeded).not.toHaveBeenCalled()
   })
 })
 
@@ -343,6 +451,9 @@ describe('useDeleteTask', () => {
     expect(mockedDeleteTask).toHaveBeenCalledWith(1)
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: tasksQueryKey,
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: horizonQueryPrefix,
     })
   })
 })

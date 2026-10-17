@@ -86,7 +86,11 @@ export function DashboardPage() {
             New Task
           </Button>
         </div>
-        <TaskList onEditTask={openEditSheet} onCreateTask={openCreateSheet} />
+        <TaskList
+          planningDate={planningDate}
+          onEditTask={openEditSheet}
+          onCreateTask={openCreateSheet}
+        />
       </section>
 
       <Sheet open={isTaskSheetOpen} onOpenChange={handleSheetOpenChange}>

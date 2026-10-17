@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 import { ApiError } from '@/lib/api'
@@ -28,13 +28,32 @@ vi.mock('@/features/tasks/hooks', async (importOriginal) => {
   }
 })
 
+vi.mock('@/features/horizon/hooks', () => ({
+  useHorizon: vi.fn(),
+}))
+
+import { useHorizon } from '@/features/horizon/hooks'
 import { useDeleteTask, useTasks, useUpdateTask } from '@/features/tasks/hooks'
 
 const mockedUseTasks = vi.mocked(useTasks)
 const mockedUseUpdateTask = vi.mocked(useUpdateTask)
 const mockedUseDeleteTask = vi.mocked(useDeleteTask)
+const mockedUseHorizon = vi.mocked(useHorizon)
 
-function renderTaskList(onEditTask = vi.fn(), onCreateTask = vi.fn()) {
+function mockHorizonIdle() {
+  mockedUseHorizon.mockReturnValue({
+    horizon: null,
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as unknown as ReturnType<typeof useHorizon>)
+}
+
+function renderTaskList(
+  onEditTask = vi.fn(),
+  onCreateTask = vi.fn(),
+  planningDate?: string,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -44,7 +63,11 @@ function renderTaskList(onEditTask = vi.fn(), onCreateTask = vi.fn()) {
     onCreateTask,
     ...render(
       <QueryClientProvider client={queryClient}>
-        <TaskList onEditTask={onEditTask} onCreateTask={onCreateTask} />
+        <TaskList
+          onEditTask={onEditTask}
+          onCreateTask={onCreateTask}
+          planningDate={planningDate}
+        />
       </QueryClientProvider>,
     ),
   }
@@ -60,10 +83,13 @@ const sampleTask: TaskResponse = {
   estimatedMinutes: 60,
   remainingEffortMinutes: 25,
   effortVersion: 0,
+  blockedBy: [],
+  blocks: [],
 }
 
 describe('TaskList', () => {
   beforeEach(() => {
+    mockHorizonIdle()
     mockedUseUpdateTask.mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
@@ -207,6 +233,89 @@ describe('TaskList', () => {
     expect(screen.queryByText('0 min remaining')).not.toBeInTheDocument()
   })
 
+  it('shows Needed for on a task promoted by a live dependency', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Write report', status: 'OPEN' }],
+        },
+        { ...sampleTask, id: 2, title: 'Write report', dueDate: '2026-06-15' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(
+      screen.getByText('Needed for Write report (due 2026-06-15)'),
+    ).toBeInTheDocument()
+  })
+
+  it('does not show Needed for when both tasks already share the ranking group', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          status: 'IN_PROGRESS',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Continue too', status: 'IN_PROGRESS' }],
+        },
+        {
+          ...sampleTask,
+          id: 2,
+          title: 'Continue too',
+          status: 'IN_PROGRESS',
+          dueDate: '2026-06-15',
+        },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    expect(screen.queryByText(/needed for/i)).not.toBeInTheDocument()
+  })
+
+  it('honors the planning date prop when deciding promotion', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          id: 1,
+          title: 'Draft outline',
+          dueDate: null,
+          blocks: [{ taskId: 2, title: 'Write report', status: 'OPEN' }],
+        },
+        { ...sampleTask, id: 2, title: 'Write report', dueDate: '2026-06-20' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList(vi.fn(), vi.fn(), '2026-06-20')
+
+    expect(
+      screen.getByText('Needed for Write report (due 2026-06-20)'),
+    ).toBeInTheDocument()
+  })
+
   it('sends effortVersion without remainingEffortMinutes when status changes to In progress', () => {
     const updateMutate = vi.fn()
     mockedUseUpdateTask.mockReturnValue({
@@ -332,6 +441,62 @@ describe('TaskList', () => {
     expect(onEditTask).toHaveBeenCalledWith(sampleTask)
   })
 
+  it('shows active dependency counts only when both tasks are Open or In progress', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        {
+          ...sampleTask,
+          blockedBy: [{ taskId: 2, title: 'Blocker', status: 'OPEN' }],
+          blocks: [{ taskId: 3, title: 'Dependent', status: 'IN_PROGRESS' }],
+        },
+        {
+          id: 2,
+          title: 'Done blocker endpoint',
+          description: null,
+          priority: 'MEDIUM',
+          status: 'OPEN',
+          dueDate: null,
+          estimatedMinutes: 20,
+          remainingEffortMinutes: 20,
+          effortVersion: 0,
+          blockedBy: [],
+          blocks: [{ taskId: 1, title: 'Write report', status: 'OPEN' }],
+        },
+        {
+          id: 4,
+          title: 'Done blocked task',
+          description: null,
+          priority: 'LOW',
+          status: 'DONE',
+          dueDate: null,
+          estimatedMinutes: 10,
+          remainingEffortMinutes: 0,
+          effortVersion: 0,
+          blockedBy: [{ taskId: 1, title: 'Write report', status: 'OPEN' }],
+          blocks: [],
+        },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+
+    renderTaskList()
+
+    const writeReportRow = screen
+      .getByRole('heading', { name: /write report/i })
+      .closest('[data-slot="card"]') as HTMLElement
+    expect(within(writeReportRow).getByText('Blocked by 1')).toBeInTheDocument()
+    expect(within(writeReportRow).getByText('Blocks 1')).toBeInTheDocument()
+
+    const doneRow = screen
+      .getByRole('heading', { name: /done blocked task/i })
+      .closest('[data-slot="card"]') as HTMLElement
+    expect(within(doneRow).queryByText(/blocked by/i)).not.toBeInTheDocument()
+  })
+
   it('calls delete mutation only after confirmation', async () => {
     const deleteMutate = vi.fn()
     mockedUseDeleteTask.mockReturnValue({
@@ -355,5 +520,125 @@ describe('TaskList', () => {
     expect(deleteMutate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /^delete task$/i }))
     expect(deleteMutate).toHaveBeenCalledWith(1)
+  })
+
+  it('shows deadline badges for at-risk, overdue, and cannot-forecast rows', () => {
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [
+        sampleTask,
+        { ...sampleTask, id: 2, title: 'On track task' },
+        { ...sampleTask, id: 3, title: 'Beyond task' },
+        { ...sampleTask, id: 5, title: 'Blocked chain' },
+      ],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+    mockedUseHorizon.mockReturnValue({
+      horizon: {
+        currentDate: '2026-06-01',
+        currentTime: '09:00:00',
+        assumptions: {
+          pace: 'AS_PLANNED',
+          workingDays: ['MONDAY'],
+          horizonWorkingDays: 7,
+        },
+        days: [],
+        tasks: [
+          {
+            taskId: 1,
+            title: 'Write report',
+            status: 'OPEN',
+            dueDate: '2026-06-15',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'AT_RISK',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 2,
+            title: 'On track task',
+            status: 'OPEN',
+            dueDate: '2026-06-20',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'ON_TRACK',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 3,
+            title: 'Beyond task',
+            status: 'OPEN',
+            dueDate: '2026-07-01',
+            remainingEffortMinutes: 25,
+            deadlineStatus: 'BEYOND_HORIZON',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [],
+            segments: [],
+          },
+          {
+            taskId: 5,
+            title: 'Blocked chain',
+            status: 'OPEN',
+            dueDate: '2026-06-15',
+            remainingEffortMinutes: null,
+            deadlineStatus: 'CANNOT_FORECAST',
+            projectedFinishDate: null,
+            waitingOn: [],
+            upstreamBlockers: [],
+            unresolvedEffort: [{ taskId: 9, title: 'Unknown effort' }],
+            segments: [],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useHorizon>)
+
+    renderTaskList()
+
+    expect(screen.getByText('At risk')).toBeInTheDocument()
+    expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    expect(screen.queryByText('Beyond horizon')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Cannot forecast: Unknown effort'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows deadline forecast unavailable when the horizon query fails', () => {
+    const refetchHorizon = vi.fn()
+    mockedUseTasks.mockReturnValue({
+      isPending: false,
+      isSuccess: true,
+      isError: false,
+      isEmpty: false,
+      tasks: [sampleTask],
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useTasks>)
+    mockedUseHorizon.mockReturnValue({
+      horizon: null,
+      isPending: false,
+      isError: true,
+      refetch: refetchHorizon,
+    } as unknown as ReturnType<typeof useHorizon>)
+
+    renderTaskList()
+
+    expect(screen.getByText(/deadline forecast unavailable/i)).toBeInTheDocument()
+    expect(screen.getByText('Write report')).toBeInTheDocument()
+    const retryButtons = screen.getAllByRole('button', { name: /retry/i })
+    fireEvent.click(retryButtons[retryButtons.length - 1]!)
+    expect(refetchHorizon).toHaveBeenCalled()
   })
 })

@@ -3,6 +3,7 @@ package com.focusflow.preferences.dto;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -16,4 +17,5 @@ public record SchedulingPreferencesRequest(
 		@NotNull @Min(0) Integer bufferMinutes,
 		LocalTime peakStart,
 		LocalTime peakEnd,
-		@Valid List<FixedBreakRequest> fixedBreaks) {}
+		@Valid List<FixedBreakRequest> fixedBreaks,
+		@NotNull List<DayOfWeek> workingDays) {}
