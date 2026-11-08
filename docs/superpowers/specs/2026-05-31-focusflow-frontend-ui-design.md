@@ -2,6 +2,8 @@
 
 Date: 2026-05-31
 
+> **Superseded 2026-11-08.** The visual, navigation, and interaction decisions in this document are replaced by [`2026-11-08-focusflow-frontend-redesign-design.md`](2026-11-08-focusflow-frontend-redesign-design.md). Keep this file for the M2 history and for the toast, alert, confirmation, and loading-state patterns that remain valid where they do not conflict with the new direction.
+
 **Parent spec:** `docs/superpowers/specs/2026-05-14-focusflow-ai-design.md`
 **Related plan:** `docs/superpowers/plans/2026-05-14-focusflow-ai-m2-frontend-plan.md`
 

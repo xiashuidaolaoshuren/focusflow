@@ -70,4 +70,4 @@ Recorded so they aren't reconsidered from scratch, and so a future brainstorming
 - [1.2.0 design](specs/2026-09-07-focusflow-1.2.0-scheduled-day-design.md) — the scheduled day.
 - [1.3.0 design](specs/2026-10-02-focusflow-1.3.0-progress-carry-over-design.md) — progress, carry-over, and revision-preserving re-planning.
 - [1.4.0 design](specs/2026-10-11-focusflow-1.4.0-dependencies-horizon-design.md) — task dependencies and the read-only multi-day horizon.
-- [Frontend UI design](specs/2026-05-31-focusflow-frontend-ui-design.md) — confirmation, toast, and alert patterns reused by later milestones.
+- [Frontend redesign design](specs/2026-11-08-focusflow-frontend-redesign-design.md) — current frontend ground truth: design system, information architecture, screens, product rules, and rebuild constraints. Supersedes the [2026-05-31 frontend UI design](specs/2026-05-31-focusflow-frontend-ui-design.md) for visual and navigation decisions.

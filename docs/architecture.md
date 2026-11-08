@@ -471,6 +471,8 @@ erDiagram
 
 ## Frontend structure
 
+> **Redesign in progress.** The table below describes the pre-redesign React app. The frontend is being rebuilt from the approved design contract in [`docs/design/`](design/README.md) under [`2026-11-08-focusflow-frontend-redesign-design.md`](superpowers/specs/2026-11-08-focusflow-frontend-redesign-design.md). Treat the new spec and `docs/design/DESIGN.md` as the target; this table remains useful for understanding the current code until the rebuild lands.
+
 The React app mirrors backend feature boundaries:
 
 | Area | Location | Role |
@@ -519,4 +521,4 @@ Open these packages in roughly this order to trace a request from HTTP to persis
 - **DTOs and validation** — Request/response records under each feature's `dto` package separate the HTTP contract from JPA entities.
 - **Tests** — Mockito service tests isolate business behavior; `@WebMvcTest` controller tests exercise JSON, validation, and security boundaries; `PostgresIntegrationTest` uses Testcontainers for real PostgreSQL behavior; `LayeredArchitectureTest` uses ArchUnit to enforce dependency rules.
 
-The frontend is the practical counterpart: Vite proxies `/api`, `frontend/src/lib/api.ts` uses `credentials: 'include'`, and it reads the CSRF cookie to attach the matching header for mutating requests. `DayTimeline.tsx` renders the scheduled block rail; the dashboard loads plans via `/by-date` with a URL-backed planning date.
+The frontend is the practical counterpart: Vite proxies `/api`, `frontend/src/lib/api.ts` uses `credentials: 'include'`, and it reads the CSRF cookie to attach the matching header for mutating requests. `DayTimeline.tsx` renders the scheduled block rail; the dashboard loads plans via `/by-date` with a URL-backed planning date. The redesign keeps those API and session rules but moves the home to a dedicated Today screen, splits task inventory into `/tasks`, and replaces the timeline with the DayRail (desktop) and AgendaList (mobile) pair. See [`2026-11-08-focusflow-frontend-redesign-design.md`](superpowers/specs/2026-11-08-focusflow-frontend-redesign-design.md).
