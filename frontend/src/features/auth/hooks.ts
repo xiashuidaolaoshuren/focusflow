@@ -32,7 +32,7 @@ export function useLogin() {
     },
     onSuccess: (user) => {
       queryClient.setQueryData(currentUserQueryKey, user)
-      navigate('/dashboard')
+      navigate('/today')
     },
   })
 }
@@ -51,7 +51,7 @@ export function useRegister() {
     },
     onSuccess: (user) => {
       queryClient.setQueryData(currentUserQueryKey, user)
-      navigate('/dashboard')
+      navigate('/today')
     },
   })
 }

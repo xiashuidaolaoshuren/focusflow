@@ -110,6 +110,9 @@
   --status-cancelled: #6B675F;
 
   --shadow-popover: 0 4px 16px rgb(28 27 25 / 0.08), 0 1px 2px rgb(28 27 25 / 0.06);
+
+  --scrim: rgb(28 27 25 / 0.36);
+  --skeleton: var(--muted);
 }
 
 .dark {
@@ -168,6 +171,9 @@
   --status-cancelled: #A39E94;
 
   --shadow-popover: 0 6px 20px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.4);
+
+  --scrim: rgb(0 0 0 / 0.55);
+  --skeleton: var(--secondary);
 }
 
 :root {
@@ -249,6 +255,9 @@
   --color-status-cancelled-foreground: var(--status-cancelled);
   --color-priority-low-foreground: var(--priority-low);
   --color-priority-medium-foreground: var(--priority-medium);
+  --color-priority-high-foreground: var(--priority-high);
+  --color-scrim: var(--scrim);
+  --color-skeleton: var(--skeleton);
   --color-sidebar: var(--background);
   --color-sidebar-foreground: var(--foreground);
   --color-sidebar-primary: var(--primary);

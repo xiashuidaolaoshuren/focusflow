@@ -1,5 +1,6 @@
 import { useId, useMemo, type ReactNode } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { CircleAlertIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { ApiError } from "@/lib/api"
@@ -88,7 +89,8 @@ type FieldProps = Omit<React.ComponentProps<"div">, "children"> &
   VariantProps<typeof fieldVariants> & {
     label?: ReactNode
     name?: string
-    error?: string
+    required?: boolean
+    error?: string | undefined
     apiError?: unknown
     description?: ReactNode
     id?: string
@@ -100,6 +102,7 @@ function Field({
   orientation = "vertical",
   label,
   name,
+  required = false,
   error,
   apiError,
   description,
@@ -154,7 +157,14 @@ function Field({
       {...props}
     >
       {label != null ? (
-        <FieldLabel htmlFor={controlId}>{label}</FieldLabel>
+        <FieldLabel htmlFor={controlId}>
+          {label}
+          {required ? (
+            <span className="ml-0.5 text-destructive" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </FieldLabel>
       ) : null}
       {control}
       {description != null ? (
@@ -296,10 +306,17 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn("text-sm font-normal text-destructive", className)}
+      className={cn(
+        "flex items-start gap-1 text-xs leading-4 font-normal text-destructive",
+        className
+      )}
       {...props}
     >
-      {content}
+      <CircleAlertIcon
+        className="mt-0.5 size-3 shrink-0"
+        aria-hidden="true"
+      />
+      <div>{content}</div>
     </div>
   )
 }

@@ -187,7 +187,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T4 — App shell, auth forms, and routes
 
-- [ ] **Do:** Ship the authenticated shell, the public auth layout, and the route map from the spec, including 404 and the error boundary.
+- [x] **Do:** Ship the authenticated shell, the public auth layout, and the route map from the spec, including 404 and the error boundary.
 - **Consumes:** `onUnauthorized` from T2. `Field` from T3. Theme tokens from T1.
 - **Produces:** `AppShell`, `AuthLayout`, `NotFoundPage`, `ErrorBoundary`. Routes: `/today`, `/tasks`, `/horizon`, `/plans`, `/plans/:id`, `/settings`, `/login`, `/register`. `/` redirects by session. `/dashboard` redirects to `/today` and keeps `?date`.
 - **Acceptance:** An unauthenticated visit to `/today` redirects to `/login`. A 401 from any query does the same. Login submits on Enter and uses a real `<form>`. The mobile drawer traps focus, closes on Escape, and returns focus to the menu button. `/unknown` renders the 404 with a link to `/today`. The theme is applied before first paint.
@@ -197,6 +197,19 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 - **TDD suitable:** partial
 - **TDD suitable reason:** Route guards, redirect query preservation, and form submit are testable. Drawer scroll-lock and the no-flash theme script are verified manually in the browser.
 - **Verification:** `cd frontend && npm run test:run -- src/App.auth-routing.test.tsx src/features/auth src/components/layout`
+
+### T4b — Close the prototype gaps found in T1–T4
+
+- [x] **Do:** Bring the finished slices back to the prototype's look and copy: tokens `--scrim`/`--skeleton`, primitive chrome, shell footer and collapse rail, brand mark, auth card, 404 inside the shell, and per-route document titles.
+- **Consumes:** `docs/design/prototype/{app.css,js/app.js,js/views.js}`, `DESIGN.md`, `tokens.css`. `formatClock`/`formatDateLabel` from T3. `useSchedulingPreferences`.
+- **Produces:** `BrandMark`, `AuthCard`, `useDocumentTitle`, shell footer work window, collapse-to-64px rail, prototype-styled `Button`/`Input`/`Card`/`Alert`/`Field`/`Sheet`/`Skeleton`.
+- **Acceptance:** Wordmark is 20px Newsreader. Sidebar shows Working day and Work window, a labelled theme button, and initials + username/email. Collapse reaches a 64px icon rail. User menu has Settings and Sign out. 404 renders inside the shell when signed in. Register rejects passwords under 8 and usernames outside 3–30; auth fields show required markers and validate on blur; alerts carry the message only. Document titles read "<Screen> — FocusFlow".
+- **Compatibility:** Routes, guards, CSRF, and the query map unchanged. `max-w-6xl` and the username-only login field stay as plan-locked decisions.
+- **Blocked by:** T4
+- **Plan mode:** medium
+- **TDD suitable:** partial
+- **TDD suitable reason:** Copy, validation, menu items, routing, and titles are testable. Primitive restyling is a visual check against the prototype.
+- **Verification:** `cd frontend && npm run test:run -- src/features/auth src/components/layout src/components/ErrorBoundary.test.tsx src/routes/NotFoundPage.test.tsx src/hooks/use-document-title.test.tsx`
 
 ### T5 — Day rail model and views
 
@@ -358,3 +371,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 |------|--------|------|
 | 2026-11-08 | Initial plan. Locked routes, content width, date control, and self-hosted fonts from the spec's open decisions. | — |
 | 2026-11-09 | T3: `zod` added in T3; `react-hook-form` + `@hookform/resolvers` deferred to T4; `Field` extended additively; local `getFieldError` copies removed per migrating slice (T4/T6/T8/T11). | equivalent |
+| 2026-11-09 | T4b added after comparing T1–T4 with the prototype: `--scrim`/`--skeleton`, primitive chrome, shell footer, collapse rail, brand mark, auth card, shell 404, document titles. No route or API change. | equivalent |

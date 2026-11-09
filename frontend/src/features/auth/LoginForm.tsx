@@ -1,26 +1,31 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
+import { Loader2Icon } from 'lucide-react'
 
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { loginSchema, type LoginFormValues } from '@/components/form/schemas'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { AuthCard } from '@/features/auth/AuthCard'
 import { useLogin } from '@/features/auth/hooks'
 
 export function LoginForm() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const { mutate, isPending, isError, error } = useLogin()
   const errorAlertRef = useRef<HTMLDivElement>(null)
   const hasLoginError = isError && error instanceof Error
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onBlur',
+    defaultValues: { username: '', password: '' },
+  })
 
   useEffect(() => {
     if (hasLoginError) {
@@ -28,72 +33,72 @@ export function LoginForm() {
     }
   }, [hasLoginError])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    mutate({ username, password })
-  }
+  const apiError = isError ? error : undefined
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sign in</CardTitle>
-        <CardDescription>
-          Sign in to manage tasks and daily plans.
-        </CardDescription>
-      </CardHeader>
-      <form onSubmit={handleSubmit}>
-        <CardContent className="flex flex-col gap-4">
-          {hasLoginError ? (
-            <Alert
-              ref={errorAlertRef}
-              variant="destructive"
-              tabIndex={-1}
-            >
-              <AlertTitle>Sign-in failed</AlertTitle>
-              <AlertDescription>{error.message}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="username">Username</Label>
+    <AuthCard
+      title="Sign in"
+      alternate={
+        <>
+          New to FocusFlow?{' '}
+          <Link
+            to="/register"
+            className="text-primary underline-offset-2 hover:underline"
+          >
+            Create account
+          </Link>
+        </>
+      }
+    >
+      {hasLoginError ? (
+        <Alert ref={errorAlertRef} variant="destructive" tabIndex={-1}>
+          <AlertTitle>{error.message}</AlertTitle>
+        </Alert>
+      ) : null}
+      <form
+        className="grid gap-4"
+        aria-label="Sign in"
+        noValidate
+        onSubmit={handleSubmit((values) => mutate(values))}
+      >
+        <Field
+          label="Username"
+          name="username"
+          required
+          error={errors.username?.message}
+          apiError={apiError}
+        >
+          {(control) => (
             <Input
-              id="username"
-              name="username"
+              {...register('username')}
+              {...control}
               autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
-              aria-invalid={hasLoginError}
-              required
             />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Password</Label>
+          )}
+        </Field>
+        <Field
+          label="Password"
+          name="password"
+          required
+          error={errors.password?.message}
+          apiError={apiError}
+        >
+          {(control) => (
             <Input
-              id="password"
-              name="password"
+              {...register('password')}
+              {...control}
               type="password"
               autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              aria-invalid={hasLoginError}
-              required
             />
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4 border-t-0 bg-transparent p-4">
-          <Button type="submit" className="w-full" disabled={isPending}>
-            Sign in
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <Link
-              to="/register"
-              className="rounded-sm text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              Register
-            </Link>
-          </p>
-        </CardFooter>
+          )}
+        </Field>
+        <Button type="submit" size="lg" className="w-full" disabled={isPending}>
+          {isPending ? (
+            <Loader2Icon className="animate-spin" aria-hidden="true" />
+          ) : null}
+          Sign in
+        </Button>
       </form>
-    </Card>
+    </AuthCard>
   )
 }

@@ -100,7 +100,7 @@ describe('useLogin', () => {
     vi.clearAllMocks()
   })
 
-  it('sets current user query data and navigates to /dashboard on success', async () => {
+  it('sets current user query data and navigates to /today on success', async () => {
     const user: UserResponse = {
       id: 1,
       email: 'user@example.com',
@@ -149,7 +149,7 @@ describe('useLogin', () => {
     expect(setQueryDataSpy).toHaveBeenCalledWith(currentUserQueryKey, user)
     expect(queryClient.getQueryData(currentUserQueryKey)).toEqual(user)
     expect(result.current.currentUser.isAuthenticated).toBe(true)
-    expect(result.current.location.pathname).toBe('/dashboard')
+    expect(result.current.location.pathname).toBe('/today')
   })
 
   it('waits for the CSRF seed query before calling login', async () => {
@@ -198,7 +198,7 @@ describe('useRegister', () => {
     vi.clearAllMocks()
   })
 
-  it('sets current user query data and navigates to /dashboard on success', async () => {
+  it('sets current user query data and navigates to /today on success', async () => {
     const user: UserResponse = {
       id: 2,
       email: 'new@example.com',
@@ -246,7 +246,7 @@ describe('useRegister', () => {
       password: 'password123',
     })
     expect(setQueryDataSpy).toHaveBeenCalledWith(currentUserQueryKey, user)
-    expect(result.current.location.pathname).toBe('/dashboard')
+    expect(result.current.location.pathname).toBe('/today')
   })
 
   it('waits for the CSRF seed query before calling register', async () => {

@@ -8,6 +8,29 @@ const TASK_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'] as const satisfies readonly Ta
 
 const WORK_OUTCOMES = ['DONE', 'PARTLY_DONE', 'SKIPPED'] as const
 
+export const loginSchema = z.object({
+  username: z.string().trim().min(1, 'Enter your username.'),
+  password: z.string().min(1, 'Enter your password.'),
+})
+
+export const registerSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Enter your email.')
+    .pipe(z.email('Use an email like name@example.com.')),
+  username: z
+    .string()
+    .trim()
+    .min(1, 'Enter a username.')
+    .min(3, 'Use at least 3 characters.')
+    .max(30, 'Use at most 30 characters.'),
+  password: z
+    .string()
+    .min(1, 'Enter your password.')
+    .min(8, 'Use at least 8 characters.'),
+})
+
 export const timeSchema = z.string().refine(
   (value) => value.trim() === '' || parseTimeInput(value) !== null,
   'Enter a valid time (HH:MM)',
@@ -200,6 +223,8 @@ export const settingsSchema = z
     }
   })
 
+export type LoginFormValues = z.infer<typeof loginSchema>
+export type RegisterFormValues = z.infer<typeof registerSchema>
 export type TaskFormValues = z.infer<typeof taskFormSchema>
 export type CommitmentFormValues = z.infer<typeof commitmentSchema>
 export type OutcomeFormValues = z.infer<typeof outcomeSchema>
