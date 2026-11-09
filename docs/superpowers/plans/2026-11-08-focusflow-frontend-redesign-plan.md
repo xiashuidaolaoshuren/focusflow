@@ -151,7 +151,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T1 — Tokens, strict TypeScript, and generated API types
 
-- [ ] **Do:** Make the app compile under strict TypeScript against generated OpenAPI types, and make `index.css` the approved token sheet.
+- [x] **Do:** Make the app compile under strict TypeScript against generated OpenAPI types, and make `index.css` the approved token sheet.
 - **Consumes:** `docs/openapi.yaml`, `docs/design/tokens.css`.
 - **Produces:** `frontend/src/types/api.generated.ts`; `api.ts` re-exports the same DTO names features already import; `npm run openapi:types` and `npm run typecheck`; token variables from the design contract on `:root` and `.dark`.
 - **Acceptance:** `npm run typecheck` passes with `strict`, `noUncheckedIndexedAccess`, and `exactOptionalPropertyTypes`. Regenerating types produces no diff. Existing feature imports of `TaskResponse` and `DailyPlanResponse` still resolve. Light and dark CSS variables match `docs/design/tokens.css`, including `--now`, `--block-work`, and the deadline tokens. No feature file gains a raw hex.
@@ -164,7 +164,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T2 — HTTP client and shared query map
 
-- [ ] **Do:** Give every feature one query-key module, and teach the HTTP client to time out and to surface a 401 without each caller handling it.
+- [x] **Do:** Give every feature one query-key module, and teach the HTTP client to time out and to surface a 401 without each caller handling it.
 - **Consumes:** `ApiError` and `apiRequest` from T1's still-intact client; the query keys currently exported by each feature's `hooks.ts`.
 - **Produces:** `lib/query.ts` with `tasksQueryKey`, `planByDateQueryKey`, `planDetailQueryKey`, `plansListQueryPrefix`, `horizonQueryPrefix`, `schedulingPreferencesQueryKey`, `commitmentsQueryKey`, and `invalidatePlanQueries(queryClient, plan)`. `onUnauthorized(handler)` on the client.
 - **Acceptance:** A 401 response invokes the registered handler once and still throws `ApiError`. A request passes `AbortSignal` through to `fetch`. An in-flight request aborts at 15 seconds. `invalidatePlanQueries` still invalidates the by-date plan, the plan list, the plan detail, the task list, and the horizon. No feature hook imports a query key from another feature.
@@ -176,7 +176,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T3 — Formatters, Field, DateField, and TimeField
 
-- [ ] **Do:** Replace duplicated field chrome and locale-native date/time inputs with one Field and two English controls.
+- [x] **Do:** Replace duplicated field chrome and locale-native date/time inputs with one Field and two English controls.
 - **Consumes:** `ApiError.details` from T2. Design type scale and radius from T1.
 - **Produces:** `formatClock(time) => "09:00"`, `formatDuration(minutes) => "50m" | "2h" | "5h 4m"`, `formatDateLabel(iso) => "6 Nov 2026"`. `Field`, `DateField` (value `YYYY-MM-DD`), `TimeField` (value `HH:MM`). Zod schemas for task, commitment, outcome, and settings.
 - **Acceptance:** `formatDuration(304)` is `5h 4m`, not `5h 04m`. `formatDuration(120)` is `2h`. `formatDuration(0)` is `0m`. `DateField` shows `6 Nov 2026`, writes `2026-11-06`, and has no `<input type="date">`. `TimeField` accepts `1745` as `17:45`, rejects `25:00`, and has no `<input type="time">`. `Field` renders the first `details[name]` string. Calendar month names are English regardless of the test locale.
@@ -357,3 +357,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | Date | Change | Kind |
 |------|--------|------|
 | 2026-11-08 | Initial plan. Locked routes, content width, date control, and self-hosted fonts from the spec's open decisions. | — |
+| 2026-11-09 | T3: `zod` added in T3; `react-hook-form` + `@hookform/resolvers` deferred to T4; `Field` extended additively; local `getFieldError` copies removed per migrating slice (T4/T6/T8/T11). | equivalent |

@@ -1,7 +1,8 @@
-import { useMemo } from "react"
+import { useId, useMemo, type ReactNode } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
+import { ApiError } from "@/lib/api"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
@@ -67,19 +68,100 @@ const fieldVariants = cva(
   }
 )
 
+export function getFieldError(
+  error: unknown,
+  fieldName: string,
+): string | undefined {
+  if (!(error instanceof ApiError) || !error.details) {
+    return undefined
+  }
+  return error.details[fieldName]?.[0]
+}
+
+type FieldControlProps = {
+  id: string
+  'aria-invalid'?: boolean
+  'aria-describedby'?: string
+}
+
+type FieldProps = Omit<React.ComponentProps<"div">, "children"> &
+  VariantProps<typeof fieldVariants> & {
+    label?: ReactNode
+    name?: string
+    error?: string
+    apiError?: unknown
+    description?: ReactNode
+    id?: string
+    children?: ReactNode | ((control: FieldControlProps) => ReactNode)
+  }
+
 function Field({
   className,
   orientation = "vertical",
+  label,
+  name,
+  error,
+  apiError,
+  description,
+  id: idProp,
+  children,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: FieldProps) {
+  const generatedId = useId()
+  const controlId = idProp ?? `${generatedId}-control`
+  const apiMessage = name ? getFieldError(apiError, name) : undefined
+  const message = error ?? apiMessage
+  const errorId = message ? `${controlId}-error` : undefined
+  const useEnhancedChrome =
+    label != null ||
+    name != null ||
+    error != null ||
+    apiError != null ||
+    description != null ||
+    typeof children === "function"
+
+  if (!useEnhancedChrome) {
+    return (
+      <div
+        role="group"
+        data-slot="field"
+        data-orientation={orientation}
+        className={cn(fieldVariants({ orientation }), className)}
+        {...props}
+      >
+        {children as ReactNode}
+      </div>
+    )
+  }
+
+  const controlProps: FieldControlProps = {
+    id: controlId,
+    ...(message && errorId
+      ? { "aria-invalid": true as const, "aria-describedby": errorId }
+      : {}),
+  }
+
+  const control =
+    typeof children === "function" ? children(controlProps) : children
+
   return (
     <div
       role="group"
       data-slot="field"
       data-orientation={orientation}
+      data-invalid={message ? true : undefined}
       className={cn(fieldVariants({ orientation }), className)}
       {...props}
-    />
+    >
+      {label != null ? (
+        <FieldLabel htmlFor={controlId}>{label}</FieldLabel>
+      ) : null}
+      {control}
+      {description != null ? (
+        <FieldDescription>{description}</FieldDescription>
+      ) : null}
+      {message != null ? <FieldError id={errorId}>{message}</FieldError> : null}
+    </div>
   )
 }
 
