@@ -178,11 +178,14 @@ export function TaskForm({ onSuccess, onEffortConflict, task }: TaskFormProps) {
           ? { effortVersion: task.effortVersion }
           : {}),
       }
-      updateMutation.mutate({ id: task.id, request }, { onSuccess })
+      updateMutation.mutate(
+        { id: task.id, request },
+        onSuccess ? { onSuccess } : undefined,
+      )
       return
     }
 
-    createMutation.mutate(payload, { onSuccess })
+    createMutation.mutate(payload, onSuccess ? { onSuccess } : undefined)
   }
 
   return (

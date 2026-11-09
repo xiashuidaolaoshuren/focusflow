@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { DailyPlanView } from '@/features/plans/DailyPlanView'

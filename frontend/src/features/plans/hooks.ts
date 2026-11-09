@@ -15,46 +15,24 @@ import {
   recordBlockProgress,
   replanDailyPlan,
 } from '@/features/plans/api'
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { isPlanRefetchConflict } from '@/features/plans/planConflicts'
-import { tasksQueryKey } from '@/features/tasks/hooks'
+import {
+  horizonQueryPrefix,
+  invalidatePlanQueries,
+  planByDateQueryKey,
+  planDetailQueryKey,
+  plansByDateQueryPrefix,
+  plansDetailQueryPrefix,
+  plansListQueryPrefix,
+  plansQueryKey,
+  tasksQueryKey,
+} from '@/lib/query'
 import type {
   BlockProgressRequest,
-  DailyPlanResponse,
   GeneratePlanRequest,
   ReplanRequest,
   UnplannedWorkRequest,
 } from '@/types/api'
-
-export const plansByDateQueryPrefix = ['plans', 'by-date'] as const
-export const plansListQueryPrefix = ['plans', 'list'] as const
-export const plansDetailQueryPrefix = ['plans', 'detail'] as const
-
-export function planByDateQueryKey(planDate: string) {
-  return [...plansByDateQueryPrefix, planDate] as const
-}
-
-export function plansQueryKey(page: number, size: number) {
-  return [...plansListQueryPrefix, page, size] as const
-}
-
-export function planDetailQueryKey(id: number) {
-  return [...plansDetailQueryPrefix, id] as const
-}
-
-/** Refetches every view of a plan plus the task list that shares its effort state. */
-export function invalidatePlanQueries(
-  queryClient: QueryClient,
-  plan: Pick<DailyPlanResponse, 'id' | 'planDate'>,
-) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: planByDateQueryKey(plan.planDate) }),
-    queryClient.invalidateQueries({ queryKey: plansListQueryPrefix }),
-    queryClient.invalidateQueries({ queryKey: planDetailQueryKey(plan.id) }),
-    queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
-    queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
-  ])
-}
 
 /**
  * A conflicting write cannot name the plan it lost, so every plan view refetches and the newer

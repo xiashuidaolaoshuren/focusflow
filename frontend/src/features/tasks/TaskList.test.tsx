@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 import { ApiError } from '@/lib/api'
@@ -66,7 +67,7 @@ function renderTaskList(
         <TaskList
           onEditTask={onEditTask}
           onCreateTask={onCreateTask}
-          planningDate={planningDate}
+          {...(planningDate !== undefined ? { planningDate } : {})}
         />
       </QueryClientProvider>,
     ),

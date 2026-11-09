@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { plansListQueryPrefix } from '@/features/plans/hooks'
+import { plansListQueryPrefix } from '@/lib/query'
 import { samplePlan } from '@/features/plans/planFixtures'
 import { PlanDetailPage } from '@/routes/PlanDetailPage'
 import { ApiError } from '@/lib/api'

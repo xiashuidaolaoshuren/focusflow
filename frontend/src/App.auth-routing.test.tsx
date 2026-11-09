@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -29,8 +30,6 @@ vi.mock('@/features/preferences/api', () => ({
 
 vi.mock('@/features/horizon/hooks', () => ({
   useHorizon: vi.fn(),
-  horizonQueryPrefix: ['horizon'],
-  horizonQueryKey: vi.fn(),
 }))
 
 import { getCurrentUser } from '@/features/auth/api'

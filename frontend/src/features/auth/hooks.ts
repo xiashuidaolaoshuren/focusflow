@@ -2,9 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
 import { getCurrentUser, login, logout, register } from '@/features/auth/api'
+import { currentUserQueryKey } from '@/lib/query'
 import type { LoginRequest, RegisterRequest } from '@/types/api'
-
-export const currentUserQueryKey = ['auth', 'me'] as const
 
 export function useCurrentUser() {
   const query = useQuery({

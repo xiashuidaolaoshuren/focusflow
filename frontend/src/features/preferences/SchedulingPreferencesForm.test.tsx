@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SchedulingPreferencesForm } from '@/features/preferences/SchedulingPreferencesForm'
@@ -196,16 +197,16 @@ describe('SchedulingPreferencesForm save', () => {
     fireEvent.click(screen.getByRole('button', { name: /add break/i }))
 
     const breakRows = screen.getAllByLabelText(/^label$/i)
-    const latestBreakLabel = breakRows[breakRows.length - 1]
+    const latestBreakLabel = breakRows[breakRows.length - 1]!
     fireEvent.change(latestBreakLabel, { target: { value: 'Tea' } })
 
     const startInputs = screen.getAllByLabelText(/^start$/i)
-    fireEvent.change(startInputs[startInputs.length - 1], {
+    fireEvent.change(startInputs[startInputs.length - 1]!, {
       target: { value: '16:00' },
     })
 
     const endInputs = screen.getAllByLabelText(/^end$/i)
-    fireEvent.change(endInputs[endInputs.length - 1], {
+    fireEvent.change(endInputs[endInputs.length - 1]!, {
       target: { value: '16:15' },
     })
 

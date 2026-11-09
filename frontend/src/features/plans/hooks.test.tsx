@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -7,14 +8,7 @@ import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
 import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
-  planByDateQueryKey,
-  planDetailQueryKey,
-  plansByDateQueryPrefix,
-  plansDetailQueryPrefix,
-  plansListQueryPrefix,
-  plansQueryKey,
   useDeletePlan,
   useGeneratePlan,
   usePlan,
@@ -23,7 +17,16 @@ import {
   useRecordBlockProgress,
   useReplan,
 } from '@/features/plans/hooks'
-import { tasksQueryKey } from '@/features/tasks/hooks'
+import {
+  horizonQueryPrefix,
+  planByDateQueryKey,
+  planDetailQueryKey,
+  plansByDateQueryPrefix,
+  plansDetailQueryPrefix,
+  plansListQueryPrefix,
+  plansQueryKey,
+  tasksQueryKey,
+} from '@/lib/query'
 import { markRegeneratePromptNeeded, useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
 
 vi.mock('@/features/plans/api', () => ({

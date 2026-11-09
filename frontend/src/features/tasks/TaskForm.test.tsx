@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider, useIsMutating } from '@tanstack/react-query'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TaskForm, TaskFormSubmitButton } from '@/features/tasks/TaskForm'
@@ -62,7 +63,7 @@ function renderTaskForm(
       <TaskForm
         onSuccess={onSuccess}
         onEffortConflict={onEffortConflict}
-        task={task}
+        {...(task !== undefined ? { task } : {})}
       />
       <TaskFormSubmitButton isEditMode={task != null} />
     </QueryClientProvider>,
@@ -81,7 +82,7 @@ function renderTaskForm(
           <TaskForm
             onSuccess={nextOnSuccess}
             onEffortConflict={nextOnEffortConflict}
-            task={nextTask}
+            {...(nextTask !== undefined ? { task: nextTask } : {})}
           />
           <TaskFormSubmitButton isEditMode={nextTask != null} />
         </QueryClientProvider>,

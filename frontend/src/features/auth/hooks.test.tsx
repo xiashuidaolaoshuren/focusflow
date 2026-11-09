@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, useLocation } from 'react-router-dom'
@@ -7,12 +8,12 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import type { UserResponse } from '@/types/api'
 
 import {
-  currentUserQueryKey,
   useCurrentUser,
   useLogin,
   useLogout,
   useRegister,
 } from '@/features/auth/hooks'
+import { currentUserQueryKey } from '@/lib/query'
 
 vi.mock('@/features/auth/api', () => ({
   getCurrentUser: vi.fn(),

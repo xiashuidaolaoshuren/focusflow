@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPlanById } from '@/features/plans/api'
-import { planDetailQueryKey } from '@/features/plans/hooks'
+import { planDetailQueryKey } from '@/lib/query'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { useHorizon } from '@/features/horizon/hooks'
 import {

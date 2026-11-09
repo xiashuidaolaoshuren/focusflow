@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { HorizonPage } from '@/features/horizon/HorizonPage'
@@ -109,20 +110,22 @@ function renderHorizonPage() {
   )
 }
 
+const horizonDay0 = horizon.days[0]!
+const horizonDay1 = horizon.days[1]!
+const horizonTask0 = horizon.tasks[0]!
+const conflictedDay0 = { ...horizonDay0, dependenciesIgnored: [10] }
+
 const conflictedHorizon: HorizonResponse = {
   ...horizon,
-  days: [
-    { ...horizon.days[0], dependenciesIgnored: [10] },
-    horizon.days[1],
-  ],
+  days: [conflictedDay0, horizonDay1],
   tasks: [
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       waitingOn: [{ taskId: 2, title: 'Blocker' }],
       upstreamBlockers: [{ taskId: 3, title: 'Upstream' }],
     },
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       taskId: 2,
       title: 'Blocker',
       deadlineStatus: null,
@@ -131,7 +134,7 @@ const conflictedHorizon: HorizonResponse = {
       segments: [],
     },
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       taskId: 3,
       title: 'Upstream',
       deadlineStatus: null,
@@ -219,7 +222,7 @@ describe('HorizonPage', () => {
 
     expect(screen.getByText(HORIZON_PACE_COPY)).toBeInTheDocument()
     expect(
-      screen.getByText(savedConflictCopy(conflictedHorizon.days[0]) as string),
+      screen.getByText(savedConflictCopy(conflictedDay0) as string),
     ).toBeInTheDocument()
   })
 

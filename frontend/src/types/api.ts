@@ -1,5 +1,7 @@
 /** Frontend API contracts mirrored from Milestone 1 backend DTOs. */
 
+import type { components } from './api.generated'
+
 /** Mirrors `com.focusflow.common.error.ApiErrorResponse` */
 export type ApiErrorResponse = {
   timestamp?: string
@@ -467,3 +469,84 @@ export type HorizonResponse = {
   days: HorizonDayResponse[]
   tasks: HorizonTaskRowResponse[]
 }
+
+type Schemas = components['schemas']
+
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+  ? true
+  : false
+
+type Expect<T extends true> = T
+
+type FieldsMatch<App, SchemaName extends keyof Schemas> = Equal<keyof App, keyof Schemas[SchemaName]>
+
+type EnumScalarMatch<
+  App extends string,
+  SchemaName extends keyof Schemas,
+  Field extends keyof Schemas[SchemaName],
+> = Equal<App, NonNullable<Schemas[SchemaName][Field]>>
+
+type WorkingDayMember = NonNullable<
+  Schemas['SchedulingPreferencesRequest']['workingDays']
+>[number]
+
+type CreditExclusionMember = NonNullable<
+  Schemas['SegmentResponse']['creditExclusions']
+>[number]
+
+type PageContract = FieldsMatch<
+  PageResponse<DailyPlanSummaryResponse>,
+  'PageResponseDailyPlanSummaryResponse'
+>
+
+/** Field keys on app DTOs must match OpenAPI component schema keys (namespaced horizon types map to flat schema names). */
+export type ApiContractChecks = Expect<
+  FieldsMatch<AddBlockerRequest, 'AddBlockerRequest'> &
+    FieldsMatch<BlockProgressRequest, 'BlockProgressRequest'> &
+    FieldsMatch<BlockProgressResponse, 'BlockProgressResponse'> &
+    FieldsMatch<CommitmentRequest, 'CommitmentRequest'> &
+    FieldsMatch<CommitmentResponse, 'CommitmentResponse'> &
+    FieldsMatch<CreateTaskRequest, 'CreateTaskRequest'> &
+    FieldsMatch<DailyPlanResponse, 'DailyPlanResponse'> &
+    FieldsMatch<DailyPlanSummaryResponse, 'DailyPlanSummaryResponse'> &
+    FieldsMatch<DailyPlanWarning, 'DailyPlanWarning'> &
+    FieldsMatch<FixedBreakRequest, 'FixedBreakRequest'> &
+    FieldsMatch<FixedBreakResponse, 'FixedBreakResponse'> &
+    FieldsMatch<GeneratePlanRequest, 'GeneratePlanRequest'> &
+    FieldsMatch<HorizonResponse, 'HorizonResponse'> &
+    FieldsMatch<LoginRequest, 'LoginRequest'> &
+    FieldsMatch<PlanRevisionResponse, 'PlanRevisionResponse'> &
+    FieldsMatch<RegisterRequest, 'RegisterRequest'> &
+    FieldsMatch<RemainingEffortRequest, 'RemainingEffortRequest'> &
+    FieldsMatch<ReplanRequest, 'ReplanRequest'> &
+    FieldsMatch<SchedulingPreferencesRequest, 'SchedulingPreferencesRequest'> &
+    FieldsMatch<SchedulingPreferencesResponse, 'SchedulingPreferencesResponse'> &
+    FieldsMatch<TaskEffortVersion, 'TaskEffortVersion'> &
+    FieldsMatch<TaskLinkResponse, 'TaskLinkResponse'> &
+    FieldsMatch<TaskResponse, 'TaskResponse'> &
+    FieldsMatch<TaskSnapshotResponse, 'TaskSnapshotResponse'> &
+    FieldsMatch<UnplacedWorkResponse, 'UnplacedWorkResponse'> &
+    FieldsMatch<UnplannedWorkRequest, 'UnplannedWorkRequest'> &
+    FieldsMatch<UnplannedWorkResponse, 'UnplannedWorkResponse'> &
+    FieldsMatch<UpdateTaskRequest, 'UpdateTaskRequest'> &
+    FieldsMatch<UserResponse, 'UserResponse'> &
+    FieldsMatch<HorizonAssumptions, 'Assumptions'> &
+    FieldsMatch<HorizonDayResponse, 'DayResponse'> &
+    FieldsMatch<HorizonDependencyRef, 'DependencyRef'> &
+    FieldsMatch<HorizonSegmentResponse, 'SegmentResponse'> &
+    FieldsMatch<HorizonTaskRowResponse, 'TaskRowResponse'> &
+    FieldsMatch<WorkBlockResponse, 'ScheduledBlockResponse'> &
+    FieldsMatch<LabelledBlockResponse, 'ScheduledBlockResponse'> &
+    PageContract &
+    EnumScalarMatch<TaskPriority, 'TaskResponse', 'priority'> &
+    EnumScalarMatch<TaskStatus, 'TaskResponse', 'status'> &
+    Equal<DayOfWeek, WorkingDayMember> &
+    EnumScalarMatch<BlockKind, 'ScheduledBlockResponse', 'kind'> &
+    EnumScalarMatch<UnplacedReason, 'UnplacedWorkResponse', 'reason'> &
+    EnumScalarMatch<WorkOutcome, 'BlockProgressRequest', 'outcome'> &
+    EnumScalarMatch<BlockDisplayState, 'ScheduledBlockResponse', 'displayState'> &
+    EnumScalarMatch<HorizonDayKind, 'DayResponse', 'kind'> &
+    EnumScalarMatch<DeadlineStatus, 'TaskRowResponse', 'deadlineStatus'> &
+    Equal<CreditExclusion, CreditExclusionMember> &
+    EnumScalarMatch<HorizonUnplacedScope, 'SegmentResponse', 'unplacedScope'>
+>
