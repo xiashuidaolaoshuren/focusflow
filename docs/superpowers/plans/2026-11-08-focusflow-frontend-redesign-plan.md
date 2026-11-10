@@ -225,7 +225,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T6 — Plan actions, plan health, and work sessions
 
-- [ ] **Do:** Enforce generate, regenerate, and re-plan visibility, and stop describing unrecorded sessions as recorded.
+- [x] **Do:** Enforce generate, regenerate, and re-plan visibility, and stop describing unrecorded sessions as recorded.
 - **Consumes:** `planHasProgress` and `replanErrorMessage` from `planConflicts.ts`. `DayRail` from T5.
 - **Produces:** `PlanActions`, `PlanHealth`, `WorkSessions`.
 - **Acceptance:** `plan === null` renders Generate and renders no Plan health. A plan with no outcome renders Regenerate. A plan with any outcome renders Re-plan and does not render Regenerate. A past date renders neither. `WorkSessions` puts a block with an outcome under Recorded, a block with no outcome under Not recorded, and `NO_LONGER_NEEDED` under No longer needed. Needs refresh is an alert with a Re-plan action, not a paragraph.
@@ -373,3 +373,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | 2026-11-09 | T3: `zod` added in T3; `react-hook-form` + `@hookform/resolvers` deferred to T4; `Field` extended additively; local `getFieldError` copies removed per migrating slice (T4/T6/T8/T11). | equivalent |
 | 2026-11-09 | T4b added after comparing T1–T4 with the prototype: `--scrim`/`--skeleton`, primitive chrome, shell footer, collapse rail, brand mark, auth card, shell 404, document titles. No route or API change. | equivalent |
 | 2026-11-09 | T5: `buildRail` also returns hairlines, hour marks (with a near-now flag), peak window, total height and now minute, and renders from `composedRail`. `RailOutcome` shared by `DayRail` and `AgendaList`. Prototype "Overlaps" state dropped (no API field). No route or API change. | equivalent |
+| 2026-11-09 | T6: Re-plan runs on click with no confirm dialog (only Regenerate confirms); a plan-changing 409 (`PLAN_EXISTS`, `PLAN_CHANGED`, `PLAN_HAS_PROGRESS`) refetches and shows the conflict alert instead of the old replace dialog. Pure modules are `planActionRules.ts`, `planHealthModel.ts`, `workSessionsModel.ts` because Windows resolves `PlanHealth` to `planHealth.ts`; `planHealth` also feeds the T7 Shortfall stat and `WorkSessions` serves T9. No route or API change. | equivalent |

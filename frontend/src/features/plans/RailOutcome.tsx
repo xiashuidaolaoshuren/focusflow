@@ -32,7 +32,13 @@ const TONE_CLASSES: Record<OutcomeTone, string> = {
   commitment: 'text-block-commitment',
 }
 
-export function RailOutcome({ outcome }: { outcome: OutcomeView }) {
+export function RailOutcome({
+  outcome,
+  iconOnly = false,
+}: {
+  outcome: OutcomeView
+  iconOnly?: boolean
+}) {
   const Icon = ICONS[outcome.tone]
 
   return (
@@ -43,7 +49,7 @@ export function RailOutcome({ outcome }: { outcome: OutcomeView }) {
       )}
     >
       <Icon className="size-3.5" aria-hidden="true" />
-      {outcome.text}
+      {iconOnly ? null : outcome.text}
     </span>
   )
 }
