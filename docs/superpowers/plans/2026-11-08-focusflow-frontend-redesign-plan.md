@@ -213,7 +213,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T5 — Day rail model and views
 
-- [ ] **Do:** Render one plan as a desktop rail and a mobile agenda that share a pure block model.
+- [x] **Do:** Render one plan as a desktop rail and a mobile agenda that share a pure block model.
 - **Consumes:** `DailyPlanResponse`, `parseScheduledBlock`, `formatClock`, `formatDuration`.
 - **Produces:** `buildRail(plan, nowMinutes, density)` returning blocks with `kind`, `topPx`, `heightPx`, `label`, `outcome`, and `sessionLabel`. `DayRail` and `AgendaList`.
 - **Acceptance:** A sample day produces one node per block kind: Work, Cadence break, Fixed break, Commitment, Trailing buffer. Work blocks include the task title and `session 2 of 3` when split. A 15-minute block still exposes its title to assistive tech. The now-line position matches the supplied minute. Compact density uses a smaller px-per-minute than comfortable and does not change the block count. Agenda order matches rail order.
@@ -372,3 +372,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | 2026-11-08 | Initial plan. Locked routes, content width, date control, and self-hosted fonts from the spec's open decisions. | — |
 | 2026-11-09 | T3: `zod` added in T3; `react-hook-form` + `@hookform/resolvers` deferred to T4; `Field` extended additively; local `getFieldError` copies removed per migrating slice (T4/T6/T8/T11). | equivalent |
 | 2026-11-09 | T4b added after comparing T1–T4 with the prototype: `--scrim`/`--skeleton`, primitive chrome, shell footer, collapse rail, brand mark, auth card, shell 404, document titles. No route or API change. | equivalent |
+| 2026-11-09 | T5: `buildRail` also returns hairlines, hour marks (with a near-now flag), peak window, total height and now minute, and renders from `composedRail`. `RailOutcome` shared by `DayRail` and `AgendaList`. Prototype "Overlaps" state dropped (no API field). No route or API change. | equivalent |
