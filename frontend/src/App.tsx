@@ -17,6 +17,11 @@ const DashboardPage = lazy(() =>
     default: module.DashboardPage,
   })),
 )
+const TodayPage = lazy(() =>
+  import('@/routes/TodayPage').then((module) => ({
+    default: module.TodayPage,
+  })),
+)
 const LoginPage = lazy(() =>
   import('@/routes/LoginPage').then((module) => ({
     default: module.LoginPage,
@@ -113,7 +118,7 @@ function App() {
 
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
-              <Route path="/today" element={<DashboardPage />} />
+              <Route path="/today" element={<TodayPage />} />
               <Route path="/tasks" element={<DashboardPage />} />
               <Route path="/dashboard" element={<DashboardRedirect />} />
               <Route path="/plans" element={<PlanHistoryPage />} />

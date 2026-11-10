@@ -7,7 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '@/App'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { formatDateLabel } from '@/lib/format'
+import { getLocalDateString } from '@/lib/planningDate'
 import type { SchedulingPreferencesResponse, UserResponse } from '@/types/api'
+
+const todayHeading = formatDateLabel(getLocalDateString())
 
 vi.mock('@/features/auth/api', () => ({
   getCurrentUser: vi.fn(),
@@ -31,6 +35,23 @@ vi.mock('@/features/preferences/api', () => ({
 vi.mock('@/features/horizon/hooks', () => ({
   useHorizon: vi.fn(),
 }))
+
+vi.mock('@/features/plans/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/plans/api')>()
+  return {
+    ...actual,
+    getPlanByDate: vi.fn(async () => null),
+  }
+})
+
+vi.mock('@/features/commitments/api', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/features/commitments/api')>()
+  return {
+    ...actual,
+    listCommitments: vi.fn(async () => []),
+  }
+})
 
 import { getCurrentUser } from '@/features/auth/api'
 import { useHorizon } from '@/features/horizon/hooks'
@@ -141,7 +162,7 @@ describe('App auth routing', () => {
         screen.getByRole('button', { name: /sign in/i }),
       ).toBeInTheDocument()
     })
-    expect(screen.queryByRole('heading', { name: /^tasks$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: todayHeading })).not.toBeInTheDocument()
   })
 
   it('allows authenticated users to access /today', async () => {
@@ -154,8 +175,12 @@ describe('App auth routing', () => {
     renderApp('/today')
 
     await waitForApp(() => {
-      expect(screen.getByRole('heading', { name: /^tasks$/i })).toBeInTheDocument()
-      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: todayHeading }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('region', { name: /today at a glance/i }),
+      ).toBeInTheDocument()
     })
     expect(
       screen.queryByRole('button', { name: /sign in/i }),
@@ -173,7 +198,9 @@ describe('App auth routing', () => {
     renderApp('/today')
 
     expect(screen.getByRole('status')).toHaveTextContent(/loading session/i)
-    expect(screen.queryByRole('heading', { name: /^tasks$/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: todayHeading }),
+    ).not.toBeInTheDocument()
 
     resolveUser({
       id: 1,
@@ -182,8 +209,9 @@ describe('App auth routing', () => {
     })
 
     await waitForApp(() => {
-      expect(screen.getByRole('heading', { name: /^tasks$/i })).toBeInTheDocument()
-      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
+      expect(
+        screen.getByRole('heading', { name: todayHeading }),
+      ).toBeInTheDocument()
     })
     expect(screen.queryByText(/loading session/i)).not.toBeInTheDocument()
   })
@@ -285,7 +313,7 @@ describe('App auth routing', () => {
 
     await waitForApp(() => {
       expect(
-        screen.getByRole('heading', { name: /^tasks$/i }),
+        screen.getByRole('heading', { name: todayHeading }),
       ).toBeInTheDocument()
     })
   })

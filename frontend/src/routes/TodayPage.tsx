@@ -1,0 +1,300 @@
+import { useEffect, useState, type ReactNode } from 'react'
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
+
+import { Skeleton } from '@/components/ui/skeleton'
+import { CommitmentList } from '@/features/commitments/CommitmentList'
+import { AgendaList } from '@/features/plans/AgendaList'
+import { DayRail } from '@/features/plans/DayRail'
+import { PlanActions } from '@/features/plans/PlanActions'
+import { PlanHealth } from '@/features/plans/PlanHealth'
+import { StatsStrip } from '@/features/plans/StatsStrip'
+import { usePlanByDate } from '@/features/plans/hooks'
+import { useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
+import {
+  buildRail,
+  toMinutes,
+  type Density,
+} from '@/features/plans/railModel'
+import { todayStats } from '@/features/plans/todayStats'
+import { useReplanPlan } from '@/features/plans/useReplanPlan'
+import { useSchedulingPreferences } from '@/features/preferences/hooks'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
+import {
+  getLocalDateString,
+  getLocalTimeString,
+  resolvePlanningDate,
+} from '@/lib/planningDate'
+import { cn } from '@/lib/utils'
+
+const CLOCK_TICK_MS = 60_000
+
+const DENSITIES: { value: Density; label: string }[] = [
+  { value: 'comfortable', label: 'Comfortable' },
+  { value: 'compact', label: 'Compact' },
+]
+
+function Panel({
+  title,
+  action,
+  children,
+  bodyClassName,
+}: {
+  title: string
+  action?: ReactNode
+  children: ReactNode
+  bodyClassName?: string
+}) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="flex min-h-12 items-center gap-2 border-b border-border px-4 py-2">
+        <h2 className="text-base leading-5 font-semibold">{title}</h2>
+        {action}
+      </div>
+      <div className={bodyClassName}>{children}</div>
+    </section>
+  )
+}
+
+function RailSkeleton() {
+  return (
+    <div role="status" aria-label="Loading plan" className="flex flex-col gap-2 p-4">
+      {[64, 96, 48, 80].map((height) => (
+        <Skeleton key={height} className="w-full rounded-md" style={{ height }} />
+      ))}
+    </div>
+  )
+}
+
+/** The day before `iso`, computed in local time through the existing date helper. */
+function previousDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  return getLocalDateString(new Date(year!, month! - 1, day! - 1))
+}
+
+/**
+ * Today: the planning date in the query, the plan for that date, and the rail that explains it.
+ */
+export function TodayPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const planDate = resolvePlanningDate(searchParams.get('date'))
+  const today = getLocalDateString()
+  const { plan, hasPlan, isPending, isError, refetch } = usePlanByDate(planDate)
+  const { preferences } = useSchedulingPreferences()
+  const { needed: regenerateNeeded, dismiss: dismissRegeneratePrompt } =
+    useRegeneratePrompt()
+  const replan = useReplanPlan(plan)
+  const isMobile = useIsMobile()
+  const [density, setDensity] = useState<Density>('comfortable')
+  const [nowMinutes, setNowMinutes] = useState(() =>
+    toMinutes(getLocalTimeString()),
+  )
+  const stats = todayStats(plan, planDate, today, nowMinutes)
+  const rail =
+    plan != null
+      ? buildRail(plan, planDate === today ? nowMinutes : null, density)
+      : null
+  const settled = !isPending && !isError
+  const replayedAt = plan?.revisions.at(-1)?.cutoff ?? null
+
+  useEffect(() => {
+    if (planDate !== today) {
+      return
+    }
+    const id = setInterval(() => {
+      setNowMinutes(toMinutes(getLocalTimeString()))
+    }, CLOCK_TICK_MS)
+    return () => clearInterval(id)
+  }, [planDate, today])
+
+  useEffect(() => {
+    if (searchParams.get('date') !== planDate) {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.set('date', planDate)
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [planDate, searchParams, setSearchParams])
+
+  function goToDate(next: string) {
+    const nextParams = new URLSearchParams(searchParams)
+    nextParams.set('date', next)
+    setSearchParams(nextParams)
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
+            Daily plan
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label={`Previous day: ${formatDateLabel(previousDate(planDate))}`}
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={() => goToDate(previousDate(planDate))}
+            >
+              <ChevronLeftIcon className="size-4" aria-hidden="true" />
+            </button>
+            <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
+              {formatDateLabel(planDate)}
+            </h1>
+            <button
+              type="button"
+              disabled
+              aria-label="Next day (see Horizon)"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            >
+              <ChevronRightIcon className="size-4" aria-hidden="true" />
+            </button>
+          </div>
+          <p className="text-sm leading-5 text-muted-foreground">
+            {preferences != null ? (
+              <>
+                Work window{' '}
+                <span className="font-mono text-xs text-foreground">
+                  {formatClock(preferences.workDayStart)}&ndash;
+                  {formatClock(preferences.workDayEnd)}
+                </span>{' '}
+                &middot; Trailing buffer{' '}
+                <span className="font-mono text-xs text-foreground">
+                  {formatDuration(preferences.bufferMinutes)}
+                </span>
+              </>
+            ) : null}
+            {hasPlan ? (
+              <>
+                {preferences != null ? ' · ' : null}
+                {replayedAt != null ? (
+                  <>
+                    Re-planned{' '}
+                    <span className="font-mono text-xs text-foreground">
+                      {formatClock(replayedAt)}
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {preferences != null ? ' · ' : null}
+                No Daily plan yet
+              </>
+            )}
+            {planDate === today ? null : (
+              <> · {planDate < today ? 'Past day · read-only' : 'Upcoming day'}</>
+            )}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <fieldset
+            aria-label="Rail density"
+            className="inline-flex h-8 flex-none items-center gap-0.5 rounded-md border border-input bg-card p-0.5"
+          >
+            {DENSITIES.map((option) => {
+              const active = density === option.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  className={cn(
+                    'inline-flex h-full items-center rounded px-2.5 text-sm font-medium tracking-[0.02em] whitespace-nowrap outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                    active
+                      ? 'bg-accent text-foreground ring-1 ring-primary ring-inset'
+                      : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                  )}
+                  onClick={() => setDensity(option.value)}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </fieldset>
+          {settled ? (
+            <PlanActions
+              plan={plan}
+              planDate={planDate}
+              today={today}
+              replan={replan}
+            />
+          ) : null}
+        </div>
+      </header>
+
+      <StatsStrip stats={stats} />
+
+      <div className="grid items-start gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
+        <Panel
+          title="Day rail"
+          action={
+            plan?.peakStart != null && plan.peakEnd != null ? (
+              <span className="inline-flex items-center gap-1.5 text-xs tracking-[0.01em] whitespace-nowrap text-muted-foreground">
+                <span
+                  aria-hidden="true"
+                  className="h-3.5 w-[3px] rounded-sm bg-peak-edge"
+                />
+                <span>Peak window</span>
+                <span className="font-mono text-foreground">
+                  {formatClock(plan.peakStart)}&ndash;{formatClock(plan.peakEnd)}
+                </span>
+              </span>
+            ) : null
+          }
+        >
+          {isPending ? <RailSkeleton /> : null}
+          {isError ? (
+            <div role="alert" className="flex items-center gap-3 p-4 text-sm">
+              <span>Today could not be loaded.</span>
+              <button type="button" className="underline" onClick={() => refetch()}>
+                Retry
+              </button>
+            </div>
+          ) : null}
+          {settled && rail != null
+            ? isMobile
+              ? <AgendaList rail={rail} />
+              : <DayRail rail={rail} />
+            : null}
+          {settled && plan == null ? (
+            <div className="p-4">
+              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-input bg-card p-6 text-center">
+                <p className="font-display text-lg leading-7 font-medium">
+                  No Daily plan yet
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Generate a plan to place today&rsquo;s work on the rail.
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </Panel>
+
+        <div className="flex flex-col gap-4">
+          {settled && regenerateNeeded && hasPlan ? (
+            <div
+              role="status"
+              className="flex items-center justify-between gap-3 rounded-md border border-input bg-card px-3 py-2 text-sm"
+            >
+              <span>Regenerate to apply changes.</span>
+              <button
+                type="button"
+                className="rounded px-2 py-1 text-xs font-medium text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={dismissRegeneratePrompt}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {settled && plan != null ? (
+            <Panel title="Plan health" bodyClassName="flex flex-col gap-3 p-3">
+              <PlanHealth plan={plan} today={today} replan={replan} />
+            </Panel>
+          ) : null}
+          <CommitmentList planDate={planDate} />
+        </div>
+      </div>
+    </div>
+  )
+}

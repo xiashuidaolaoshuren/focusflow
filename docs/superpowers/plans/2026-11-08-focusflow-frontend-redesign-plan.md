@@ -237,7 +237,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T7 — Today page
 
-- [ ] **Do:** Assemble Today from the rail, stats, plan actions, plan health, and the existing plan-by-date query.
+- [x] **Do:** Assemble Today from the rail, stats, plan actions, plan health, and the existing plan-by-date query.
 - **Consumes:** `DayRail`, `AgendaList`, `PlanActions`, `PlanHealth` from T5 and T6. `usePlanByDate` via `lib/query.ts`.
 - **Produces:** `TodayPage` at `/today`. Stats: Planned focus, Done, Left today, Shortfall, formatted with `formatDuration`.
 - **Acceptance:** `/today?date=2026-11-06` loads that plan. An invalid `date` falls back to the local date and replaces the query. Below 768px the agenda renders and the rail does not. The no-plan state shows the empty rail and Generate, and does not show Plan health. One solid button is visible.
@@ -374,3 +374,5 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | 2026-11-09 | T4b added after comparing T1–T4 with the prototype: `--scrim`/`--skeleton`, primitive chrome, shell footer, collapse rail, brand mark, auth card, shell 404, document titles. No route or API change. | equivalent |
 | 2026-11-09 | T5: `buildRail` also returns hairlines, hour marks (with a near-now flag), peak window, total height and now minute, and renders from `composedRail`. `RailOutcome` shared by `DayRail` and `AgendaList`. Prototype "Overlaps" state dropped (no API field). No route or API change. | equivalent |
 | 2026-11-09 | T6: Re-plan runs on click with no confirm dialog (only Regenerate confirms); a plan-changing 409 (`PLAN_EXISTS`, `PLAN_CHANGED`, `PLAN_HAS_PROGRESS`) refetches and shows the conflict alert instead of the old replace dialog. Pure modules are `planActionRules.ts`, `planHealthModel.ts`, `workSessionsModel.ts` because Windows resolves `PlanHealth` to `planHealth.ts`; `planHealth` also feeds the T7 Shortfall stat and `WorkSessions` serves T9. No route or API change. | equivalent |
+| 2026-11-10 | T7: Stats live in a pure `todayStats.ts` (planned = WORK minutes on `composedRail` minus `NO_LONGER_NEEDED`; done = `creditFor` per outcome; left = unrecorded minutes clamped to the clock today, whole on a future day, zero on a past day; shortfall = `planHealth`). `StatsStrip.tsx` renders them. Today keeps `CommitmentList` until T10 replaces it and keeps `useIsMobile` for the rail/agenda switch, with a Comfortable/Compact toggle. `/tasks` still renders `DashboardPage`. No route, API, or query-key change. | equivalent |
+| 2026-11-10 | T7 follow-up after comparing with `docs/design/prototype/`: stats card chrome and 2×2 borders, `1fr 360px` side column at 1180px, panel heads for the rail and Plan health, peak-window chip, work-window/buffer/re-planned meta line, previous-day arrow, prototype segmented density control, dashed empty rail, and the Regenerate prompt restored on Today. No route, API, or query-key change. | equivalent |
