@@ -3,6 +3,11 @@ backend/bin/
 backend/.gradle/
 .env
 
+# IDE metadata (Eclipse / Buildship; generated per machine)
+backend/.classpath
+backend/.project
+backend/.settings/
+
 .cursor/rules/
 scripts/*cookies*.txt
 scripts/b18-register.json
@@ -21,6 +26,8 @@ frontend/node_modules
 frontend/dist
 frontend/dist-ssr
 frontend/*.local
+# One-off migration codemods, already applied to src
+frontend/scripts/
 
 # Design reference prototype (generated in OpenDesign; kept local)
 docs/design/prototype/
