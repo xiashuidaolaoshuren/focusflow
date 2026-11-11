@@ -35,9 +35,11 @@ const TONE_CLASSES: Record<OutcomeTone, string> = {
 export function RailOutcome({
   outcome,
   iconOnly = false,
+  className,
 }: {
   outcome: OutcomeView
   iconOnly?: boolean
+  className?: string
 }) {
   const Icon = ICONS[outcome.tone]
 
@@ -46,6 +48,7 @@ export function RailOutcome({
       className={cn(
         'inline-flex flex-none items-center gap-1 text-xs leading-[18px] font-medium tracking-[0.01em] whitespace-nowrap',
         TONE_CLASSES[outcome.tone],
+        className,
       )}
     >
       <Icon className="size-3.5" aria-hidden="true" />

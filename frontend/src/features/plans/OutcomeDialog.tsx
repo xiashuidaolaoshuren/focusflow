@@ -3,7 +3,6 @@ import { XIcon } from 'lucide-react'
 
 import {
   AlertDialog,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -20,6 +19,8 @@ import {
   plannedMinutes,
   wouldExhaustRemainder,
 } from '@/features/plans/progressRules'
+import { RailOutcome } from '@/features/plans/RailOutcome'
+import type { OutcomeTone } from '@/features/plans/railModel'
 import { useRecordBlockProgress } from '@/features/plans/hooks'
 import { formatClock, formatDuration } from '@/lib/format'
 import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
@@ -31,10 +32,14 @@ import type {
   WorkOutcome,
 } from '@/types/api'
 
-const OUTCOMES: { value: WorkOutcome; label: string }[] = [
-  { value: 'DONE', label: 'Done' },
-  { value: 'PARTLY_DONE', label: 'Partly done' },
-  { value: 'SKIPPED', label: 'Skipped' },
+const OUTCOMES: {
+  value: WorkOutcome
+  label: string
+  tone: OutcomeTone
+}[] = [
+  { value: 'DONE', label: 'Done', tone: 'done' },
+  { value: 'PARTLY_DONE', label: 'Partly done', tone: 'partly' },
+  { value: 'SKIPPED', label: 'Skipped', tone: 'skipped' },
 ]
 
 function minutesBetween(start: string, end: string): number {
@@ -274,7 +279,7 @@ export function OutcomeDialog({
             <legend className="text-sm leading-[18px] font-medium">
               Outcome
             </legend>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {OUTCOMES.map((item) => (
                 <label
                   key={item.value}
@@ -288,7 +293,10 @@ export function OutcomeDialog({
                     checked={outcome === item.value}
                     onChange={() => setOutcome(item.value)}
                   />
-                  <span>{item.label}</span>
+                  <RailOutcome
+                    outcome={{ tone: item.tone, text: item.label }}
+                    className="text-sm leading-5"
+                  />
                 </label>
               ))}
             </div>
@@ -380,7 +388,7 @@ export function OutcomeDialog({
                 />
                 <span>Finish task</span>
               </label>
-              <div className="grid justify-items-start gap-2">
+              <div className="grid justify-items-center gap-2">
                 <Button
                   type="button"
                   variant="link"
@@ -418,7 +426,9 @@ export function OutcomeDialog({
         </div>
 
         <AlertDialogFooter className="flex-row items-center justify-end gap-2 border-t border-border px-5 pt-3 pb-4">
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
           <Button disabled={!canSave || isPending} onClick={handleSave}>
             Save outcome
           </Button>
