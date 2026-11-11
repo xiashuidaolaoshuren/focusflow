@@ -88,6 +88,13 @@ function timeToMinutes(value: string): number | null {
   return hours! * 60 + minutes!
 }
 
+const TASK_FORM_STATUSES = [
+  'OPEN',
+  'IN_PROGRESS',
+  'DONE',
+  'CANCELLED',
+] as const
+
 export const taskFormSchema = z.object({
   title: z
     .string()
@@ -95,6 +102,7 @@ export const taskFormSchema = z.object({
     .min(1, 'Title is required'),
   description: z.string(),
   priority: z.enum(TASK_PRIORITIES).optional(),
+  status: z.enum(TASK_FORM_STATUSES).optional(),
   dueDate: dateSchema,
   estimatedMinutes: positiveIntString('Estimated minutes', true),
 })

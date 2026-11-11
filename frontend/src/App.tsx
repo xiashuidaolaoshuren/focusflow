@@ -12,9 +12,9 @@ import { useDocumentTitle } from '@/hooks/use-document-title'
 import { DashboardRedirect } from '@/routes/DashboardRedirect'
 import { NotFoundPage } from '@/routes/NotFoundPage'
 
-const DashboardPage = lazy(() =>
-  import('@/routes/DashboardPage').then((module) => ({
-    default: module.DashboardPage,
+const TasksPage = lazy(() =>
+  import('@/routes/TasksPage').then((module) => ({
+    default: module.TasksPage,
   })),
 )
 const TodayPage = lazy(() =>
@@ -119,7 +119,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/today" element={<TodayPage />} />
-              <Route path="/tasks" element={<DashboardPage />} />
+              <Route path="/tasks" element={<TasksPage />} />
               <Route path="/dashboard" element={<DashboardRedirect />} />
               <Route path="/plans" element={<PlanHistoryPage />} />
               <Route path="/plans/:id" element={<PlanDetailPage />} />

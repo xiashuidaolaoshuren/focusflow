@@ -331,6 +331,10 @@ describe('App auth routing', () => {
       expect(
         screen.getByRole('heading', { name: /^tasks$/i }),
       ).toBeInTheDocument()
+      expect(
+        screen.getByRole('tablist', { name: /task filter/i }),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
     })
   })
 
