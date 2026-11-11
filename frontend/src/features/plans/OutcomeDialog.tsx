@@ -139,10 +139,7 @@ export function OutcomeDialog({
     : validation.error.issues[0]?.message
   const displayedError = minutesTouched ? errorMessage : undefined
   const canSave =
-    outcome != null &&
-    validation.success &&
-    (!crossing || hasRemainderInput) &&
-    !isExhaustionBlocked()
+    outcome != null && validation.success && !isExhaustionBlocked()
 
   const plannedStat = crossing
     ? minutesBetween(block.startTime, now)
@@ -153,28 +150,41 @@ export function OutcomeDialog({
     task?.remainingEffortMinutes ??
     block.taskSnapshot?.capturedRemainingEffortMinutes ??
     null
+  const computedRemainder =
+    capturedRemaining != null && recordedMinutes != null
+      ? Math.max(
+          0,
+          capturedRemaining - (recordedMinutes - (block.actualMinutes ?? 0)),
+        )
+      : capturedRemaining
   const checkpointValue = Number.parseInt(checkpointMinutes, 10)
   const projectedRemaining =
     outcome == null
       ? null
       : finish
         ? 0
-        : reassess && hasRemainderInput
-          ? checkpointValue
-          : crossing
+        : crossing
+          ? reassess
             ? unknownRemainder
               ? null
               : Number.isFinite(checkpointValue)
                 ? checkpointValue
-                : capturedRemaining
-            : capturedRemaining != null && recordedMinutes != null
-              ? Math.max(
-                  0,
-                  capturedRemaining - (recordedMinutes - (block.actualMinutes ?? 0)),
-                )
-              : capturedRemaining
+                : computedRemainder
+            : computedRemainder
+          : reassess && hasRemainderInput
+            ? checkpointValue
+            : computedRemainder
 
   const title = block.taskSnapshot?.title ?? 'Task'
+
+  function toggleReassess() {
+    if (!reassess && checkpointMinutes === '') {
+      setCheckpointMinutes(
+        computedRemainder != null ? String(computedRemainder) : '',
+      )
+    }
+    setReassess((open) => !open)
+  }
 
   function parsedActualMinutes(): number | null {
     if (actualMinutes.trim() === '') {
@@ -189,14 +199,22 @@ export function OutcomeDialog({
       return
     }
 
-    const remainder = unknownRemainder
+    const remainder = Number.parseInt(checkpointMinutes, 10)
+    const checkpoint = finish
       ? null
-      : Number.parseInt(checkpointMinutes, 10)
-    const checkpoint = crossing
-      ? { remainingEffortMinutes: Number.isFinite(remainder) ? remainder : null }
-      : reassess && Number.isFinite(remainder) && (remainder ?? 0) > 0
-        ? { remainingEffortMinutes: remainder }
-        : null
+      : crossing
+        ? {
+            remainingEffortMinutes: !reassess
+              ? computedRemainder
+              : unknownRemainder
+                ? null
+                : Number.isFinite(remainder)
+                  ? remainder
+                  : null,
+          }
+        : reassess && Number.isFinite(remainder) && remainder > 0
+          ? { remainingEffortMinutes: remainder }
+          : null
 
     mutate(
       {
@@ -207,7 +225,7 @@ export function OutcomeDialog({
           actualMinutes: hidesActualMinutes ? null : parsedActualMinutes(),
           currentDate: getLocalDateString(),
           expectedProgressVersion: block.progressVersion,
-          finish: crossing ? false : finish,
+          finish,
           checkpoint,
           cutoff: crossing ? now : null,
         },
@@ -346,83 +364,65 @@ export function OutcomeDialog({
             />
           </div>
 
-          {crossing ? (
-            <>
-              <Field label="Remaining effort minutes">
-                {(control) => (
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      {...control}
-                      type="number"
-                      min={0}
-                      value={checkpointMinutes}
-                      disabled={unknownRemainder}
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              aria-label="Finish task"
+              checked={finish}
+              onChange={(event) => setFinish(event.target.checked)}
+            />
+            <span>Finish task</span>
+          </label>
+
+          <div className="grid justify-items-center gap-2">
+            <Button
+              type="button"
+              variant="link"
+              aria-expanded={reassess}
+              className="h-auto p-0 text-sm"
+              onClick={toggleReassess}
+            >
+              Reassess remaining effort
+            </Button>
+            {reassess ? (
+              <div className="grid w-full gap-2 rounded-md border border-dashed border-input p-3">
+                <Field label="Remaining effort minutes">
+                  {(control) => (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        {...control}
+                        type="number"
+                        min={0}
+                        value={checkpointMinutes}
+                        disabled={crossing && unknownRemainder}
+                        onChange={(event) =>
+                          setCheckpointMinutes(event.target.value)
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">min</span>
+                    </div>
+                  )}
+                </Field>
+                {crossing ? (
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label="Remaining effort is unknown"
+                      checked={unknownRemainder}
                       onChange={(event) =>
-                        setCheckpointMinutes(event.target.value)
+                        setUnknownRemainder(event.target.checked)
                       }
                     />
-                    <span className="text-sm text-muted-foreground">min</span>
-                  </div>
+                    <span>Remaining effort is unknown</span>
+                  </label>
+                ) : (
+                  <p className="text-xs leading-4 text-muted-foreground">
+                    Replaces the computed value
+                  </p>
                 )}
-              </Field>
-              <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  aria-label="Remaining effort is unknown"
-                  checked={unknownRemainder}
-                  onChange={(event) => setUnknownRemainder(event.target.checked)}
-                />
-                <span>Remaining effort is unknown</span>
-              </label>
-            </>
-          ) : null}
-
-          {crossing ? null : (
-            <>
-              <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  aria-label="Finish task"
-                  checked={finish}
-                  onChange={(event) => setFinish(event.target.checked)}
-                />
-                <span>Finish task</span>
-              </label>
-              <div className="grid justify-items-center gap-2">
-                <Button
-                  type="button"
-                  variant="link"
-                  aria-expanded={reassess}
-                  className="h-auto p-0 text-sm"
-                  onClick={() => setReassess((open) => !open)}
-                >
-                  Reassess remaining effort
-                </Button>
-                {reassess ? (
-                  <div className="grid w-full gap-2 rounded-md border border-dashed border-input p-3">
-                    <Field label="Remaining effort minutes">
-                      {(control) => (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            {...control}
-                            type="number"
-                            min={0}
-                            value={checkpointMinutes}
-                            onChange={(event) =>
-                              setCheckpointMinutes(event.target.value)
-                            }
-                          />
-                          <span className="text-sm text-muted-foreground">
-                            min
-                          </span>
-                        </div>
-                      )}
-                    </Field>
-                  </div>
-                ) : null}
               </div>
-            </>
-          )}
+            ) : null}
+          </div>
         </div>
 
         <AlertDialogFooter className="flex-row items-center justify-end gap-2 border-t border-border px-5 pt-3 pb-4">

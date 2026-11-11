@@ -120,7 +120,14 @@ describe('OutcomeDialog reconcile', () => {
     expect(screen.getByLabelText(/actual minutes/i)).toBeInTheDocument()
   })
 
-  it('requires actual minutes and an explicit remainder before saving', () => {
+  it('offers Finish task while reconciling a running session', () => {
+    mockMutation()
+    renderDialog({ block: crossingBlock })
+
+    expect(screen.getByLabelText(/finish task/i)).toBeInTheDocument()
+  })
+
+  it('prefills the reassess box with the computed remainder', () => {
     mockMutation()
     renderDialog({ block: crossingBlock })
 
@@ -128,10 +135,114 @@ describe('OutcomeDialog reconcile', () => {
     fireEvent.change(screen.getByLabelText(/actual minutes/i), {
       target: { value: '20' },
     })
-    expect(saveButton()).toBeDisabled()
 
+    expect(
+      screen.queryByLabelText(/remaining effort minutes/i),
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /reassess remaining effort/i }),
+    )
+    expect(screen.getByLabelText(/remaining effort minutes/i)).toHaveValue(5)
+  })
+
+  it('lets an explicit remainder override the computed one', () => {
+    const mutate = mockMutation()
+    renderDialog({ block: crossingBlock })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
+    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
+      target: { value: '20' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /reassess remaining effort/i }),
+    )
+    fireEvent.change(screen.getByLabelText(/remaining effort minutes/i), {
+      target: { value: '12' },
+    })
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          checkpoint: { remainingEffortMinutes: 12 },
+        }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('sends an unknown remainder as a null checkpoint', () => {
+    const mutate = mockMutation()
+    renderDialog({ block: crossingBlock })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
+    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
+      target: { value: '20' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /reassess remaining effort/i }),
+    )
     fireEvent.click(screen.getByLabelText(/remaining effort is unknown/i))
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          checkpoint: { remainingEffortMinutes: null },
+        }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('finishes the task from reconcile without a checkpoint', () => {
+    const mutate = mockMutation()
+    renderDialog({ block: crossingBlock })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
+    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
+      target: { value: '20' },
+    })
+    fireEvent.click(screen.getByLabelText(/finish task/i))
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          outcome: 'PARTLY_DONE',
+          actualMinutes: 20,
+          finish: true,
+          checkpoint: null,
+        }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('saves once the actual minutes are known, defaulting the checkpoint', () => {
+    const mutate = mockMutation()
+    renderDialog({ block: crossingBlock })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
+    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
+      target: { value: '20' },
+    })
+
     expect(saveButton()).toBeEnabled()
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({
+          outcome: 'PARTLY_DONE',
+          actualMinutes: 20,
+          cutoff: '09:45:00',
+          checkpoint: { remainingEffortMinutes: 5 },
+        }),
+      }),
+      expect.anything(),
+    )
   })
 })
 
@@ -284,31 +395,6 @@ describe('OutcomeDialog save', () => {
         request: expect.objectContaining({
           outcome: 'SKIPPED',
           actualMinutes: null,
-        }),
-      }),
-      expect.anything(),
-    )
-  })
-
-  it('posts the cutoff and remainder when reconciling', () => {
-    const mutate = mockMutation()
-    renderDialog({ block: { ...sampleWorkBlock, endTime: '10:30:00' } })
-
-    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
-    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
-      target: { value: '20' },
-    })
-    fireEvent.click(screen.getByLabelText(/remaining effort is unknown/i))
-    fireEvent.click(saveButton())
-
-    expect(mutate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        request: expect.objectContaining({
-          outcome: 'PARTLY_DONE',
-          actualMinutes: 20,
-          finish: false,
-          checkpoint: { remainingEffortMinutes: null },
-          cutoff: '09:45:00',
         }),
       }),
       expect.anything(),
