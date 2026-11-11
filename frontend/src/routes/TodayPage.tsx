@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CommitmentList } from '@/features/commitments/CommitmentList'
 import { AgendaList } from '@/features/plans/AgendaList'
 import { DayRail } from '@/features/plans/DayRail'
+import { OutcomeDialog } from '@/features/plans/OutcomeDialog'
 import { PlanActions } from '@/features/plans/PlanActions'
 import { PlanHealth } from '@/features/plans/PlanHealth'
 import { StatsStrip } from '@/features/plans/StatsStrip'
@@ -19,6 +20,7 @@ import {
 import { todayStats } from '@/features/plans/todayStats'
 import { useReplanPlan } from '@/features/plans/useReplanPlan'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
+import { useTasks } from '@/features/tasks/hooks'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
 import {
@@ -27,6 +29,7 @@ import {
   resolvePlanningDate,
 } from '@/lib/planningDate'
 import { cn } from '@/lib/utils'
+import type { TaskResponse, WorkBlockResponse } from '@/types/api'
 
 const CLOCK_TICK_MS = 60_000
 
@@ -87,6 +90,8 @@ export function TodayPage() {
   const replan = useReplanPlan(plan)
   const isMobile = useIsMobile()
   const [density, setDensity] = useState<Density>('comfortable')
+  const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null)
+  const { tasks } = useTasks()
   const [nowMinutes, setNowMinutes] = useState(() =>
     toMinutes(getLocalTimeString()),
   )
@@ -97,6 +102,19 @@ export function TodayPage() {
       : null
   const settled = !isPending && !isError
   const replayedAt = plan?.revisions.at(-1)?.cutoff ?? null
+  const selectedBlock =
+    selectedBlockId != null && plan != null
+      ? (plan.composedRail.find(
+          (item): item is WorkBlockResponse =>
+            item.id === selectedBlockId && item.kind === 'WORK',
+        ) ?? null)
+      : null
+
+  function findLiveTask(block: WorkBlockResponse): TaskResponse | null {
+    const referenceId =
+      block.taskSnapshot.taskReferenceId ?? block.taskSnapshot.sourceTaskId
+    return tasks.find((task) => task.id === referenceId) ?? null
+  }
 
   useEffect(() => {
     if (planDate !== today) {
@@ -254,8 +272,8 @@ export function TodayPage() {
           ) : null}
           {settled && rail != null
             ? isMobile
-              ? <AgendaList rail={rail} />
-              : <DayRail rail={rail} />
+              ? <AgendaList rail={rail} onSelect={setSelectedBlockId} />
+              : <DayRail rail={rail} onSelect={setSelectedBlockId} />
             : null}
           {settled && plan == null ? (
             <div className="p-4">
@@ -295,6 +313,16 @@ export function TodayPage() {
           <CommitmentList planDate={planDate} />
         </div>
       </div>
+
+      {plan != null && selectedBlock != null ? (
+        <OutcomeDialog
+          plan={plan}
+          block={selectedBlock}
+          task={findLiveTask(selectedBlock)}
+          now={planDate === today ? getLocalTimeString() : null}
+          onClose={() => setSelectedBlockId(null)}
+        />
+      ) : null}
     </div>
   )
 }

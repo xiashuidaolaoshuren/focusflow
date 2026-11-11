@@ -34,6 +34,23 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn() },
 }))
 
+vi.mock('@/features/plans/OutcomeDialog', () => ({
+  OutcomeDialog: ({
+    block,
+    onClose,
+  }: {
+    block: { taskSnapshot: { title: string } }
+    onClose: () => void
+  }) => (
+    <div role="dialog" aria-label="Outcome dialog">
+      <p>{block.taskSnapshot.title}</p>
+      <button type="button" onClick={onClose}>
+        Close outcome
+      </button>
+    </div>
+  ),
+}))
+
 import { usePlanByDate } from '@/features/plans/hooks'
 import {
   clearRegeneratePrompt,
@@ -183,6 +200,24 @@ describe('TodayPage', () => {
     expect(
       screen.getByRole('heading', { level: 3, name: '09:00' }),
     ).toBeInTheDocument()
+  })
+
+  it('opens the outcome dialog for a selected recordable block', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday(`/today?date=${getLocalDateString()}`)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /write report.*record outcome/i }),
+    )
+
+    const dialog = screen.getByRole('dialog', { name: /outcome dialog/i })
+    expect(dialog).toHaveTextContent('Write report')
+
+    fireEvent.click(screen.getByRole('button', { name: /close outcome/i }))
+    expect(
+      screen.queryByRole('dialog', { name: /outcome dialog/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the regenerate prompt once the plan inputs change', () => {
