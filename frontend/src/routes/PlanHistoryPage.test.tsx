@@ -51,7 +51,7 @@ describe('PlanHistoryPage', () => {
     )
 
     expect(mockedUsePlans).toHaveBeenCalledWith(0, 20)
-    expect(screen.getByText('2026-06-14')).toBeInTheDocument()
+    expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
   })
 
   it('requests the next page when pagination changes', () => {

@@ -80,6 +80,19 @@ function renderPlanDetailPage(options?: {
 
 describe('PlanDetailPage', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
     mockedUsePlan.mockReturnValue({
       plan: samplePlan,
       isPending: false,
@@ -144,6 +157,7 @@ describe('PlanDetailPage', () => {
               },
             ],
           },
+          { ...samplePlan.revisions[0]!, id: 2, revisionNumber: 2 },
         ],
       },
       isPending: false,
@@ -154,17 +168,40 @@ describe('PlanDetailPage', () => {
 
     renderPlanDetailPage()
 
-    fireEvent.click(screen.getByRole('combobox', { name: /revision/i }))
-    return screen
-      .findByRole('option', { name: /revision 1/i })
-      .then((option) => {
-        fireEvent.pointerDown(option)
-        fireEvent.click(option)
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
 
-        expect(
-          screen.getByLabelText(/work: write tests, session 1 of 1, 16:00–16:30/i),
-        ).toBeInTheDocument()
-      })
+    expect(
+      screen.getByLabelText(/work: write tests, 16:00–16:30/i),
+    ).toBeInTheDocument()
+  })
+
+  it('renders the selected revision read-only with no record or add controls', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('list', { name: /daily plan blocks/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /record outcome/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /add unplanned work/i })).toBeNull()
+  })
+
+  it('titles the page with the plan date and shows focus, sessions and saved time', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { level: 1, name: '15 Jun 2026' })).toBeInTheDocument()
+    expect(screen.getByText(/^Focus/)).toHaveTextContent(/Sessions/)
+  })
+
+  it('shows Unplanned work and Unplaced work cards beside the rail', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { name: 'Unplanned work' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unplaced work' })).toBeInTheDocument()
+  })
+
+  it('lists work sessions for the selected revision in their groups', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { name: /work sessions/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /not recorded/i })).toBeInTheDocument()
   })
 
   it('links to the cached planning date when a stale plan id returns 404', () => {
@@ -181,7 +218,7 @@ describe('PlanDetailPage', () => {
     const recoveryLink = screen.getByRole('link', {
       name: /back to plan for 2026-06-14/i,
     })
-    expect(recoveryLink).toHaveAttribute('href', '/dashboard?date=2026-06-14')
+    expect(recoveryLink).toHaveAttribute('href', '/today?date=2026-06-14')
   })
 
   it('links to plan history when a 404 has no cached summary', () => {

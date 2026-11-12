@@ -1,4 +1,9 @@
-import { CalendarDaysIcon } from 'lucide-react'
+import {
+  CalendarDaysIcon,
+  ClockIcon,
+  RefreshCwIcon,
+  TriangleAlertIcon,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
@@ -13,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PlanDeleteButton } from '@/features/plans/PlanDeleteButton'
 import { useDeletePlan } from '@/features/plans/hooks'
+import { formatDateLabel, formatDuration } from '@/lib/format'
 import type { DailyPlanSummaryResponse } from '@/types/api'
 
 type PlanHistoryListProps = {
@@ -54,22 +60,19 @@ function PlanHistoryListEmpty() {
       <div className="space-y-1">
         <p className="font-medium">No saved plans yet</p>
         <p className="text-sm text-muted-foreground">
-          Generate a daily plan from the dashboard to see it here.
+          Generate a daily plan from Today to see it here.
         </p>
       </div>
-      <Button render={<Link to="/dashboard" />}>Go to Dashboard</Button>
+      <Button render={<Link to="/today" />}>Go to Today</Button>
     </div>
   )
-}
-
-function formatSummaryCounts(plan: DailyPlanSummaryResponse): string {
-  return `${plan.scheduledWorkMinutes} min · ${plan.workSessionCount} session${plan.workSessionCount === 1 ? '' : 's'} · ${plan.scheduledTaskCount} task${plan.scheduledTaskCount === 1 ? '' : 's'} · ${plan.unplacedWorkCount} unplaced`
 }
 
 export function PlanHistoryList({
   plans,
   page,
-  totalPages,
+  size,
+  totalElements,
   hasPrevious,
   hasNext,
   onPageChange,
@@ -111,39 +114,66 @@ export function PlanHistoryList({
 
   return (
     <div className="flex flex-col gap-4">
-      <ul className="flex flex-col gap-3">
-        {plans.map((plan) => (
-          <li
-            key={plan.id}
-            className="flex items-center gap-1 rounded-xl border border-border px-2 py-1"
-          >
-            <Link
-              to={`/plans/${plan.id}`}
-              className="flex flex-1 flex-col gap-1 rounded-lg px-2 py-2 transition-colors outline-none hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <span className="font-medium">{plan.planDate}</span>
-              <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                {plan.hasWarning ? (
-                  <Badge variant="secondary">Shortfall</Badge>
-                ) : null}
-                {plan.hasProgress ? (
-                  <Badge variant="secondary">Progress</Badge>
-                ) : null}
-                {plan.needsRefresh ? (
-                  <Badge variant="secondary">Needs refresh</Badge>
-                ) : null}
-                {formatSummaryCounts(plan)}
-              </span>
-            </Link>
-            <PlanDeleteButton
-              plan={plan}
-              variant="icon"
-              isDeleting={isDeleting}
-              onConfirm={() => handleDelete(plan)}
-            />
-          </li>
-        ))}
-      </ul>
+      <table className="w-full text-sm">
+        <caption className="sr-only">Saved Daily plans</caption>
+        <thead>
+          <tr className="border-b border-border text-left text-xs tracking-wider text-muted-foreground uppercase">
+            <th scope="col" className="px-3 py-2 font-medium">Date</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">Focus</th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">Sessions</th>
+            <th scope="col" className="px-3 py-2 font-medium">Status</th>
+            <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {plans.map((plan) => (
+            <tr key={plan.id} className="border-t border-border first:border-t-0">
+              <td className="px-3 py-2">
+                <Link to={`/plans/${plan.id}`} className="font-medium hover:underline">
+                  {formatDateLabel(plan.planDate)}
+                </Link>
+              </td>
+              <td className="px-3 py-2 text-right font-mono">
+                {formatDuration(plan.scheduledWorkMinutes)}
+              </td>
+              <td className="px-3 py-2 text-right font-mono">{plan.workSessionCount}</td>
+              <td className="px-3 py-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  {plan.hasWarning ? (
+                    <Badge variant="secondary">
+                      <TriangleAlertIcon aria-hidden />
+                      Shortfall
+                    </Badge>
+                  ) : null}
+                  {plan.hasProgress ? (
+                    <Badge variant="secondary">
+                      <ClockIcon aria-hidden />
+                      Progress
+                    </Badge>
+                  ) : null}
+                  {plan.needsRefresh ? (
+                    <Badge variant="secondary">
+                      <RefreshCwIcon aria-hidden />
+                      Needs refresh
+                    </Badge>
+                  ) : null}
+                  {!plan.hasWarning && !plan.hasProgress && !plan.needsRefresh ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : null}
+                </span>
+              </td>
+              <td className="px-3 py-2 text-right">
+                <PlanDeleteButton
+                  plan={plan}
+                  variant="icon"
+                  isDeleting={isDeleting}
+                  onConfirm={() => handleDelete(plan)}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
         <Button
           type="button"
@@ -155,7 +185,10 @@ export function PlanHistoryList({
           Previous
         </Button>
         <p className="text-sm text-muted-foreground">
-          Page {page + 1} of {totalPages}
+          <span className="font-mono">
+            {page * size + 1}–{page * size + plans.length}
+          </span>{' '}
+          of <span className="font-mono">{totalElements}</span>
         </p>
         <Button
           type="button"

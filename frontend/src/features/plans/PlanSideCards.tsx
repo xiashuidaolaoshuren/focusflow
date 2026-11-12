@@ -1,0 +1,142 @@
+import { useState } from 'react'
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import { useDeleteUnplannedWork } from '@/features/plans/hooks'
+import { useTasks } from '@/features/tasks/hooks'
+import type { DailyPlanResponse, UnplacedWorkResponse } from '@/types/api'
+
+const UNPLACED_REASON_TEXT: Record<UnplacedWorkResponse['reason'], string> = {
+  NO_ESTIMATE: 'No estimate',
+  BLOCKED: 'Waiting on another task',
+  OUT_OF_TIME: 'Out of time',
+}
+
+/** Unplanned work (recorded outside the plan) and unplaced work (did not fit), for a saved plan. */
+export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
+  const { tasks } = useTasks()
+  const { mutate: deleteUnplannedWork, isPending: isDeleting } =
+    useDeleteUnplannedWork()
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
+
+  function handleDelete(entryId: number) {
+    const entry = plan.unplannedWork.find((item) => item.id === entryId)
+    const liveTask =
+      entry?.taskReferenceId != null
+        ? (tasks.find((task) => task.id === entry.taskReferenceId) ?? null)
+        : null
+    deleteUnplannedWork({
+      id: entryId,
+      effortVersion: liveTask?.effortVersion ?? null,
+    })
+    setPendingDeleteId(null)
+  }
+
+  return (
+    <>
+      <section
+        aria-labelledby="unplanned-work-title"
+        className="rounded-lg border border-border bg-card"
+      >
+        <h2 id="unplanned-work-title" className="px-4 py-3 text-base font-semibold">
+          Unplanned work
+        </h2>
+        {plan.unplannedWork.length > 0 ? (
+          <ul className="border-t border-border">
+            {plan.unplannedWork.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm first:border-t-0"
+              >
+                <span>
+                  <span className="font-mono">{entry.workDate}</span> · {entry.actualMinutes} min
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Delete unplanned work for ${entry.workDate}`}
+                  disabled={isDeleting}
+                  onClick={() => setPendingDeleteId(entry.id)}
+                >
+                  Delete
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">None</p>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="unplaced-work-title"
+        className="rounded-lg border border-border bg-card"
+      >
+        <h2 id="unplaced-work-title" className="px-4 py-3 text-base font-semibold">
+          Unplaced work
+        </h2>
+        {plan.unplacedWork.length > 0 ? (
+          <ul className="border-t border-border">
+            {plan.unplacedWork.map((entry) => (
+              <li
+                key={`${entry.reason}-${entry.taskSnapshot.sourceTaskId}`}
+                className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm first:border-t-0"
+              >
+                <span className="truncate">{entry.taskSnapshot.title}</span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {UNPLACED_REASON_TEXT[entry.reason]}
+                  {entry.unplacedMinutes != null ? ` · ${entry.unplacedMinutes}m` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">None</p>
+        )}
+      </section>
+
+      <AlertDialog
+        open={pendingDeleteId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDeleteId(null)
+          }
+        }}
+      >
+        <AlertDialogContent aria-label="Delete unplanned entry">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete unplanned entry</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the recorded unplanned minutes. The task remainder keeps only the
+              credit that remains after reversing them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => {
+                if (pendingDeleteId != null) {
+                  handleDelete(pendingDeleteId)
+                }
+              }}
+            >
+              Delete entry
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}

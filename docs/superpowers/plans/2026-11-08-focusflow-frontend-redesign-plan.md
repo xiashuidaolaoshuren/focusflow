@@ -122,7 +122,7 @@ Delete `frontend/src/components/ui/form.tsx` once nothing imports it. `field.tsx
 | `frontend/src/features/horizon/HorizonGrid.tsx` | create | Desktop seven-day grid. No start-date picker. | `HorizonGrid` | provisional |
 | `frontend/src/features/horizon/HorizonDayList.tsx` | create | Mobile day list. | `HorizonDayList` | provisional |
 | `frontend/src/features/horizon/HorizonPage.tsx` | modify | Chooses grid or day list. Keeps the existing query. | `HorizonPage` | verified |
-| `frontend/src/features/plans/PlansHistory.tsx` | create | History rows, badges, pagination, delete. Replaces `PlanHistoryList.tsx`. | `PlansHistory` | provisional |
+| `frontend/src/features/plans/PlanHistoryList.tsx` | modify | History rows, badges, pagination, delete. Existing file; no `PlansHistory` is created. | `PlanHistoryList` | provisional |
 | `frontend/src/routes/PlanDetailPage.tsx` | modify | Read-only rail, revision switcher, `WorkSessions`. | `PlanDetailPage` | verified |
 | `frontend/src/features/preferences/SettingsForm.tsx` | create | Grouped sections, cadence toggle, live mini-rail. Replaces `SchedulingPreferencesForm.tsx`. | `SettingsForm` | provisional |
 | `frontend/src/features/preferences/MiniRail.tsx` | create | Typical-day preview driven by the form's current values. | `MiniRail` | provisional |
@@ -299,15 +299,15 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T12 — Plan history and detail
 
-- [ ] **Do:** Restyle history and detail onto the rail and the work-session groups.
-- **Consumes:** `DayRail`, `WorkSessions`, `PlansHistory`.
+- [x] **Do:** Restyle history and detail onto the rail and the work-session groups.
+- **Consumes:** `DayRail`, `WorkSessions`, `PlanHistoryList`.
 - **Produces:** History at `/plans`. Detail at `/plans/:id` with the revision switcher.
 - **Acceptance:** History shows Shortfall, Progress, and Needs refresh as badges plus text. Delete confirms, then navigates nowhere on history and to `/plans` on detail. Detail renders the selected revision's blocks in the read-only rail. Recorded, Not recorded, and No longer needed are separate groups. A 404 uses the not-found recovery, not a blank page.
 - **Compatibility:** Pagination stays `page` and `size`. Delete still invalidates list, by-date, detail, and horizon.
 - **Blocked by:** T6, T4
 - **Plan mode:** skip
 - **TDD suitable:** yes
-- **Verification:** `cd frontend && npm run test:run -- src/features/plans/PlansHistory.test.tsx src/routes/PlanDetailPage.test.tsx`
+- **Verification:** `cd frontend && npm run test:run -- src/features/plans/PlanHistoryList.test.tsx src/routes/PlanHistoryPage.test.tsx src/routes/PlanDetailPage.test.tsx`
 
 ### T13 — Settings and the live preview
 
@@ -381,3 +381,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | 2026-11-11 | T9 follow-up after the browser compare with the prototype, agreed before implementing: reconcile mode now offers Finish task, and one centered Reassess control (prefilled with the computed remainder, unknown inside it) replaces the always-visible remainder field. The checkpoint defaults to the computed remainder because the server rejects a crossing reconcile without one; checking Finish sends `finish: true` with no checkpoint, which the server treats as a whole-task finish. | material |
 | 2026-11-12 | T10: `CommitmentsPanel` replaces `CommitmentList` on Today: an inline add and edit form (react-hook-form, `commitmentSchema`, `TimeField`), a row Edit, and an inline delete confirm that replaces the dialog. A 400 `details` entry renders on its field; a 400 without `details` (for example overlap) renders as a form-level alert, because the server sends no field for it. Edits keep the commitment's own date. `CommitmentList` and its test stay until T14. No API, hook, or query-key change. | equivalent |
 | 2026-11-12 | T11: `HorizonPage` is a shell over `HorizonGridView` (desktop, `section` labelled "Horizon grid") and `HorizonDayList` (below 768px via `useIsMobile`). The grid component is named `HorizonGridView.tsx` because `HorizonGrid.tsx` collides with the verified `horizonGrid.ts` on case-insensitive Windows. Deadline badges reuse `deadlineBadgeLabel` with lucide glyphs, not the Tasks `DeadlineBadge`, so the Tasks page is untouched. `dashboardHref` becomes `todayHref` (`/today?date=`). Headers show a formatted date, the day total, and a saved shortfall from `SAVED_SHORTFALL` segments. Due dates between columns show a weekday at the edge. The ⓘ popovers from the T11 note are deferred; the pace copy stays on the page. No route, API, or query-key change. | equivalent |
+| 2026-11-12 | T12: the type-1 entry named `PlansHistory`, which does not exist. The real history component is `PlanHistoryList.tsx`, modified in place; names and verification command corrected. History is a table (Date, Focus, Sessions, Status, Actions) with glyph badges, a `first–last of total` pager, and an empty state linking to Today. Detail renders the selected revision read-only through `DayRail`/`AgendaList` (`buildRail`), with `WorkSessions`, Unplanned work and Unplaced work beside it. Revisions switch with a segmented control shown for two or more revisions, replacing the dropdown. The header carries the date, focus, sessions and saved time. Notices move to `PlanDetailNotices`. Recovery links go to `/today?date=`. `DailyPlanView` and `RevisionSelect` stay until T14. | material |
