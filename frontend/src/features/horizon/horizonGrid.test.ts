@@ -4,7 +4,6 @@ import type { HorizonDayResponse, HorizonSegmentResponse } from '@/types/api'
 
 import {
   barPercent,
-  dashboardHref,
   deadlineBadgeLabel,
   forecastHeaderCopy,
   formatDueDateTitle,
@@ -15,6 +14,7 @@ import {
   segmentAriaLabel,
   segmentCellCopy,
   timeSpanMinutes,
+  todayHref,
   upstreamCopy,
 } from '@/features/horizon/horizonGrid'
 
@@ -70,7 +70,7 @@ describe('segmentCellCopy', () => {
       unplacedMinutes: 30,
       unplacedScope: 'SAVED_SHORTFALL',
     }
-    expect(segmentCellCopy(shortfall)).toContain('Saved shortfall: 30 min')
+    expect(segmentCellCopy(shortfall)).toContain('Saved shortfall: 30m')
   })
 
   it('states credit when it differs from displayed minutes', () => {
@@ -84,9 +84,22 @@ describe('segmentCellCopy', () => {
       unplacedScope: null,
     }
     expect(segmentCellCopy(segment)).toEqual([
-      '60 min',
-      '30 min credited of 60 min displayed (checkpoint)',
+      '1h',
+      '30m credited of 1h displayed (checkpoint)',
     ])
+  })
+
+  it('formats durations as 1h 25m, never as raw minutes', () => {
+    const segment: HorizonSegmentResponse = {
+      date: '2026-06-01',
+      minutes: 85,
+      assumedCreditMinutes: null,
+      creditExclusions: [],
+      unplacedReason: null,
+      unplacedMinutes: null,
+      unplacedScope: null,
+    }
+    expect(segmentCellCopy(segment)).toEqual(['1h 25m'])
   })
 
   it('states a fully excluded saved session as zero credited', () => {
@@ -100,8 +113,8 @@ describe('segmentCellCopy', () => {
       unplacedScope: null,
     }
     expect(segmentCellCopy(segment)).toEqual([
-      '60 min',
-      '0 min credited of 60 min displayed (checkpoint)',
+      '1h',
+      '0m credited of 1h displayed (checkpoint)',
     ])
   })
 })
@@ -170,7 +183,7 @@ describe('horizon copy helpers', () => {
     expect(forecastHeaderCopy()).toBe(
       'Fixed order: must-continue, then due or overdue, then optional. Generating a Daily plan for this date can choose a different order inside those groups.',
     )
-    expect(dashboardHref('2026-06-02')).toBe('/dashboard?date=2026-06-02')
+    expect(todayHref('2026-06-02')).toBe('/today?date=2026-06-02')
   })
 
   it('names the upstream cause when one exists', () => {
@@ -195,6 +208,7 @@ describe('deadlineBadgeLabel', () => {
         { taskId: 2, title: 'Blocker' },
       ]),
     ).toBe('Cannot forecast: Blocker')
+    expect(deadlineBadgeLabel('BEYOND_HORIZON', [])).toBe('Beyond horizon')
     expect(deadlineBadgeLabel('ON_TRACK', [])).toBeNull()
     expect(deadlineBadgeLabel(null, [])).toBeNull()
   })
