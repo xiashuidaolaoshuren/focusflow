@@ -274,7 +274,7 @@ Dependency notation: `Blocked by: T1` means start after T1 is done.
 
 ### T10 — Commitments panel
 
-- [ ] **Do:** Edit one date's commitments inline on Today, with overlap and window checks surfaced from the server.
+- [x] **Do:** Edit one date's commitments inline on Today, with overlap and window checks surfaced from the server.
 - **Consumes:** `TimeField`, `commitmentSchema` from T3. `CommitmentsPanel` replaces `CommitmentList`.
 - **Produces:** `CommitmentsPanel` used by `TodayPage`.
 - **Acceptance:** Add, edit, and delete call the existing commitment mutations. Delete asks for confirmation. A 400 `details` entry renders on the matching field. Times use `TimeField`. The panel is not titled or styled as a task.
@@ -379,3 +379,4 @@ UI work in T4, T7, and T11 is **`partial`** on purpose: test the branching and t
 | 2026-11-10 | T8: Filtering, search, and sorting live in a pure `taskListModel.ts`; rows render as a table or cards from one `TaskRow`; the editor is `TaskEditorSheet` on base-ui `Sheet` with react-hook-form, `DateField`, blocker add/remove, plain-language dependency copy in `dependencyCopy.ts`, and a dirty-close discard gate. The sheet keeps Open/In progress editable and carries any Done/Cancelled status through unchanged. `DashboardPage`, `TaskList`, and `TaskForm` with their tests are retired here instead of T14. No API, query-key, or request-body change. | equivalent |
 | 2026-11-11 | T9: `OutcomeDialog` is wired into `TodayPage` via rail/agenda `onSelect`; the dialog gets `now: null` on a past or future day so only today reconciles; Save is a plain button so a 409 keeps it open; `BlockProgressDialog` stays until T14. No route or API change. | equivalent |
 | 2026-11-11 | T9 follow-up after the browser compare with the prototype, agreed before implementing: reconcile mode now offers Finish task, and one centered Reassess control (prefilled with the computed remainder, unknown inside it) replaces the always-visible remainder field. The checkpoint defaults to the computed remainder because the server rejects a crossing reconcile without one; checking Finish sends `finish: true` with no checkpoint, which the server treats as a whole-task finish. | material |
+| 2026-11-12 | T10: `CommitmentsPanel` replaces `CommitmentList` on Today: an inline add and edit form (react-hook-form, `commitmentSchema`, `TimeField`), a row Edit, and an inline delete confirm that replaces the dialog. A 400 `details` entry renders on its field; a 400 without `details` (for example overlap) renders as a form-level alert, because the server sends no field for it. Edits keep the commitment's own date. `CommitmentList` and its test stay until T14. No API, hook, or query-key change. | equivalent |

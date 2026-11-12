@@ -3,7 +3,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { CommitmentList } from '@/features/commitments/CommitmentList'
+import { CommitmentsPanel } from '@/features/commitments/CommitmentsPanel'
 import { AgendaList } from '@/features/plans/AgendaList'
 import { DayRail } from '@/features/plans/DayRail'
 import { OutcomeDialog } from '@/features/plans/OutcomeDialog'
@@ -310,7 +310,7 @@ export function TodayPage() {
               <PlanHealth plan={plan} today={today} replan={replan} />
             </Panel>
           ) : null}
-          <CommitmentList planDate={planDate} />
+          <CommitmentsPanel planDate={planDate} />
         </div>
       </div>
 

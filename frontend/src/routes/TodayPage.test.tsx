@@ -246,4 +246,15 @@ describe('TodayPage', () => {
 
     expect(screen.getByTestId('location').textContent).toBe('?date=2026-11-05')
   })
+
+  it('renders the Commitments panel for the viewed date', () => {
+    mockPlan({ plan: null })
+
+    renderToday('/today?date=2026-11-06')
+
+    expect(screen.getByRole('heading', { name: 'Commitments' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^add$/i })).toBeInTheDocument()
+    expect(screen.getByText('No Commitments today')).toBeInTheDocument()
+    expect(screen.queryByText(/fixed-time blocks/i)).toBeNull()
+  })
 })
