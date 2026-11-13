@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useEffect,
   useId,
   useMemo,
   useState,
@@ -21,7 +20,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button-variants'
 import { formatDateLabel } from '@/lib/format'
 import { getLocalDateString } from '@/lib/planningDate'
 import { cn } from '@/lib/utils'
@@ -71,14 +71,18 @@ export function DateField({
   const [viewMonthIndex, setViewMonthIndex] = useState(seeded?.monthIndex ?? 0)
   const [focusedIso, setFocusedIso] = useState(value !== '' ? value : today)
 
-  useEffect(() => {
+  const [trackedValue, setTrackedValue] = useState(value)
+
+  // Adopt a value changed from outside without an effect.
+  if (value !== trackedValue) {
+    setTrackedValue(value)
     const parsed = parseIso(value)
     if (parsed) {
       setViewYear(parsed.year)
       setViewMonthIndex(parsed.monthIndex)
       setFocusedIso(value)
     }
-  }, [value])
+  }
 
   const grid = useMemo(
     () => buildMonthGrid(viewYear, viewMonthIndex),

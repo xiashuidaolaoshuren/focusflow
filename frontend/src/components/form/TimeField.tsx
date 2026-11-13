@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from 'react'
+import { useId, useState, type KeyboardEvent } from 'react'
 
 import { parseTimeInput } from '@/components/form/timeInput'
 import { cn } from '@/lib/utils'
@@ -34,12 +28,13 @@ export function TimeField({
   const generatedId = useId()
   const id = idProp ?? generatedId
   const [draft, setDraft] = useState(value)
-  const latestRaw = useRef(value)
+  const [trackedValue, setTrackedValue] = useState(value)
 
-  useEffect(() => {
+  // Adopt a value changed from outside without an effect.
+  if (value !== trackedValue) {
+    setTrackedValue(value)
     setDraft(value)
-    latestRaw.current = value
-  }, [value])
+  }
 
   const invalid =
     ariaInvalid === true ||
@@ -49,21 +44,19 @@ export function TimeField({
     const normalized = parseTimeInput(raw)
     if (normalized !== null) {
       setDraft(normalized)
-      latestRaw.current = normalized
       onChange(normalized)
       return
     }
     setDraft(raw)
-    latestRaw.current = raw
     onChange(raw)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
-      const normalized = parseTimeInput(latestRaw.current)
-      if (normalized !== null && normalized !== latestRaw.current) {
+      const normalized = parseTimeInput(draft)
+      if (normalized !== null && normalized !== draft) {
         event.preventDefault()
-        commitFromValue(latestRaw.current)
+        commitFromValue(draft)
       }
     }
   }
@@ -80,12 +73,10 @@ export function TimeField({
       aria-invalid={invalid || undefined}
       aria-describedby={ariaDescribedBy}
       onChange={(event) => {
-        const next = event.target.value
-        latestRaw.current = next
-        setDraft(next)
-        onChange(next)
+        setDraft(event.target.value)
+        onChange(event.target.value)
       }}
-      onBlur={() => commitFromValue(latestRaw.current)}
+      onBlur={() => commitFromValue(draft)}
       onKeyDown={onKeyDown}
     />
   )

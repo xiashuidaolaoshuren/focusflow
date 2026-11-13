@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { CircleAlertIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { ApiError } from "@/lib/api"
+import { getFieldError } from "@/components/ui/field-error"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
@@ -68,16 +68,6 @@ const fieldVariants = cva(
     },
   }
 )
-
-export function getFieldError(
-  error: unknown,
-  fieldName: string,
-): string | undefined {
-  if (!(error instanceof ApiError) || !error.details) {
-    return undefined
-  }
-  return error.details[fieldName]?.[0]
-}
 
 type FieldControlProps = {
   id: string

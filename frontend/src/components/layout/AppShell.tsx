@@ -38,8 +38,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  useSidebar,
+ 
 } from '@/components/ui/sidebar'
+import { useSidebar } from '@/components/ui/sidebar-context'
 import { useCurrentUser, useLogout } from '@/features/auth/hooks'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { formatClock, formatDateLabel } from '@/lib/format'

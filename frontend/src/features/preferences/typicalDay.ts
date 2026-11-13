@@ -2,8 +2,23 @@ import type {
   DailyPlanResponse,
   ScheduledBlockResponse,
   BlockKind,
+  TaskSnapshotResponse,
 } from '@/types/api'
-import { sampleTaskSnapshot } from '@/features/plans/planFixtures'
+
+/** Placeholder snapshot so the preview's work blocks parse like a real plan's. */
+const PREVIEW_TASK_SNAPSHOT: TaskSnapshotResponse = {
+  sourceTaskId: 0,
+  taskReferenceId: null,
+  title: 'Focus session',
+  priority: 'MEDIUM',
+  status: 'OPEN',
+  dueDate: null,
+  estimatedMinutes: null,
+  capturedRemainingEffortMinutes: null,
+  mustInclude: false,
+  capturedCheckpointId: null,
+  neededForTaskId: null,
+}
 
 export type TypicalDayInput = {
   workDayStart: string
@@ -60,7 +75,7 @@ function toBlock(draft: Draft, id: number, session: { index: number; count: numb
       kind: 'WORK',
       sessionIndex: session?.index ?? 1,
       sessionCount: session?.count ?? 1,
-      taskSnapshot: { ...sampleTaskSnapshot, title: 'Focus session' },
+      taskSnapshot: PREVIEW_TASK_SNAPSHOT,
       label: null,
     }
   }

@@ -1,6 +1,6 @@
 import { MoonIcon, SunIcon } from 'lucide-react'
 
-import { useTheme } from '@/components/theme/ThemeProvider'
+import { useTheme } from '@/components/theme/theme-context'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 

@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { Field, getFieldError } from '@/components/ui/field'
+import { Field } from '@/components/ui/field'
+import { getFieldError } from '@/components/ui/field-error'
 import { Input } from '@/components/ui/input'
 import { ApiError } from '@/lib/api'
 
