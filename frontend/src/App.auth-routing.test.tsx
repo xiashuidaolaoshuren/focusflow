@@ -258,7 +258,7 @@ describe('App auth routing', () => {
 
     await waitForApp(() => {
       expect(
-        screen.getByRole('heading', { name: /scheduling preferences/i }),
+        screen.getByRole('heading', { name: 'Settings' }),
       ).toBeInTheDocument()
     })
   })

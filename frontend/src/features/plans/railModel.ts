@@ -6,11 +6,12 @@ import type {
   ScheduledBlockResponse,
 } from '@/types/api'
 
-export type Density = 'comfortable' | 'compact'
+export type Density = 'comfortable' | 'compact' | 'mini'
 
 const PX_PER_MINUTE: Record<Density, number> = {
   comfortable: 1.6,
   compact: 1.2,
+  mini: 0.6,
 }
 
 export type RailBlock = {

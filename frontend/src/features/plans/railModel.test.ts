@@ -275,4 +275,14 @@ describe('buildRail', () => {
     expect(compact.blocks[0]).toMatchObject({ topPx: 0, heightPx: 58 })
     expect(compact.blocks[0]!.heightPx).toBeLessThan(comfortable.blocks[0]!.heightPx)
   })
+
+  it('uses 0.6 px per minute when mini without changing the block count', () => {
+    const plan = planWith([work('09:00:00', '09:50:00'), ...dayBlocks.slice(1)])
+    const comfortable = buildRail(plan, null, 'comfortable')
+    const mini = buildRail(plan, null, 'mini')
+
+    expect(mini.blocks).toHaveLength(comfortable.blocks.length)
+    expect(mini.blocks[0]).toMatchObject({ topPx: 0, heightPx: 50 * 0.6 - 2 })
+    expect(mini.totalPx).toBe(540 * 0.6)
+  })
 })
