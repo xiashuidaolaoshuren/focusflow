@@ -1,5 +1,5 @@
 import { latestRevisionId, planHasProgress } from '@/features/plans/planConflicts'
-import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
+import { getLocalDateString, getLocalMinuteString } from '@/lib/planningDate'
 import type { DailyPlanResponse, ReplanRequest, TaskResponse } from '@/types/api'
 
 export type ActionVisibility = {
@@ -51,7 +51,7 @@ export function buildReplanRequest(
 
   return {
     currentDate: getLocalDateString(now),
-    cutoff: getLocalTimeString(now),
+    cutoff: getLocalMinuteString(now),
     expectedRevisionId,
     effortVersions: tasks
       .filter((task) => task.status === 'OPEN' || task.status === 'IN_PROGRESS')

@@ -23,7 +23,11 @@ import { RailOutcome } from '@/features/plans/RailOutcome'
 import type { OutcomeTone } from '@/features/plans/railModel'
 import { useRecordBlockProgress } from '@/features/plans/hooks'
 import { formatClock, formatDuration } from '@/lib/format'
-import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
+import {
+  getLocalDateString,
+  getLocalMinuteString,
+  getLocalTimeString,
+} from '@/lib/planningDate'
 import { cn } from '@/lib/utils'
 import type {
   DailyPlanResponse,
@@ -227,7 +231,7 @@ export function OutcomeDialog({
           expectedProgressVersion: block.progressVersion,
           finish,
           checkpoint,
-          cutoff: crossing ? now : null,
+          cutoff: crossing ? getLocalMinuteString(now) : null,
         },
       },
       { onSuccess: () => onClose() },

@@ -737,6 +737,29 @@ class BlockProgressServiceTest {
 	}
 
 	@Test
+	void record_whenCutoffIsNotMinuteAligned_throwsBadRequest() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		BlockProgressRequest request =
+				new BlockProgressRequest(
+						WorkOutcome.PARTLY_DONE,
+						20,
+						PLAN_DATE,
+						0,
+						false,
+						new BlockProgressRequest.Checkpoint(70),
+						LocalTime.of(9, 20, 30));
+
+		assertThatThrownBy(() -> service.record(PLAN_ID, BLOCK_ID, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("times must be minute-aligned");
+
+		assertThat(block.getOutcome()).isNull();
+		assertThat(block.isReconciled()).isFalse();
+		assertThat(block.getProgressVersion()).isZero();
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+	}
+
+	@Test
 	void record_crossingBlockWithZeroActualMinutes_storesTheKnownZeroAndExplicitUnknown() {
 		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
 		BlockProgressRequest request =

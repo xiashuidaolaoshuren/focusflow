@@ -14,7 +14,7 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | # | Decision | Dependent | Proposed default |
 |---|----------|-----------|------------------|
 | D1 | Out-of-window commitment: spec says "rejected", backend spec says "stored, ignored" (Dentist 15:00 saved in a 03:00–10:00 window) | T6 | UI rejects inline; backend unchanged |
-| D2 | Seconds in `cutoff`: backend truncates, or returns 400 | T1 | 400 (never 500); frontend always sends `HH:mm:00` |
+| D2 | Seconds in `cutoff`: backend truncates, or returns 400 | T1 | **Decided 2026-11-15:** 400 (never 500) via service-layer `MinutePrecision.requireMinuteAligned` — message `times must be minute-aligned`, no `details`; frontend always sends `HH:mm:00` |
 | D3 | Backend validation messages follow `Accept-Language` (got `不得空白`) | T9 | Pin message locale to English |
 | D4 | Prototype date styles ("Friday, 6 November", Today/Tomorrow) vs spec rule 3 (`6 Nov 2026`) | T8 | Spec wins; only change if you say otherwise |
 
@@ -31,7 +31,7 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 |---------|------|---------------|----------------|---------------------|
 | T1 | `frontend/src/lib/planningDate.ts` | modify | `getLocalMinuteString(now?)` → `HH:mm:00` | verified |
 | T1 | `frontend/src/features/plans/planActionRules.ts`, `OutcomeDialog.tsx` | modify | minute-aligned `cutoff` | verified |
-| T1 | `backend/.../plan/dto/ReplanRequest.java`, `DailyPlanService.java`, `BlockProgressService.java`, `docs/api.md` | modify | 400 on non-aligned `cutoff` | verified |
+| T1 | `backend/.../plan/DailyPlanService.java`, `BlockProgressService.java`, `docs/api.md` | modify | 400 on non-aligned `cutoff` (service-layer `MinutePrecision`; DTO unchanged) | verified |
 | T2 | `routes/TasksPage.tsx` | modify | `key` the editor sheet; 400px sheet | verified |
 | T2 | `features/tasks/{TaskRow,StatusBadge,PriorityBadge,TaskEditorSheet}.tsx` | modify | priority fill, glyph outline badges, forecast badges, sheet title style | verified |
 | T3 | `features/horizon/{HorizonGridView,HorizonPage}.tsx`, `horizonGrid.ts` | modify | column layout, On track badge, English dates, ⓘ, ochre shortfall | verified |
@@ -66,10 +66,10 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 - [ ] **Do:** Re-plan and reconcile saves send `cutoff` as `HH:mm:00`; the backend rejects a non-minute-aligned `cutoff` with 400 (D2) instead of a 500.
 - **Consumes:** none
-- **Produces:** `getLocalMinuteString(date?: Date): string`; 400 `Validation failed` with `details.cutoff`; updated replan contract in `docs/api.md` (~L1031–1057).
+- **Produces:** `getLocalMinuteString(date?: Date | string): string`; 400 `times must be minute-aligned` via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); updated replan and block-progress contract in `docs/api.md` (~L1031–1057 and ~L1013/L1022).
 - **Acceptance:** `buildReplanRequest` at 04:24:05 gives `cutoff === '04:24:00'`; reconcile PUT `cutoff` ends `:00`; non-crossing saves still send `null`; backend `"04:24:05"` → 400, `"04:24:00"` → 200; 409 responses unchanged. Live: Re-plan after recording the elapsed block returns 200 and writes a new revision.
-- **Blocked by:** D2
-- **Plan mode:** medium (named unknown: DTO vs service validation placement)
+- **Blocked by:** D2 (decided 2026-11-15: 400 via service-layer `MinutePrecision`)
+- **Plan mode:** medium (named unknown resolved: service-layer placement, reusing `MinutePrecision`)
 - **TDD suitable:** yes
 - **Verification:** `npm test -- planActionRules OutcomeDialog planningDate`; `cd backend; .\gradlew.bat test --tests "*Replan*"`; live re-plan.
 
@@ -175,3 +175,4 @@ Per subtask, obey **`TDD suitable`**: `yes` means strict **test-driven-developme
 |------|--------|------|
 | 2026-11-15 | Initial plan from the live browser check (18 subtasks; findings are in the conversation, no separate report file) | — |
 | 2026-11-15 | Merged 18 subtasks into 10 by screen/area: T1+T2→T1; T3+T15→T2; T4+T11→T3; T5(a)+T12→T4; T5(b)+T14→T5; T5(c)+T6+T7+T8+T9→T6; T13→T7; T16+T17→T8; T10→T9; T18→T10. Added D4. Acceptance criteria preserved | material (user-requested restructure) |
+| 2026-11-15 | D2 decided (user): 400 via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); T1 Produces/acceptance wording and file map updated; `getLocalMinuteString` widened to `Date \| string` | equivalent (D2 answer, user-approved) |

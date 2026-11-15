@@ -10,6 +10,7 @@ import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
@@ -93,6 +94,7 @@ public class DailyPlanService {
 	}
 
 	public DailyPlanResponse replan(Long planId, ReplanRequest request) {
+		MinutePrecision.requireMinuteAligned(request.cutoff());
 		DailyPlan plan = loadPlanForCurrentUser(planId);
 		if (!plan.getPlanDate().equals(request.currentDate())) {
 			throw new ConflictException("REPLAN_NOT_TODAY", "plan date is not the client current date");

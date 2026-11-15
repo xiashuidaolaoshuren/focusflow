@@ -24,6 +24,7 @@ const mockedUseRecordBlockProgress = vi.mocked(useRecordBlockProgress)
 vi.mock('@/lib/planningDate', () => ({
   getLocalDateString: vi.fn(() => '2026-06-15'),
   getLocalTimeString: vi.fn(() => '09:45:00'),
+  getLocalMinuteString: vi.fn(() => '09:45:00'),
 }))
 
 const liveTask: TaskResponse = {
@@ -240,6 +241,24 @@ describe('OutcomeDialog reconcile', () => {
           cutoff: '09:45:00',
           checkpoint: { remainingEffortMinutes: 5 },
         }),
+      }),
+      expect.anything(),
+    )
+  })
+
+  it('sends a minute-aligned cutoff even when the clock has seconds', () => {
+    const mutate = mockMutation()
+    renderDialog({ block: crossingBlock, now: '09:45:42' })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^partly done$/i }))
+    fireEvent.change(screen.getByLabelText(/actual minutes/i), {
+      target: { value: '20' },
+    })
+    fireEvent.click(saveButton())
+
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        request: expect.objectContaining({ cutoff: '09:45:00' }),
       }),
       expect.anything(),
     )

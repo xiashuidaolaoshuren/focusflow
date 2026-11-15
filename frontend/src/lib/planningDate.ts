@@ -12,6 +12,12 @@ export function getLocalTimeString(date = new Date()): string {
   return `${hours}:${minutes}:${seconds}`
 }
 
+/** The minute-aligned form of a clock value: `HH:mm:00`, seconds dropped. */
+export function getLocalMinuteString(date: Date | string = new Date()): string {
+  const time = typeof date === 'string' ? date : getLocalTimeString(date)
+  return `${time.slice(0, 5)}:00`
+}
+
 export function isValidPlanningDate(value: string | null): value is string {
   if (value == null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false

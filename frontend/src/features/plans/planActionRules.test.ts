@@ -110,7 +110,7 @@ describe('buildReplanRequest', () => {
 
     expect(request).toEqual({
       currentDate: '2026-06-15',
-      cutoff: '14:10:42',
+      cutoff: '14:10:00',
       expectedRevisionId: 9,
       effortVersions: [
         { taskId: 1, effortVersion: 3 },

@@ -1010,7 +1010,7 @@ Record an outcome for one work block. A first save credits provisionally: `DONE`
 | `expectedProgressVersion` | integer | no | Block's `progressVersion`; stale → **409** `PROGRESS_CONFLICT` |
 | `finish` | boolean | no | Finishes the task; wins over `cutoff` when both are sent |
 | `checkpoint` | `Checkpoint` | no | Explicit reassessment that replaces the running remainder |
-| `cutoff` | string (time) | no | Current time, to reconcile a block that spans now |
+| `cutoff` | string (time) | no | Current time, to reconcile a block that spans now. Must be minute-aligned (`HH:mm:00`) when sent; a time with seconds → **400** `times must be minute-aligned` |
 
 **Reconciling a block that spans the current time.** For an actionable block whose interval contains `cutoff`, send `cutoff` with the known `actualMinutes` and the required `checkpoint` (or an explicit null remainder for unknown). That stores the elapsed portion and closes the block for re-planning; it grants no planned credit.
 
@@ -1019,7 +1019,7 @@ Record an outcome for one work block. A first save credits provisionally: `DONE`
 | Status | Body |
 |--------|------|
 | **200** | `BlockProgressResponse` |
-| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, `BLOCK_NOT_RECORDABLE`, or validation failed |
+| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, `BLOCK_NOT_RECORDABLE`, `message`: `times must be minute-aligned` for a `cutoff` with seconds, or validation failed |
 | **401** | Not authenticated |
 | **404** | `message`: `daily plan not found` or block not found |
 | **409** | `code`: `PROGRESS_CONFLICT` |
@@ -1039,7 +1039,7 @@ Re-plan runs only for the client current date and only when the plan has a compl
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `currentDate` | string (date) | yes | Must equal the plan date, else **409** `REPLAN_NOT_TODAY` |
-| `cutoff` | string (time) | yes | Clamps up to the window start when earlier; at or after the window end → **409** `REPLAN_WINDOW_ENDED` |
+| `cutoff` | string (time) | yes | Must be minute-aligned (`HH:mm:00`); a time with seconds → **400** `times must be minute-aligned`. Clamps up to the window start when earlier; at or after the window end → **409** `REPLAN_WINDOW_ENDED` |
 | `expectedRevisionId` | integer | yes | Latest revision id the client saw |
 | `effortVersions` | `TaskEffortVersion[]` | yes | One entry per current plannable task, matching `remainingEffortMinutes` state |
 
@@ -1048,7 +1048,7 @@ Re-plan runs only for the client current date and only when the plan has a compl
 | Status | Body |
 |--------|------|
 | **200** | `DailyPlanResponse` with the appended revision |
-| **400** | `code`: `PLAN_CANDIDATE_LIMIT`, or validation failed |
+| **400** | `code`: `PLAN_CANDIDATE_LIMIT`, `message`: `times must be minute-aligned` for a `cutoff` with seconds, or validation failed |
 | **401** | Not authenticated |
 | **404** | `message`: `daily plan not found` |
 | **409** | `code`: `REPLAN_NOT_TODAY`, `REPLAN_LEGACY_SNAPSHOT`, `REPLAN_WINDOW_ENDED`, `ELAPSED_WORK_UNRESOLVED`, `PLAN_CHANGED`, or `TASK_MISSING_DURING_GENERATION` |

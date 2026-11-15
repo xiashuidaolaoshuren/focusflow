@@ -1277,6 +1277,47 @@ class DailyPlanServiceTest {
 	}
 
 	@Test
+	void replan_whenCutoffIsNotMinuteAligned_throwsBadRequest() {
+		lenient()
+				.when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		lenient()
+				.when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L))
+				.thenReturn(Optional.of(plan));
+		lenient().when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of());
+		lenient()
+				.when(commitmentQueryService.windowsFor(42L, LocalDate.of(2026, 6, 1)))
+				.thenReturn(List.of());
+		lenient()
+				.when(scheduler.compose(any(), any(), any(), any(), any()))
+				.thenReturn(stubSchedule());
+		lenient()
+				.when(persister.appendRevision(any(), any(), any(), any(), any(), any(), any(), any()))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								7L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0, 30),
+						100L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("times must be minute-aligned");
+
+		verify(aiClient, never()).generate(any());
+		verify(persister, never())
+				.appendRevision(any(), any(), any(), any(), any(), any(), any(), any());
+	}
+
+	@Test
 	void replan_whenElapsedWorkIsUnresolved_throwsElapsedWorkUnresolved() {
 		when(currentUser.getCurrentUser())
 				.thenReturn(new UserContext(42L, "user@example.com", "user"));

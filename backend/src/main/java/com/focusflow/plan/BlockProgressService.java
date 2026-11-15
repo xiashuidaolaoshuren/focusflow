@@ -3,6 +3,7 @@ package com.focusflow.plan;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.effort.EffortEvent;
 import com.focusflow.effort.RemainingEffortCalculator;
 import com.focusflow.effort.WorkOutcome;
@@ -57,6 +58,7 @@ public class BlockProgressService {
 						.findByOwner_IdAndId(ownerId, planId)
 						.orElseThrow(() -> new NotFoundException("daily plan not found"));
 		requireNotFuture(plan, request);
+		requireMinuteAlignedCutoff(request);
 		DailyPlanBlock block = findBlock(plan, blockId);
 		requireRecordable(plan, block);
 		Task task = block.getDailyPlanTask().getTaskReference();
@@ -238,6 +240,12 @@ public class BlockProgressService {
 		}
 		if (plan.getPlanDate().isAfter(request.currentDate())) {
 			throw new BadRequestException("FUTURE_ACTUAL", "work date is after the current date");
+		}
+	}
+
+	private static void requireMinuteAlignedCutoff(BlockProgressRequest request) {
+		if (request.cutoff() != null) {
+			MinutePrecision.requireMinuteAligned(request.cutoff());
 		}
 	}
 
