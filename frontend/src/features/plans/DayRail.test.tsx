@@ -32,6 +32,19 @@ describe('DayRail', () => {
     expect(screen.getByLabelText(/^Commitment: Dentist/)).toBeInTheDocument()
   })
 
+  it('shows a stacked work block duration before its session label', () => {
+    renderRail()
+
+    expect(screen.getByText('09:00–09:50 · 50m · session 2 of 3')).toBeInTheDocument()
+  })
+
+  it('names fixed breaks and commitments by kind in the meta line', () => {
+    renderRail()
+
+    expect(screen.getByText('12:00–13:00 · Fixed break')).toBeInTheDocument()
+    expect(screen.getByText('14:00–15:00 · Commitment')).toBeInTheDocument()
+  })
+
   it('shows the now marker with its time', () => {
     renderRail()
 

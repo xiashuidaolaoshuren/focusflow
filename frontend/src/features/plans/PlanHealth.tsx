@@ -31,7 +31,7 @@ function HealthRow({
 }) {
   return (
     <li className="flex items-center gap-3 px-4 py-2.5 not-first:border-t not-first:border-border">
-      <span className="inline-flex flex-none text-muted-foreground">{icon}</span>
+      <span className="inline-flex flex-none text-muted-foreground [&_svg]:size-4">{icon}</span>
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm leading-[18px] font-medium">{label}</span>
         <span className="truncate text-xs leading-4 tracking-[0.01em] text-muted-foreground">
@@ -63,9 +63,15 @@ export function PlanHealth({
       {health.shortfall != null ? (
         <Alert variant="warning">
           <TriangleAlertIcon />
-          <AlertTitle>
+          <AlertTitle className="flex items-center gap-1">
             Shortfall &middot;{' '}
             <span className="font-mono">{formatDuration(health.shortfall.minutes)}</span>
+            <InfoPopover label="About this shortfall" title="Shortfall">
+              <p>
+                Work due by tomorrow that no longer fits today&rsquo;s Work window.
+                Re-plan moves it to the next Working day.
+              </p>
+            </InfoPopover>
           </AlertTitle>
           <AlertDescription>
             <ul className="flex flex-col gap-1">

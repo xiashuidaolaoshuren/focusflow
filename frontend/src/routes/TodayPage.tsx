@@ -1,5 +1,9 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import {
+  CalendarDaysIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { Skeleton } from '@/components/ui/skeleton'
@@ -205,6 +209,17 @@ export function TodayPage() {
     setSearchParams(nextParams)
   }
 
+  const noPlanCard = (
+    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-input bg-card p-6 text-center">
+      <CalendarDaysIcon className="size-5 text-muted-foreground" aria-hidden="true" />
+      <p className="font-display text-lg leading-7 font-medium">No Daily plan yet</p>
+      <p className="text-sm text-muted-foreground">
+        Generate a plan to place today&rsquo;s work on the rail.
+      </p>
+      <GenerateButton planDate={planDate} />
+    </div>
+  )
+
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-end justify-between gap-6">
@@ -344,20 +359,16 @@ export function TodayPage() {
           {settled && rail != null
             ? isMobile
               ? <AgendaList rail={rail} onSelect={readOnly ? undefined : setSelectedBlockId} />
-              : <DayRail rail={rail} onSelect={readOnly ? undefined : setSelectedBlockId} />
+              : (
+                <DayRail
+                  rail={rail}
+                  onSelect={readOnly ? undefined : setSelectedBlockId}
+                  empty={plan == null ? noPlanCard : undefined}
+                />
+              )
             : null}
-          {settled && plan == null ? (
-            <div className="p-4">
-              <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-input bg-card p-6 text-center">
-                <p className="font-display text-lg leading-7 font-medium">
-                  No Daily plan yet
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Generate a plan to place today&rsquo;s work on the rail.
-                </p>
-                <GenerateButton planDate={planDate} />
-              </div>
-            </div>
+          {settled && plan == null && (isMobile || rail == null) ? (
+            <div className="p-4">{noPlanCard}</div>
           ) : null}
           {settled && readOnly && plan != null ? (
             <div className="p-4">

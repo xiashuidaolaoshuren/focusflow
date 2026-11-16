@@ -53,6 +53,19 @@ export function formatDateLabel(iso: string): string {
   return `${day} ${month} ${year}`
 }
 
+/** Today, Tomorrow, or the date, relative to the given local day (YYYY-MM-DD). */
+export function relativeDueLabel(due: string, today: string): string {
+  if (due === today) {
+    return 'Today'
+  }
+  const [year = 0, month = 1, day = 1] = today.split('-').map(Number)
+  const tomorrow = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10)
+  if (due === tomorrow) {
+    return 'Tomorrow'
+  }
+  return formatDateLabel(due)
+}
+
 export function formatDuration(minutes: number): string {
   if (minutes <= 0) {
     return '0m'

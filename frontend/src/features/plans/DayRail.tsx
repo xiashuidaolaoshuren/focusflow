@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react'
 
 import { RailOutcome } from '@/features/plans/RailOutcome'
-import type { Rail, RailBlock } from '@/features/plans/railModel'
+import { KIND_LABELS, type Rail, type RailBlock } from '@/features/plans/railModel'
 import { cn } from '@/lib/utils'
 
 type DayRailProps = {
   rail: Rail
   /** Omit (or pass undefined) for a read-only rail: blocks open nothing. */
   onSelect?: ((blockId: number) => void) | undefined
+  /** Overlaid just after now on a day with no plan yet. */
+  empty?: ReactNode | undefined
 }
 
 const KIND_CLASSES: Record<RailBlock['kind'], string> = {
@@ -24,7 +26,11 @@ const BLOCK_BASE =
 
 function BlockBody({ block }: { block: RailBlock }) {
   const meta =
-    block.kind === 'WORK' ? [block.range, block.sessionLabel] : [block.range]
+    block.kind === 'WORK'
+      ? [block.range, `${block.durationMinutes}m`, block.sessionLabel]
+      : block.kind === 'FIXED_BREAK' || block.kind === 'COMMITMENT'
+        ? [block.range, KIND_LABELS[block.kind]]
+        : [block.range]
   const end = block.outcome ? <RailOutcome outcome={block.outcome} /> : null
 
   if (block.layout === 'row') {
@@ -133,7 +139,7 @@ function RailBlockNode({
   )
 }
 
-export function DayRail({ rail, onSelect }: DayRailProps) {
+export function DayRail({ rail, onSelect, empty }: DayRailProps) {
   return (
     <div className="pt-4 pr-4 pb-5">
       <div
@@ -161,28 +167,38 @@ export function DayRail({ rail, onSelect }: DayRailProps) {
             />
           ) : null}
         </div>
-        <div role="list" aria-label="Daily plan blocks" className="relative">
-          {rail.lines.map((line) => (
-            <span
-              key={line.topPx}
-              aria-hidden="true"
-              className={cn(
-                'absolute right-0 left-0 border-t border-border',
-                line.half && 'border-dotted',
-              )}
-              style={{ top: line.topPx }}
-            />
-          ))}
-          {rail.peak ? (
-            <span
-              aria-hidden="true"
-              className="absolute right-0 left-0 bg-peak"
-              style={{ top: rail.peak.topPx, height: rail.peak.heightPx }}
-            />
+        <div className="relative">
+          <div role="list" aria-label="Daily plan blocks" className="relative">
+            {rail.lines.map((line) => (
+              <span
+                key={line.topPx}
+                aria-hidden="true"
+                className={cn(
+                  'absolute right-0 left-0 border-t border-border',
+                  line.half && 'border-dotted',
+                )}
+                style={{ top: line.topPx }}
+              />
+            ))}
+            {rail.peak ? (
+              <span
+                aria-hidden="true"
+                className="absolute right-0 left-0 bg-peak"
+                style={{ top: rail.peak.topPx, height: rail.peak.heightPx }}
+              />
+            ) : null}
+            {rail.blocks.map((block) => (
+              <RailBlockNode key={block.id} block={block} onSelect={onSelect} />
+            ))}
+          </div>
+          {empty != null ? (
+            <div
+              className="absolute right-0 left-2 z-4"
+              style={{ top: rail.emptyCardTopPx }}
+            >
+              {empty}
+            </div>
           ) : null}
-          {rail.blocks.map((block) => (
-            <RailBlockNode key={block.id} block={block} onSelect={onSelect} />
-          ))}
         </div>
         {rail.nowTopPx != null && rail.nowLabel != null ? (
           <div

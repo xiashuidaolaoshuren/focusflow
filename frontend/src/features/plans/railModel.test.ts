@@ -315,4 +315,17 @@ describe('buildRail', () => {
     expect(mini.blocks[0]).toMatchObject({ topPx: 0, heightPx: 50 * 0.6 - 2 })
     expect(mini.totalPx).toBe(540 * 0.6)
   })
+
+  it('places the empty-plan card 10 minutes after now', () => {
+    const rail = buildRail(planWith([]), 10 * 60 + 30, 'comfortable')
+
+    expect(rail.emptyCardTopPx).toBe((10 * 60 + 40 - 9 * 60) * 1.6)
+  })
+
+  it('carries each block duration in minutes', () => {
+    const plan = planWith([work('09:00:00', '09:50:00'), ...dayBlocks.slice(1)])
+    const rail = buildRail(plan, null, 'comfortable')
+
+    expect(rail.blocks[0]).toMatchObject({ durationMinutes: 50 })
+  })
 })

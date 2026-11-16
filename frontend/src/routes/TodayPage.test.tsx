@@ -297,6 +297,17 @@ describe('TodayPage', () => {
     expect(screen.getAllByRole('button', { name: /generate/i })).toHaveLength(1)
   })
 
+  it('overlays the no-plan card on the rail track on desktop', () => {
+    mockPlan({ plan: null })
+    mockPreferences()
+
+    renderToday('/today?date=2026-11-06')
+
+    const track = document.querySelector('[data-rail]') as HTMLElement | null
+    expect(track).not.toBeNull()
+    expect(within(track as HTMLElement).getByText('No Daily plan yet')).toBeInTheDocument()
+  })
+
   it('offers Generate, an empty rail, and no plan health without a plan', () => {
     mockPlan({ plan: null })
 

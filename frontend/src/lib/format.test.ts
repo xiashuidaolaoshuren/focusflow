@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
+import { formatClock, formatDateLabel, formatDuration, relativeDueLabel } from '@/lib/format'
+
+describe('relativeDueLabel', () => {
+  it('says Today and Tomorrow for the next two days and a date otherwise', () => {
+    expect(relativeDueLabel('2026-11-16', '2026-11-16')).toBe('Today')
+    expect(relativeDueLabel('2026-11-17', '2026-11-16')).toBe('Tomorrow')
+    expect(relativeDueLabel('2026-11-30', '2026-11-16')).toBe(formatDateLabel('2026-11-30'))
+  })
+
+  it('rolls Tomorrow over a month end', () => {
+    expect(relativeDueLabel('2026-12-01', '2026-11-30')).toBe('Tomorrow')
+  })
+})
 
 describe('formatDuration', () => {
   it('formats minutes without zero-padding the remainder', () => {

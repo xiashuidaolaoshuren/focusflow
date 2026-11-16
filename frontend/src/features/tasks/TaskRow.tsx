@@ -60,7 +60,7 @@ export function PriorityFlag({ priority }: { priority: TaskResponse['priority'] 
   )
 }
 
-function EffortCell({ task }: { task: TaskResponse }) {
+export function EffortCell({ task }: { task: TaskResponse }) {
   if (task.remainingEffortMinutes == null) {
     return (
       <span className="flex flex-col items-end whitespace-nowrap">

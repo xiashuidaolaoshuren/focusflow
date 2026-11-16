@@ -1,12 +1,15 @@
-import { InboxIcon } from 'lucide-react'
+import { InboxIcon, LinkIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Badge } from '@/components/ui/badge'
 import { InfoPopover } from '@/components/InfoPopover'
 import { DeadlineBadge, DeadlineLegend } from '@/features/horizon/DeadlineBadge'
-import { PriorityFlag } from '@/features/tasks/TaskRow'
+import { EffortCell, PriorityFlag } from '@/features/tasks/TaskRow'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { miniTaskRows } from '@/features/tasks/miniTasksModel'
+import { waitingOnLabel } from '@/features/tasks/taskDependencyLinks'
+import { relativeDueLabel } from '@/lib/format'
+import { getLocalDateString } from '@/lib/planningDate'
 import type { HorizonTaskRowResponse, TaskResponse } from '@/types/api'
 
 type MiniTasksCardProps = {
@@ -14,17 +17,10 @@ type MiniTasksCardProps = {
   horizonRowByTaskId: Map<number, HorizonTaskRowResponse>
 }
 
-function Effort({ task }: { task: TaskResponse }) {
-  return (
-    <span className="flex-none text-right font-mono text-sm whitespace-nowrap">
-      {task.remainingEffortMinutes == null ? '—' : `${task.remainingEffortMinutes}m`}
-    </span>
-  )
-}
-
 /** The compact Tasks card beside the rail: active work, its badges and what is left. */
 export function MiniTasksCard({ tasks, horizonRowByTaskId }: MiniTasksCardProps) {
   const rows = miniTaskRows(tasks)
+  const today = getLocalDateString()
 
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card">
@@ -47,6 +43,7 @@ export function MiniTasksCard({ tasks, horizonRowByTaskId }: MiniTasksCardProps)
         <ul className="rows" aria-label="Active tasks">
           {rows.map(({ task, unplaced }) => {
             const horizonRow = horizonRowByTaskId.get(task.id)
+            const waitingOn = waitingOnLabel(task)
             return (
               <li
                 key={task.id}
@@ -65,6 +62,11 @@ export function MiniTasksCard({ tasks, horizonRowByTaskId }: MiniTasksCardProps)
                       <DeadlineBadge
                         deadlineStatus={horizonRow.deadlineStatus}
                         unresolvedEffort={horizonRow.unresolvedEffort}
+                        suffix={
+                          task.dueDate != null
+                            ? relativeDueLabel(task.dueDate, today)
+                            : undefined
+                        }
                       />
                     ) : null}
                     {unplaced ? (
@@ -74,8 +76,16 @@ export function MiniTasksCard({ tasks, horizonRowByTaskId }: MiniTasksCardProps)
                       </Badge>
                     ) : null}
                   </span>
+                  {waitingOn != null ? (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <LinkIcon className="size-3" aria-hidden="true" />
+                      {waitingOn}
+                    </span>
+                  ) : null}
                 </div>
-                <Effort task={task} />
+                <div className="flex-none">
+                  <EffortCell task={task} />
+                </div>
               </li>
             )
           })}

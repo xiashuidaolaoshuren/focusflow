@@ -19,6 +19,7 @@ export type RailBlock = {
   kind: BlockKind
   recordable: boolean
   startMinutes: number
+  durationMinutes: number
   topPx: number
   heightPx: number
   layout: 'stack' | 'row'
@@ -61,6 +62,8 @@ export type Rail = {
   hours: { label: string; topPx: number; nearNow: boolean }[]
   lines: { topPx: number; half: boolean }[]
   peak: { topPx: number; heightPx: number } | null
+  /** Where the no-plan card sits: 10 minutes after now, kept inside the window. */
+  emptyCardTopPx: number
   totalPx: number
 }
 
@@ -160,6 +163,10 @@ export function buildRail(
     lines,
     peak,
     totalPx: (windowEnd - windowStart) * ppm,
+    emptyCardTopPx:
+      (Math.min(Math.max(nowMinutes ?? windowStart, windowStart) + 10, windowEnd - 200) -
+        windowStart) *
+      ppm,
     nowTopPx: nowVisible ? (nowMinutes - windowStart) * ppm : null,
     nowMinutes: nowVisible ? nowMinutes : null,
     nowLabel: nowVisible ? clockFromMinutes(nowMinutes) : null,
@@ -199,6 +206,7 @@ export function buildRail(
           (block.displayState === 'ACTIONABLE' ||
             block.displayState === 'HISTORICAL'),
         startMinutes: start,
+        durationMinutes: end - start,
         range,
         title,
         sessionLabel,

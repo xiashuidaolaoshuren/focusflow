@@ -70,6 +70,9 @@ describe('PlanHealth', () => {
     expect(
       screen.getByText('Prepare slides · 80 of 90m placed'),
     ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'About this shortfall' }),
+    ).toBeInTheDocument()
   })
 
   it('shows no shortfall when everything fits', () => {
