@@ -34,7 +34,10 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | T1 | `backend/.../plan/DailyPlanService.java`, `BlockProgressService.java`, `docs/api.md` | modify | 400 on non-aligned `cutoff` (service-layer `MinutePrecision`; DTO unchanged) | verified |
 | T2 | `routes/TasksPage.tsx` | modify | `key` the editor sheet; 400px sheet | verified |
 | T2 | `features/tasks/{TaskRow,StatusBadge,PriorityBadge,TaskEditorSheet}.tsx` | modify | priority fill, glyph outline badges, forecast badges, sheet title style | verified |
-| T3 | `features/horizon/{HorizonGridView,HorizonPage}.tsx`, `horizonGrid.ts` | modify | column layout, On track badge, English dates, ⓘ, ochre shortfall | verified |
+| T2 | `features/tasks/taskDependencyLinks.ts` | modify | adds `waitingOnLabel` (active blockers only) | verified |
+| T3 | `features/horizon/{HorizonGridView,HorizonPage,HorizonDayList}.tsx`, `horizonGrid.ts` | modify | column layout, On track badge, English dates, ⓘ, ochre shortfall | verified |
+| T2+T3 | `features/horizon/DeadlineBadge.tsx` | create | shared deadline badge, glyph map, legend (used by Tasks and Horizon) | verified |
+| T2+T3 | `components/InfoPopover.tsx` | create | shared ⓘ popover (reused by T5–T7) | verified |
 | T4 | `features/plans/{hooks.ts,PlanDeleteButton,PlanHistoryList,PlanRevisionSwitch}.tsx`, `routes/{PlanHistoryPage,PlanDetailPage}.tsx` | modify | delete 409 message, Shortfall badge, date copy, non-solid delete, Read-only badge | verified |
 | T5 | `features/preferences/{SettingsForm,settingsModel,MiniRail,typicalDay}.ts(x)`, `components/form/TimeField.tsx` | modify | label rule, error display, stepping, layout, preview | verified |
 | T6 | `routes/TodayPage.tsx`, `features/commitments/CommitmentsPanel.tsx`, `features/plans/{railModel.ts,DayRail,AgendaList,OutcomeDialog}.tsx` | modify | past-day read-only, mobile fit, rail polish, outcome clarity, commitment messages | verified |
@@ -175,4 +178,5 @@ Per subtask, obey **`TDD suitable`**: `yes` means strict **test-driven-developme
 |------|--------|------|
 | 2026-11-15 | Initial plan from the live browser check (18 subtasks; findings are in the conversation, no separate report file) | — |
 | 2026-11-15 | Merged 18 subtasks into 10 by screen/area: T1+T2→T1; T3+T15→T2; T4+T11→T3; T5(a)+T12→T4; T5(b)+T14→T5; T5(c)+T6+T7+T8+T9→T6; T13→T7; T16+T17→T8; T10→T9; T18→T10. Added D4. Acceptance criteria preserved | material (user-requested restructure) |
+| 2026-11-15 | T2+T3 planned together; file map adds `DeadlineBadge.tsx`, `InfoPopover.tsx`, `waitingOnLabel`, `HorizonDayList.tsx`; fixed-order copy moves into the Horizon pace ⓘ | equivalent |
 | 2026-11-15 | D2 decided (user): 400 via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); T1 Produces/acceptance wording and file map updated; `getLocalMinuteString` widened to `Date \| string` | equivalent (D2 answer, user-approved) |
