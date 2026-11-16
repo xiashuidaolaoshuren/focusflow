@@ -1,19 +1,11 @@
 import { useState } from 'react'
-import {
-  ArrowRightIcon,
-  CalendarIcon,
-  CircleHelpIcon,
-  OctagonAlertIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+import { CalendarIcon, TriangleAlertIcon } from 'lucide-react'
 
 import {
   barPercent,
-  deadlineBadgeLabel,
   dayTotalMinutes,
   type DueMarker,
   dueMarker,
-  forecastHeaderCopy,
   formatDueDateTitle,
   savedConflictCopy,
   savedShortfallMinutes,
@@ -23,6 +15,7 @@ import {
   upstreamCopy,
   waitingOnCopy,
 } from '@/features/horizon/horizonGrid'
+import { DeadlineBadge } from '@/features/horizon/DeadlineBadge'
 import { formatDateLabel, formatDuration } from '@/lib/format'
 import type {
   HorizonDayResponse,
@@ -50,9 +43,9 @@ export function HorizonGridView({ horizon, scaleMinutes }: HorizonGridProps) {
   return (
     <section aria-label="Horizon grid" className="overflow-x-auto">
       <div
-        className="grid min-w-max gap-px rounded-lg border border-border bg-border"
+        className="grid gap-px rounded-lg border border-border bg-border"
         style={{
-          gridTemplateColumns: `minmax(12rem, 16rem) repeat(${horizon.days.length}, minmax(8rem, 1fr))`,
+          gridTemplateColumns: `240px repeat(${horizon.days.length}, minmax(96px, 1fr))`,
         }}
       >
         <div className="sticky left-0 z-20 bg-background p-2 text-sm font-medium">
@@ -111,13 +104,13 @@ function DayHeader({
         {formatDuration(totalMinutes)}
       </div>
       {isSaved && shortfallMinutes > 0 ? (
-        <div className="text-xs font-medium text-destructive">
+        <div className="flex items-center gap-1 text-xs font-medium text-deadline-at-risk">
+          <TriangleAlertIcon className="size-3" aria-hidden="true" />
           Shortfall {formatDuration(shortfallMinutes)}
         </div>
       ) : null}
       {day.kind === 'FORECAST' ? (
         <div className="space-y-1 pt-1 text-left text-xs text-muted-foreground">
-          <p>{forecastHeaderCopy()}</p>
           <a className="underline" href={todayHref(day.date)}>
             Open in Today
           </a>
@@ -129,35 +122,6 @@ function DayHeader({
         </p>
       ) : null}
     </div>
-  )
-}
-
-const DEADLINE_GLYPHS = {
-  AT_RISK: { Icon: TriangleAlertIcon, tone: 'text-deadline-at-risk' },
-  OVERDUE: { Icon: OctagonAlertIcon, tone: 'text-deadline-overdue' },
-  CANNOT_FORECAST: { Icon: CircleHelpIcon, tone: 'text-deadline-unknown' },
-  BEYOND_HORIZON: { Icon: ArrowRightIcon, tone: 'text-deadline-unknown' },
-} as const
-
-function DeadlineForecastBadge({ task }: { task: HorizonTaskRowResponse }) {
-  const status = task.deadlineStatus
-  if (status == null || !(status in DEADLINE_GLYPHS)) {
-    return null
-  }
-  const key = status as keyof typeof DEADLINE_GLYPHS
-  const { Icon, tone } = DEADLINE_GLYPHS[key]
-  const label = deadlineBadgeLabel(status, task.unresolvedEffort)
-  if (label == null) {
-    return null
-  }
-  return (
-    <span
-      data-deadline={status}
-      className={`inline-flex items-center gap-1 text-xs font-medium ${tone}`}
-    >
-      <Icon className="size-3.5" aria-hidden="true" />
-      {label}
-    </span>
   )
 }
 
@@ -201,10 +165,15 @@ function HorizonTaskRow({
         }`}
       >
         <div className="font-medium">{task.title}</div>
-        <div className="text-muted-foreground">
-          Due {formatDueDateTitle(task.dueDate)}
-        </div>
-        <DeadlineForecastBadge task={task} />
+        {formatDueDateTitle(task.dueDate) != null ? (
+          <div className="text-muted-foreground">
+            {formatDueDateTitle(task.dueDate)}
+          </div>
+        ) : null}
+        <DeadlineBadge
+          deadlineStatus={task.deadlineStatus}
+          unresolvedEffort={task.unresolvedEffort}
+        />
         {waitingOn != null ? (
           <div className="text-xs text-muted-foreground">{waitingOn}</div>
         ) : null}

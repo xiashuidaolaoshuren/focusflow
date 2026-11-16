@@ -171,6 +171,55 @@ describe('TasksPage', () => {
     expect(row).toHaveTextContent('Blocked by 2')
     expect(row).toHaveTextContent('Blocks 1')
     expect(row).toHaveTextContent('At risk')
+    expect(row).toHaveTextContent('Waiting on Collect data, Draft outline')
+  })
+
+  it('opens Edit with the saved values, then a New task starts empty', () => {
+    renderTasks()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Write report' }))
+    expect(screen.getByRole('textbox', { name: /^title/i })).toHaveValue('Write report')
+    expect(screen.getByRole('textbox', { name: /description/i })).toHaveValue('Quarterly summary')
+
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /new task/i })[0]!)
+    expect(screen.getByRole('textbox', { name: /^title/i })).toHaveValue('')
+  })
+
+  it('shows every forecast state on the task rows, including on track and beyond horizon', () => {
+    mockHorizon([horizonRow({ deadlineStatus: 'ON_TRACK' })])
+    const { unmount } = renderTasks()
+    expect(screen.getByText('On track')).toBeInTheDocument()
+    unmount()
+
+    mockHorizon([horizonRow({ deadlineStatus: 'BEYOND_HORIZON' })])
+    renderTasks()
+    expect(screen.getByText('Beyond horizon')).toBeInTheDocument()
+  })
+
+  it('explains the deadline forecast states behind an ⓘ in the header', () => {
+    renderTasks()
+
+    fireEvent.click(screen.getByRole('button', { name: /about deadline forecasts/i }))
+    for (const text of ['On track', 'Overdue', "Can't forecast", 'Beyond horizon']) {
+      expect(screen.getByText(text)).toBeInTheDocument()
+    }
+  })
+
+  it('fills the priority flag by level: full for high, half for medium, empty for low', () => {
+    const levels = [
+      ['HIGH', 'full'],
+      ['MEDIUM', 'half'],
+      ['LOW', 'empty'],
+    ] as const
+    for (const [priority, fill] of levels) {
+      mockTasks([{ ...sampleTask, priority }])
+      const { unmount } = renderTasks()
+      const flag = screen.getAllByText(`${priority[0]}${priority.slice(1).toLowerCase()} priority`)[0]!
+        .closest('[data-fill]')
+      expect(flag).toHaveAttribute('data-fill', fill)
+      unmount()
+    }
   })
 
   it('filters by tab, searches titles, and sorts the rows', () => {

@@ -214,9 +214,9 @@ export function TaskEditorSheet({ open, task, onOpenChange }: TaskEditorSheetPro
 
   return (
     <Sheet open={open} onOpenChange={handleSheetOpenChange}>
-      <SheetContent className="w-full gap-0 sm:max-w-[400px]">
+      <SheetContent className="w-full gap-0 sm:max-w-[400px] data-[side=right]:sm:max-w-[400px]">
         <SheetHeader className="border-b border-border px-5 py-4">
-          <SheetTitle className="font-display text-lg leading-7 font-medium tracking-[-0.01em]">
+          <SheetTitle className="text-md leading-6 font-semibold">
             {isEdit ? 'Edit task' : 'New task'}
           </SheetTitle>
         </SheetHeader>

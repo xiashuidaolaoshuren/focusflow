@@ -8,6 +8,7 @@ import {
   forecastHeaderCopy,
   formatDueDateTitle,
   HORIZON_PACE_COPY,
+  horizonRangeCopy,
   isDueDateColumn,
   longestFullWorkWindow,
   savedConflictCopy,
@@ -141,7 +142,8 @@ describe('segmentAriaLabel', () => {
 
 describe('due date helpers', () => {
   it('shows actual due date in title and marker only on column dates', () => {
-    expect(formatDueDateTitle('2026-06-08')).toBe('2026-06-08')
+    expect(formatDueDateTitle('2026-06-08')).toBe('Due 8 Jun 2026')
+    expect(formatDueDateTitle(null)).toBeNull()
     expect(isDueDateColumn('2026-06-08', ['2026-06-01', '2026-06-08'])).toBe(
       true,
     )
@@ -207,9 +209,10 @@ describe('deadlineBadgeLabel', () => {
       deadlineBadgeLabel('CANNOT_FORECAST', [
         { taskId: 2, title: 'Blocker' },
       ]),
-    ).toBe('Cannot forecast: Blocker')
+    ).toBe("Can't forecast: Blocker")
+    expect(deadlineBadgeLabel('CANNOT_FORECAST', [])).toBe("Can't forecast")
     expect(deadlineBadgeLabel('BEYOND_HORIZON', [])).toBe('Beyond horizon')
-    expect(deadlineBadgeLabel('ON_TRACK', [])).toBeNull()
+    expect(deadlineBadgeLabel('ON_TRACK', [])).toBe('On track')
     expect(deadlineBadgeLabel(null, [])).toBeNull()
   })
 })
@@ -217,5 +220,16 @@ describe('deadlineBadgeLabel', () => {
 describe('timeSpanMinutes', () => {
   it('computes window length from clock strings', () => {
     expect(timeSpanMinutes('09:00:00', '18:00:00')).toBe(540)
+  })
+})
+
+describe('horizonRangeCopy', () => {
+  it('states the window in English with minute precision', () => {
+    expect(horizonRangeCopy('2026-06-01', '09:00:00')).toBe(
+      'Seven working days from 1 Jun 2026 at 09:00',
+    )
+    expect(horizonRangeCopy('2026-11-15', '04:24:05')).toBe(
+      'Seven working days from 15 Nov 2026 at 04:24',
+    )
   })
 })

@@ -12,8 +12,8 @@ describe('PriorityBadge', () => {
   ] as const)('renders %s as %s with data-priority', (priority, label) => {
     render(<PriorityBadge priority={priority} />)
 
-    const badge = screen.getByText(label)
-    expect(badge).toBeInTheDocument()
+    const badge = screen.getByText(label).closest('[data-priority]')
     expect(badge).toHaveAttribute('data-priority', priority)
+    expect(badge?.querySelector('svg')).not.toBeNull()
   })
 })

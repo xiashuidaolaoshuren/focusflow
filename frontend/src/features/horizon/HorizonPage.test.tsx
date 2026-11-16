@@ -220,7 +220,8 @@ describe('HorizonPage', () => {
     expect(screen.getByText('Saved')).toBeInTheDocument()
     expect(screen.getByText('Forecast')).toBeInTheDocument()
     expect(screen.getByText('Write report')).toBeInTheDocument()
-    expect(screen.getByText(/Due 2026-06-02/)).toBeInTheDocument()
+    expect(screen.getByText('Due 2 Jun 2026')).toBeInTheDocument()
+    expect(screen.getByText('Seven working days from 1 Jun 2026 at 09:00')).toBeInTheDocument()
     expect(screen.getByLabelText(/Write report, 2026-06-01, 60 minutes displayed, saved day/i)).toBeInTheDocument()
     expect(screen.getByText('Due')).toBeInTheDocument()
   })
@@ -291,7 +292,7 @@ describe('HorizonPage', () => {
   })
 
   it('shows every deadline state as a glyph and a word', () => {
-    const states = ['AT_RISK', 'OVERDUE', 'CANNOT_FORECAST', 'BEYOND_HORIZON'] as const
+    const states = ['ON_TRACK', 'AT_RISK', 'OVERDUE', 'CANNOT_FORECAST', 'BEYOND_HORIZON'] as const
     const deadlineHorizon: HorizonResponse = {
       ...horizon,
       tasks: states.map((status, index) => ({
@@ -308,9 +309,10 @@ describe('HorizonPage', () => {
     renderHorizonPage()
 
     const labels: Array<[string, string]> = [
+      ['ON_TRACK', 'On track'],
       ['AT_RISK', 'At risk'],
       ['OVERDUE', 'Overdue'],
-      ['CANNOT_FORECAST', 'Cannot forecast: Blocker'],
+      ['CANNOT_FORECAST', "Can't forecast: Blocker"],
       ['BEYOND_HORIZON', 'Beyond horizon'],
     ]
     for (const [status, text] of labels) {
@@ -318,6 +320,19 @@ describe('HorizonPage', () => {
       expect(badge).toHaveAttribute('data-deadline', status)
       expect(badge?.querySelector('svg')).not.toBeNull()
     }
+  })
+
+  it('explains every deadline state behind an ⓘ on the deadline forecast legend', () => {
+    mockHorizon(horizon)
+
+    renderHorizonPage()
+
+    expect(screen.queryByText("Can't forecast")).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about deadline forecasts/i }))
+    for (const text of ['On track', 'Overdue', "Can't forecast", 'Beyond horizon']) {
+      expect(screen.getByText(text)).toBeInTheDocument()
+    }
+    expect(screen.getAllByText('At risk').length).toBeGreaterThanOrEqual(2)
   })
 
   it('shows an empty state with a way to Tasks when nothing is scheduled', () => {
@@ -382,17 +397,21 @@ describe('HorizonPage', () => {
 
     renderHorizonPage()
 
+    expect(screen.queryByText(HORIZON_PACE_COPY)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about pace assumption/i }))
     expect(screen.getByText(HORIZON_PACE_COPY)).toBeInTheDocument()
     expect(
       screen.getByText(savedConflictCopy(conflictedDay0) as string),
     ).toBeInTheDocument()
   })
 
-  it('marks a forecast header with the fixed order and a dashboard link', () => {
+  it('marks a forecast header with a dashboard link and puts the fixed order behind the pace ⓘ', () => {
     mockHorizon(horizon)
 
     renderHorizonPage()
 
+    expect(screen.queryByText(forecastHeaderCopy())).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about pace assumption/i }))
     expect(screen.getByText(forecastHeaderCopy())).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /open in today/i }),

@@ -1,4 +1,8 @@
-import { formatDuration } from '@/lib/format'
+import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
+
+export function horizonRangeCopy(currentDate: string, currentTime: string): string {
+  return `Seven working days from ${formatDateLabel(currentDate)} at ${formatClock(currentTime)}`
+}
 import type {
   HorizonDayResponse,
   HorizonSegmentResponse,
@@ -103,8 +107,12 @@ function weekdayShort(iso: string): string | null {
   return WEEKDAY_SHORT[new Date(utc).getUTCDay()] ?? null
 }
 
-export function formatDueDateTitle(dueDate: string | null): string {
-  return dueDate ?? 'No due date'
+export function formatDueDateTitle(dueDate: string | null): string | null {
+  if (dueDate == null) {
+    return null
+  }
+  const label = formatDateLabel(dueDate)
+  return label === '' ? null : `Due ${label}`
 }
 
 const EXCLUSION_LABELS = {
@@ -238,16 +246,18 @@ export function deadlineBadgeLabel(
   switch (deadlineStatus) {
     case 'AT_RISK':
       return 'At risk'
+    case 'ON_TRACK':
+      return 'On track'
     case 'OVERDUE':
       return 'Overdue'
     case 'BEYOND_HORIZON':
       return 'Beyond horizon'
     case 'CANNOT_FORECAST': {
       if (unresolvedEffort.length === 0) {
-        return 'Cannot forecast'
+        return "Can't forecast"
       }
       const names = unresolvedEffort.map((ref) => ref.title).join(', ')
-      return `Cannot forecast: ${names}`
+      return `Can't forecast: ${names}`
     }
     default:
       return null

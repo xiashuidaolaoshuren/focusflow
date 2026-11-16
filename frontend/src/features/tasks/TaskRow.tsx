@@ -1,12 +1,13 @@
-import { FlagIcon } from 'lucide-react'
+import { LinkIcon } from 'lucide-react'
 
-import { Badge } from '@/components/ui/badge'
+import { DeadlineBadge } from '@/features/horizon/DeadlineBadge'
 import { StatusBadge } from '@/features/tasks/StatusBadge'
 import { TaskActions } from '@/features/tasks/TaskActions'
 import { PRIORITY_LABELS } from '@/features/tasks/labels'
 import {
   countActiveBlockedBy,
   countActiveBlocks,
+  waitingOnLabel,
 } from '@/features/tasks/taskDependencyLinks'
 import { formatDateLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -28,10 +29,32 @@ type TaskRowProps = {
   isDeleting: boolean
 }
 
+const FLAG_FILL_PATHS: Record<TaskResponse['priority'], { fill: 'full' | 'half' | 'empty'; d: string | null }> = {
+  HIGH: { fill: 'full', d: 'M3.5 3h9l-2.2 3.5L12.5 10h-9z' },
+  MEDIUM: { fill: 'half', d: 'M3.5 6.5h6.8L12.5 10h-9z' },
+  LOW: { fill: 'empty', d: null },
+}
+
 function PriorityFlag({ priority }: { priority: TaskResponse['priority'] }) {
+  const { fill, d } = FLAG_FILL_PATHS[priority]
   return (
-    <span className={cn('inline-flex', PRIORITY_CLASSES[priority])}>
-      <FlagIcon className="size-4" aria-hidden="true" />
+    <span className={cn('inline-flex', PRIORITY_CLASSES[priority])} data-fill={fill}>
+      <svg
+        viewBox="0 0 16 16"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        {d != null ? <path d={d} fill="currentColor" stroke="none" /> : null}
+        <path d="M3.5 14V2.5" />
+        <path d="M3.5 3h9l-2.2 3.5L12.5 10h-9" />
+      </svg>
       <span className="sr-only">{PRIORITY_LABELS[priority]} priority</span>
     </span>
   )
@@ -58,32 +81,20 @@ function EffortCell({ task }: { task: TaskResponse }) {
   )
 }
 
-function DeadlineBadge({
+function ForecastBadge({
   horizonRow,
 }: {
   horizonRow: HorizonTaskRowResponse | undefined
 }) {
-  if (horizonRow == null) {
+  if (horizonRow == null || horizonRow.deadlineStatus == null) {
     return <span className="text-muted-foreground">—</span>
   }
-  switch (horizonRow.deadlineStatus) {
-    case 'AT_RISK':
-      return <Badge variant="secondary">At risk</Badge>
-    case 'OVERDUE':
-      return <Badge variant="destructive">Overdue</Badge>
-    case 'CANNOT_FORECAST':
-      return (
-        <Badge variant="outline">
-          {horizonRow.unresolvedEffort.length > 0
-            ? `Cannot forecast: ${horizonRow.unresolvedEffort
-                .map((ref) => ref.title)
-                .join(', ')}`
-            : 'Cannot forecast'}
-        </Badge>
-      )
-    default:
-      return <span className="text-muted-foreground">—</span>
-  }
+  return (
+    <DeadlineBadge
+      deadlineStatus={horizonRow.deadlineStatus}
+      unresolvedEffort={horizonRow.unresolvedEffort}
+    />
+  )
 }
 
 export function TaskRow({
@@ -97,6 +108,7 @@ export function TaskRow({
 }: TaskRowProps) {
   const blockedBy = countActiveBlockedBy(task)
   const blocks = countActiveBlocks(task)
+  const waiting = waitingOnLabel(task)
 
   const statusClasses =
     task.status === 'CANCELLED'
@@ -149,7 +161,7 @@ export function TaskRow({
           {titleButton}
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={task.status} />
-            <DeadlineBadge horizonRow={horizonRow} />
+            <ForecastBadge horizonRow={horizonRow} />
             <span className="font-mono text-xs text-muted-foreground">
               Due {task.dueDate != null ? formatDateLabel(task.dueDate) : '—'}
             </span>
@@ -157,6 +169,12 @@ export function TaskRow({
           <span className="flex flex-wrap gap-2 text-xs text-muted-foreground">
             {facts}
           </span>
+          {waiting != null ? (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground">
+              <LinkIcon className="size-3" aria-hidden="true" />
+              {waiting}
+            </p>
+          ) : null}
           {neededFor != null ? (
             <p className="text-xs text-muted-foreground">{neededFor}</p>
           ) : null}
@@ -171,13 +189,19 @@ export function TaskRow({
 
   return (
     <tr
-      className={cn('transition-colors hover:bg-accent', statusClasses)}
+      className={cn('border-t border-border transition-colors first:border-t-0 hover:bg-accent', statusClasses)}
     >
       <td className="w-7 px-3 py-2">
         <PriorityFlag priority={task.priority} />
       </td>
       <td className="px-3 py-2">
         {titleButton}
+        {waiting != null ? (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <LinkIcon className="size-3" aria-hidden="true" />
+            {waiting}
+          </p>
+        ) : null}
         {neededFor != null ? (
           <p className="text-xs text-muted-foreground">{neededFor}</p>
         ) : null}
@@ -189,7 +213,7 @@ export function TaskRow({
         {task.dueDate != null ? formatDateLabel(task.dueDate) : '—'}
       </td>
       <td className="px-3 py-2">
-        <DeadlineBadge horizonRow={horizonRow} />
+        <ForecastBadge horizonRow={horizonRow} />
       </td>
       <td className="px-3 py-2 text-right">
         <EffortCell task={task} />

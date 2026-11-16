@@ -109,3 +109,11 @@ export function liveNeededForLabel(
   const dueSuffix = named.dueDate != null ? ` (due ${named.dueDate})` : ''
   return `Needed for ${named.title}${dueSuffix}`
 }
+
+export function waitingOnLabel(task: TaskResponse): string | null {
+  if (!isActiveDependencyStatus(task.status)) {
+    return null
+  }
+  const titles = activeBlockedByLinks(task).map((link) => link.title)
+  return titles.length === 0 ? null : `Waiting on ${titles.join(', ')}`
+}

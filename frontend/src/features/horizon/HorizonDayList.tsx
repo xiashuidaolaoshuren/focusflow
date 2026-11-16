@@ -1,3 +1,5 @@
+import { TriangleAlertIcon } from 'lucide-react'
+
 import {
   barPercent,
   dayTotalMinutes,
@@ -51,7 +53,8 @@ export function HorizonDayList({ horizon, scaleMinutes }: HorizonDayListProps) {
                   {formatDuration(totalMinutes)}
                 </div>
                 {shortfallMinutes > 0 ? (
-                  <div className="text-xs font-medium text-destructive">
+                  <div className="flex items-center justify-end gap-1 text-xs font-medium text-deadline-at-risk">
+                    <TriangleAlertIcon className="size-3" aria-hidden="true" />
                     Shortfall {formatDuration(shortfallMinutes)}
                   </div>
                 ) : null}

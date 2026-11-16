@@ -15,8 +15,12 @@ import { useHorizon } from '@/features/horizon/hooks'
 import { HorizonDayList } from '@/features/horizon/HorizonDayList'
 import { HorizonGridView } from '@/features/horizon/HorizonGridView'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { InfoPopover } from '@/components/InfoPopover'
+import { DeadlineLegend } from '@/features/horizon/DeadlineBadge'
 import {
+  forecastHeaderCopy,
   HORIZON_PACE_COPY,
+  horizonRangeCopy,
   longestFullWorkWindow,
   timeSpanMinutes,
 } from '@/features/horizon/horizonGrid'
@@ -96,11 +100,23 @@ export function HorizonPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Horizon</h1>
+        <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
+          7 Working days
+        </span>
+        <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">Horizon</h1>
         <p className="text-sm text-muted-foreground">
-          Seven working days from {horizon.currentDate} at {horizon.currentTime}.
+          {horizonRangeCopy(horizon.currentDate, horizon.currentTime)}
         </p>
-        <p className="text-sm text-muted-foreground">{HORIZON_PACE_COPY}</p>
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <span>Pace assumption</span>
+          <InfoPopover label="About pace assumption" title="Pace assumption">
+            <p>{HORIZON_PACE_COPY}</p>
+            <p className="pt-2">{forecastHeaderCopy()}</p>
+          </InfoPopover>
+          <InfoPopover label="About deadline forecasts" title="Deadline forecast" align="end">
+            <DeadlineLegend />
+          </InfoPopover>
+        </div>
       </div>
 
       {horizon.tasks.length === 0 ? (

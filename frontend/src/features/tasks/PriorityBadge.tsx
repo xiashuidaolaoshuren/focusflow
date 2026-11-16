@@ -1,19 +1,14 @@
-import { cva } from 'class-variance-authority'
+import { FlagIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { PRIORITY_LABELS } from '@/features/tasks/labels'
 import type { TaskPriority } from '@/types/api'
 
-const priorityBadgeVariants = cva('border', {
-  variants: {
-    priority: {
-      LOW: 'border-border bg-priority-low/15 text-priority-low-foreground',
-      MEDIUM:
-        'border-priority-medium/30 bg-priority-medium/15 text-priority-medium-foreground',
-      HIGH: 'border-destructive/30 bg-destructive/10 text-destructive',
-    },
-  },
-})
+const PRIORITY_TONES: Record<TaskPriority, string> = {
+  LOW: 'text-priority-low',
+  MEDIUM: 'text-priority-medium',
+  HIGH: 'text-priority-high',
+}
 
 type PriorityBadgeProps = {
   priority: TaskPriority
@@ -23,9 +18,10 @@ export function PriorityBadge({ priority }: PriorityBadgeProps) {
   return (
     <Badge
       variant="outline"
-      className={priorityBadgeVariants({ priority })}
+      className={`h-5 gap-1 rounded-sm bg-card ${PRIORITY_TONES[priority]}`}
       data-priority={priority}
     >
+      <FlagIcon className="size-3" aria-hidden="true" />
       {PRIORITY_LABELS[priority]}
     </Badge>
   )

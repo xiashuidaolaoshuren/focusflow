@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { ListTodoIcon, PlusIcon, SearchIcon } from 'lucide-react'
 
+import { InfoPopover } from '@/components/InfoPopover'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DeadlineLegend } from '@/features/horizon/DeadlineBadge'
 import { TaskEditorSheet } from '@/features/tasks/TaskEditorSheet'
 import { TaskRow } from '@/features/tasks/TaskRow'
 import { useDeleteTask, useTasks } from '@/features/tasks/hooks'
@@ -49,6 +51,7 @@ export function TasksPage() {
   const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<TaskResponse | null>(null)
+  const [sheetSession, setSheetSession] = useState(0)
   const [tab, setTab] = useState<TaskTab>('active')
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<TaskSort>('due')
@@ -72,19 +75,18 @@ export function TasksPage() {
 
   function openCreate() {
     setEditingTask(null)
+    setSheetSession((session) => session + 1)
     setIsSheetOpen(true)
   }
 
   function openEdit(task: TaskResponse) {
     setEditingTask(task)
+    setSheetSession((session) => session + 1)
     setIsSheetOpen(true)
   }
 
   function handleSheetOpenChange(open: boolean) {
     setIsSheetOpen(open)
-    if (!open) {
-      setEditingTask(null)
-    }
   }
 
   function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
@@ -112,6 +114,9 @@ export function TasksPage() {
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <InfoPopover label="About deadline forecasts" title="Deadline forecast" align="end">
+            <DeadlineLegend />
+          </InfoPopover>
           <Button type="button" onClick={openCreate}>
             <PlusIcon aria-hidden="true" />
             New task
@@ -162,14 +167,21 @@ export function TasksPage() {
             <label htmlFor="task-search" className="text-sm font-medium">
               Search
             </label>
-            <Input
-              id="task-search"
-              type="search"
-              aria-label="Search tasks"
-              autoComplete="off"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+            <div className="relative">
+              <SearchIcon
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                id="task-search"
+                type="search"
+                aria-label="Search tasks"
+                autoComplete="off"
+                className="pl-[30px]"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
           </div>
           <div className="flex w-[180px] max-w-full flex-col gap-1">
             <label htmlFor="task-sort" className="text-sm font-medium">
@@ -336,6 +348,7 @@ export function TasksPage() {
       ) : null}
 
       <TaskEditorSheet
+        key={sheetSession}
         open={isSheetOpen}
         task={editingTask}
         onOpenChange={handleSheetOpenChange}
