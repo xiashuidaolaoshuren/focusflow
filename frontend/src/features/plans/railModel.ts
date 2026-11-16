@@ -45,7 +45,7 @@ const STACK_MIN_HEIGHT_PX = 44
 const MIN_BLOCK_PX = 20
 const NEAR_NOW_MINUTES = 14
 
-const KIND_LABELS: Record<BlockKind, string> = {
+export const KIND_LABELS: Record<BlockKind, string> = {
   WORK: 'Work',
   CADENCE_BREAK: 'Cadence break',
   FIXED_BREAK: 'Fixed break',

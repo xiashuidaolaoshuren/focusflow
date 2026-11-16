@@ -137,6 +137,22 @@ describe('PlanHealth', () => {
     expect(unplacedRow).toHaveTextContent('1')
   })
 
+  it('lays the health rows out in the card itself, with no second bordered box', () => {
+    render(<PlanHealth plan={planWith([])} />)
+
+    const rows = screen.getByText('Blocked work').closest('ul')!
+    expect(rows).not.toHaveClass('border')
+    expect(rows).not.toHaveClass('rounded-lg')
+  })
+
+  it('explains Needs refresh behind an info popover', () => {
+    render(<PlanHealth plan={{ ...planWith([]), needsRefresh: true }} />)
+
+    expect(
+      screen.getByRole('button', { name: 'About Needs refresh' }),
+    ).toBeInTheDocument()
+  })
+
   it('shows None and zero for healthy rows', () => {
     render(<PlanHealth plan={planWith([])} />)
 

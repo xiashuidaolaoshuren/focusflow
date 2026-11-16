@@ -1,13 +1,18 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { CommitmentsPanel } from '@/features/commitments/CommitmentsPanel'
+import { useCommitments } from '@/features/commitments/hooks'
 import { AgendaList } from '@/features/plans/AgendaList'
 import { DayRail } from '@/features/plans/DayRail'
+import { GenerateButton } from '@/features/plans/GenerateButton'
+import { BlockKindLegend, OutcomeLegend } from '@/features/plans/railLegends'
+import { InfoPopover } from '@/components/InfoPopover'
 import { OutcomeDialog } from '@/features/plans/OutcomeDialog'
 import { headerMetaParts, type HeaderMetaPart } from '@/features/plans/headerMeta'
+import { planlessRailPlan } from '@/features/plans/planlessRail'
 import { PlanActions } from '@/features/plans/PlanActions'
 import { PlanHealth } from '@/features/plans/PlanHealth'
 import { StatsStrip } from '@/features/plans/StatsStrip'
@@ -22,7 +27,9 @@ import {
 import { todayStats } from '@/features/plans/todayStats'
 import { useReplanPlan } from '@/features/plans/useReplanPlan'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
+import { useHorizon } from '@/features/horizon/hooks'
 import { useTasks } from '@/features/tasks/hooks'
+import { MiniTasksCard } from '@/features/tasks/MiniTasksCard'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
 import {
@@ -44,11 +51,13 @@ const DENSITIES: { value: Density; label: string }[] = [
 
 function Panel({
   title,
+  titleExtra,
   action,
   children,
   bodyClassName,
 }: {
   title: string
+  titleExtra?: ReactNode
   action?: ReactNode
   children: ReactNode
   bodyClassName?: string
@@ -57,6 +66,8 @@ function Panel({
     <section className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex min-h-12 items-center gap-2 border-b border-border px-4 py-2">
         <h2 className="text-base leading-5 font-semibold">{title}</h2>
+        {titleExtra}
+        <span className="flex-1" />
         {action}
       </div>
       <div className={bodyClassName}>{children}</div>
@@ -91,6 +102,7 @@ export function TodayPage() {
   const readOnly = isPastPlanningDate(planDate, today)
   const { plan, hasPlan, isPending, isError, refetch } = usePlanByDate(planDate)
   const { preferences } = useSchedulingPreferences()
+  const { commitments } = useCommitments(planDate)
   const { needed: regenerateNeeded, dismiss: dismissRegeneratePrompt } =
     useRegeneratePrompt()
   const replan = useReplanPlan(plan)
@@ -98,6 +110,11 @@ export function TodayPage() {
   const [density, setDensity] = useState<Density>('comfortable')
   const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null)
   const { tasks } = useTasks()
+  const { horizon } = useHorizon()
+  const horizonRowByTaskId = useMemo(
+    () => new Map((horizon?.tasks ?? []).map((row) => [row.taskId, row])),
+    [horizon],
+  )
   const [nowMinutes, setNowMinutes] = useState(() =>
     toMinutes(getLocalTimeString()),
   )
@@ -105,7 +122,13 @@ export function TodayPage() {
   const rail =
     plan != null
       ? buildRail(plan, planDate === today ? nowMinutes : null, density)
-      : null
+      : preferences != null
+        ? buildRail(
+            planlessRailPlan(preferences, commitments),
+            planDate === today ? nowMinutes : null,
+            density,
+          )
+        : null
   const settled = !isPending && !isError
   const replayedAt = plan?.revisions.at(-1)?.cutoff ?? null
   const selectedBlock =
@@ -257,7 +280,7 @@ export function TodayPage() {
               )
             })}
           </fieldset>
-          {settled ? (
+          {settled && hasPlan ? (
             <PlanActions
               plan={plan}
               planDate={planDate}
@@ -273,18 +296,36 @@ export function TodayPage() {
       <div className="grid items-start gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
         <Panel
           title="Day rail"
+          titleExtra={
+            <>
+              <InfoPopover label="About block kinds" title="Block kinds">
+                <BlockKindLegend />
+              </InfoPopover>
+              <InfoPopover label="About outcomes" title="Outcomes">
+                <OutcomeLegend />
+              </InfoPopover>
+            </>
+          }
           action={
             plan?.peakStart != null && plan.peakEnd != null ? (
-              <span className="inline-flex items-center gap-1.5 text-xs tracking-[0.01em] whitespace-nowrap text-muted-foreground">
-                <span
-                  aria-hidden="true"
-                  className="h-3.5 w-[3px] rounded-sm bg-peak-edge"
-                />
-                <span>Peak window</span>
-                <span className="font-mono text-foreground">
-                  {formatClock(plan.peakStart)}&ndash;{formatClock(plan.peakEnd)}
+              <>
+                <span className="inline-flex items-center gap-1.5 text-xs tracking-[0.01em] whitespace-nowrap text-muted-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="h-3.5 w-[3px] rounded-sm bg-peak-edge"
+                  />
+                  <span>Peak window</span>
+                  <span className="font-mono text-foreground">
+                    {formatClock(plan.peakStart)}&ndash;{formatClock(plan.peakEnd)}
+                  </span>
                 </span>
-              </span>
+                <InfoPopover label="About the Peak window" title="Peak window" align="end">
+                  <p>
+                    Your highest-focus hours. They are shown on the rail only and
+                    do not change how tasks are scheduled.
+                  </p>
+                </InfoPopover>
+              </>
             ) : null
           }
         >
@@ -311,6 +352,7 @@ export function TodayPage() {
                 <p className="text-sm text-muted-foreground">
                   Generate a plan to place today&rsquo;s work on the rail.
                 </p>
+                <GenerateButton planDate={planDate} />
               </div>
             </div>
           ) : null}
@@ -343,6 +385,7 @@ export function TodayPage() {
             </Panel>
           ) : null}
           <CommitmentsPanel planDate={planDate} readOnly={readOnly} />
+          <MiniTasksCard tasks={tasks} horizonRowByTaskId={horizonRowByTaskId} />
         </div>
       </div>
 

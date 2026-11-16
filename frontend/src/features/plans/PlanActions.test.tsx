@@ -8,7 +8,6 @@ vi.mock('@/features/plans/hooks', () => ({
 }))
 
 import { ApiError } from '@/lib/api'
-import { plansByDateQueryPrefix } from '@/lib/query'
 import { PlanActions } from '@/features/plans/PlanActions'
 import { progressPlan, samplePlan } from '@/features/plans/planFixtures'
 import { useGeneratePlan } from '@/features/plans/hooks'
@@ -45,28 +44,6 @@ function renderActions(plan: Parameters<typeof PlanActions>[0]['plan']) {
 describe('PlanActions', () => {
   beforeEach(() => {
     mockGenerate({})
-  })
-
-  it('generates a plan when there is none', () => {
-    const mutate = vi.fn()
-    mockGenerate({ mutate })
-
-    renderActions(null)
-
-    const generate = screen.getByRole('button', { name: /generate/i })
-    fireEvent.click(generate)
-
-    expect(mutate.mock.calls[0]?.[0]).toEqual({ planDate: '2026-06-15' })
-  })
-
-  it('shows the generating state while the request is in flight', () => {
-    mockGenerate({ isPending: true })
-
-    renderActions(null)
-
-    const generate = screen.getByRole('button', { name: /generating/i })
-    expect(generate).toBeDisabled()
-    expect(generate).toHaveAttribute('aria-busy', 'true')
   })
 
   it('offers Regenerate and Re-plan on today when nothing is recorded', () => {
@@ -204,37 +181,6 @@ describe('PlanActions', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('refreshes the plan views and says so when the plan changed underneath', async () => {
-    const conflict = new ApiError({
-      status: 409,
-      code: 'PLAN_EXISTS',
-      message: 'plan already exists',
-    })
-    const mutate = vi.fn(
-      (_variables: unknown, options?: { onError?: (error: unknown) => void }) => {
-        options?.onError?.(conflict)
-      },
-    )
-    mockGenerate({ mutate })
-    const queryClient = new QueryClient({
-      defaultOptions: { mutations: { retry: false } },
-    })
-    const invalidate = vi.spyOn(queryClient, 'invalidateQueries')
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <PlanActions plan={null} planDate="2026-06-15" today="2026-06-15" />
-      </QueryClientProvider>,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: /^generate$/i }))
-
-    expect(
-      await screen.findByText(/a newer update was kept/i),
-    ).toBeInTheDocument()
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: plansByDateQueryPrefix })
-  })
-
   it('treats a plan that gained progress as a conflict too', async () => {
     const mutate = vi.fn(
       (_variables: unknown, options?: { onError?: (error: unknown) => void }) => {
@@ -256,23 +202,6 @@ describe('PlanActions', () => {
     expect(
       await screen.findByText(/a newer update was kept/i),
     ).toBeInTheDocument()
-  })
-
-  it('keeps an ordinary failure out of the conflict copy', async () => {
-    const mutate = vi.fn(
-      (_variables: unknown, options?: { onError?: (error: unknown) => void }) => {
-        options?.onError?.(
-          new ApiError({ status: 500, message: 'boom' }),
-        )
-      },
-    )
-    mockGenerate({ mutate })
-
-    renderActions(null)
-    fireEvent.click(screen.getByRole('button', { name: /^generate$/i }))
-
-    await Promise.resolve()
-    expect(screen.queryByText(/a newer update was kept/i)).toBeNull()
   })
 
   it('explains a failed re-plan with the server message for its code', () => {

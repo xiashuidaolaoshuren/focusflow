@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
-import { screen, waitFor } from '@testing-library/dom'
+import { screen, waitFor, within } from '@testing-library/dom'
 import { fireEvent } from '@testing-library/dom'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -30,6 +30,10 @@ vi.mock('@/features/preferences/hooks', () => ({
   useSchedulingPreferences: vi.fn(() => ({ preferences: null })),
 }))
 
+vi.mock('@/features/horizon/hooks', () => ({
+  useHorizon: vi.fn(() => ({ horizon: null, isPending: false, isError: false })),
+}))
+
 vi.mock('sonner', () => ({
   toast: { success: vi.fn() },
 }))
@@ -51,7 +55,9 @@ vi.mock('@/features/plans/OutcomeDialog', () => ({
   ),
 }))
 
+import { useCommitments } from '@/features/commitments/hooks'
 import { usePlanByDate } from '@/features/plans/hooks'
+import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import {
   clearRegeneratePrompt,
   markRegeneratePromptNeeded,
@@ -62,6 +68,44 @@ import { getLocalDateString } from '@/lib/planningDate'
 import { TodayPage } from '@/routes/TodayPage'
 
 const mockedUsePlanByDate = vi.mocked(usePlanByDate)
+const mockedUseCommitments = vi.mocked(useCommitments)
+const mockedUseSchedulingPreferences = vi.mocked(useSchedulingPreferences)
+
+function mockPreferences(windowEnd = '18:00:00', windowStart = '09:00:00') {
+  mockedUseSchedulingPreferences.mockReturnValue({
+    preferences: {
+      workDayStart: windowStart,
+      workDayEnd: windowEnd,
+      cadenceEnabled: true,
+      targetFocusMinutes: 50,
+      breakMinutes: 10,
+      minSessionMinutes: 15,
+      bufferMinutes: 0,
+      peakStart: null,
+      peakEnd: null,
+      fixedBreaks: [{ label: 'Lunch', startTime: '12:00:00', endTime: '13:00:00' }],
+      workingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
+      persisted: true,
+    },
+  } as unknown as ReturnType<typeof useSchedulingPreferences>)
+}
+
+function mockDayCommitments() {
+  mockedUseCommitments.mockReturnValue({
+    commitments: [
+      {
+        id: 7,
+        title: 'Dentist',
+        commitmentDate: '2026-11-06',
+        startTime: '15:00:00',
+        endTime: '15:30:00',
+      },
+    ],
+    isPending: false,
+    isError: false,
+    error: null,
+  } as unknown as ReturnType<typeof useCommitments>)
+}
 
 function LocationProbe() {
   const { search } = useLocation()
@@ -110,6 +154,15 @@ describe('TodayPage', () => {
       })),
     })
     mockPlan()
+    mockedUseCommitments.mockReturnValue({
+      commitments: [],
+      isPending: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof useCommitments>)
+    mockedUseSchedulingPreferences.mockReturnValue({
+      preferences: null,
+    } as unknown as ReturnType<typeof useSchedulingPreferences>)
   })
 
   afterEach(() => {
@@ -139,6 +192,88 @@ describe('TodayPage', () => {
         `?date=${getLocalDateString()}`,
       )
     })
+  })
+
+  it('shows the compact Tasks card beside the rail', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday(`/today?date=${getLocalDateString()}`)
+
+    expect(screen.getByRole('heading', { name: 'Tasks' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'All tasks' })).toHaveAttribute('href', '/tasks')
+  })
+
+  it('puts the rail explanations and the Peak chip in the Day rail header', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday(`/today?date=${getLocalDateString()}`)
+
+    const railSection = screen
+      .getByRole('heading', { name: 'Day rail' })
+      .closest('section') as HTMLElement
+    expect(
+      within(railSection).getByRole('button', { name: 'About block kinds' }),
+    ).toBeInTheDocument()
+    expect(
+      within(railSection).getByRole('button', { name: 'About outcomes' }),
+    ).toBeInTheDocument()
+    expect(within(railSection).getByText('Peak window')).toBeInTheDocument()
+    expect(within(railSection).getByText('09:30–12:00')).toBeInTheDocument()
+    expect(
+      within(railSection).getByRole('button', { name: 'About the Peak window' }),
+    ).toBeInTheDocument()
+  })
+
+  it('hides the Peak chip when the plan has no peak window', () => {
+    mockPlan({
+      plan: { ...railTestPlan, peakStart: null, peakEnd: null },
+      hasPlan: true,
+    })
+
+    renderToday(`/today?date=${getLocalDateString()}`)
+
+    expect(screen.queryByText('Peak window')).toBeNull()
+  })
+
+  it('shows fixed breaks and commitments on the rail before a plan exists', () => {
+    mockPlan({ plan: null })
+    mockPreferences()
+    mockDayCommitments()
+
+    renderToday('/today?date=2026-11-06')
+
+    const blocks = screen.getByRole('list', { name: 'Daily plan blocks' })
+    expect(
+      within(blocks).getByRole('listitem', { name: /fixed break: lunch/i }),
+    ).toBeInTheDocument()
+    expect(
+      within(blocks).getByRole('listitem', { name: /commitment: dentist/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('draws the now-line on a plan-less today but not on another day', () => {
+    mockPlan({ plan: null })
+    mockPreferences('23:59:00', '00:00:00')
+
+    const { unmount } = renderToday(`/today?date=${getLocalDateString()}`)
+    expect(screen.getByRole('img', { name: /^now /i })).toBeInTheDocument()
+    unmount()
+
+    renderToday('/today?date=2000-01-14')
+    expect(screen.queryByRole('img', { name: /^now /i })).toBeNull()
+  })
+
+  it('offers one Generate inside the Day rail when the day has no plan', () => {
+    mockPlan({ plan: null })
+
+    renderToday('/today?date=2026-11-06')
+
+    const railSection = screen.getByRole('heading', { name: 'Day rail' }).closest('section')
+    expect(railSection).not.toBeNull()
+    expect(
+      within(railSection as HTMLElement).getAllByRole('button', { name: /generate/i }),
+    ).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /generate/i })).toHaveLength(1)
   })
 
   it('offers Generate, an empty rail, and no plan health without a plan', () => {

@@ -49,8 +49,8 @@ type PlanActionsProps = {
 }
 
 /**
- * The plan header actions. Generate replaces a missing plan, Regenerate only while nothing is
- * recorded, and Re-plan is the one solid control.
+ * The plan header actions once a plan exists. Regenerate shows only while nothing is recorded,
+ * and Re-plan is the one solid control. A missing plan's Generate lives in the empty rail.
  */
 export function PlanActions({
   plan,
@@ -86,24 +86,6 @@ export function PlanActions({
       <AlertDescription>{PLAN_CONFLICT_MESSAGE}</AlertDescription>
     </Alert>
   ) : null
-
-  if (visibility.generate) {
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        {conflictAlert}
-        {replanErrorAlert}
-        <Button
-          type="button"
-          disabled={isPending}
-          aria-busy={isPending}
-          onClick={() => mutate({ planDate }, { onError: handlePlanConflict })}
-        >
-          <RefreshCwIcon />
-          {isPending ? 'Generating…' : 'Generate'}
-        </Button>
-      </div>
-    )
-  }
 
   return (
     <div className="flex flex-wrap items-center gap-2">

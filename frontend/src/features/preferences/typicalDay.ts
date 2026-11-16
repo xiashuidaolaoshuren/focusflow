@@ -1,3 +1,4 @@
+import { labelledBlock, toBlockTime } from '@/features/plans/blockFactory'
 import type {
   DailyPlanResponse,
   ScheduledBlockResponse,
@@ -51,27 +52,18 @@ function toMinutes(time: string): number {
   return (hours ?? 0) * 60 + (minutes ?? 0)
 }
 
-function toApiTime(minutes: number): string {
-  const hours = String(Math.floor(minutes / 60)).padStart(2, '0')
-  const mins = String(minutes % 60).padStart(2, '0')
-  return `${hours}:${mins}:00`
-}
-
 function toBlock(draft: Draft, id: number, session: { index: number; count: number } | null): ScheduledBlockResponse {
-  const common = {
-    id,
-    revisionId: 0,
-    outcome: null,
-    actualMinutes: null,
-    reconciled: false,
-    progressVersion: 0,
-    displayState: 'ACTIONABLE' as const,
-    startTime: toApiTime(draft.start),
-    endTime: toApiTime(draft.end),
-  }
   if (draft.kind === 'WORK') {
     return {
-      ...common,
+      id,
+      revisionId: 0,
+      outcome: null,
+      actualMinutes: null,
+      reconciled: false,
+      progressVersion: 0,
+      displayState: 'ACTIONABLE',
+      startTime: toBlockTime(draft.start),
+      endTime: toBlockTime(draft.end),
       kind: 'WORK',
       sessionIndex: session?.index ?? 1,
       sessionCount: session?.count ?? 1,
@@ -79,14 +71,7 @@ function toBlock(draft: Draft, id: number, session: { index: number; count: numb
       label: null,
     }
   }
-  return {
-    ...common,
-    kind: draft.kind,
-    sessionIndex: null,
-    sessionCount: null,
-    taskSnapshot: null,
-    label: draft.label ?? '',
-  } as ScheduledBlockResponse
+  return labelledBlock(draft.kind, draft.start, draft.end, draft.label ?? '', id)
 }
 
 export function typicalDay(input: TypicalDayInput): TypicalDayResult | null {
@@ -156,10 +141,10 @@ export function typicalDay(input: TypicalDayInput): TypicalDayResult | null {
   return {
     plan: {
       composedRail,
-      windowStart: toApiTime(start),
-      windowEnd: toApiTime(toMinutes(input.workDayEnd)),
-      peakStart: input.peakStart ? toApiTime(toMinutes(input.peakStart)) : null,
-      peakEnd: input.peakEnd ? toApiTime(toMinutes(input.peakEnd)) : null,
+      windowStart: toBlockTime(start),
+      windowEnd: toBlockTime(toMinutes(input.workDayEnd)),
+      peakStart: input.peakStart ? toBlockTime(toMinutes(input.peakStart)) : null,
+      peakEnd: input.peakEnd ? toBlockTime(toMinutes(input.peakEnd)) : null,
     },
     focusMinutes: workDrafts.reduce((total, draft) => total + (draft.end - draft.start), 0),
     sessions: workDrafts.length,

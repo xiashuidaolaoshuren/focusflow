@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { InboxIcon, LinkIcon, RefreshCwIcon, TriangleAlertIcon } from 'lucide-react'
 
+import { InfoPopover } from '@/components/InfoPopover'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { actionVisibility } from '@/features/plans/planActionRules'
@@ -78,7 +79,7 @@ export function PlanHealth({
         </Alert>
       ) : null}
 
-      <ul className="divide-y divide-border rounded-lg border border-border">
+      <ul>
         <HealthRow
           icon={<LinkIcon />}
           label="Blocked work"
@@ -112,7 +113,15 @@ export function PlanHealth({
       {plan.needsRefresh ? (
         <Alert>
           <RefreshCwIcon />
-          <AlertTitle>Needs refresh</AlertTitle>
+          <AlertTitle className="flex items-center gap-1">
+            Needs refresh
+            <InfoPopover label="About Needs refresh" title="Needs refresh">
+              <p>
+                Tasks, commitments or settings changed after this plan was made.
+                Re-plan to fit the rest of today.
+              </p>
+            </InfoPopover>
+          </AlertTitle>
           <AlertDescription>
             <p>
               Tasks, commitments or settings changed after this plan was made.

@@ -35,7 +35,7 @@ const FLAG_FILL_PATHS: Record<TaskResponse['priority'], { fill: 'full' | 'half' 
   LOW: { fill: 'empty', d: null },
 }
 
-function PriorityFlag({ priority }: { priority: TaskResponse['priority'] }) {
+export function PriorityFlag({ priority }: { priority: TaskResponse['priority'] }) {
   const { fill, d } = FLAG_FILL_PATHS[priority]
   return (
     <span className={cn('inline-flex', PRIORITY_CLASSES[priority])} data-fill={fill}>

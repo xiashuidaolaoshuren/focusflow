@@ -16,7 +16,7 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | D1 | Out-of-window commitment: spec says "rejected", backend spec says "stored, ignored" (Dentist 15:00 saved in a 03:00–10:00 window) | T6 | **Decided 2026-11-16:** UI rejects inline; backend unchanged |
 | D2 | Seconds in `cutoff`: backend truncates, or returns 400 | T1 | **Decided 2026-11-15:** 400 (never 500) via service-layer `MinutePrecision.requireMinuteAligned` — message `times must be minute-aligned`, no `details`; frontend always sends `HH:mm:00` |
 | D3 | Backend validation messages follow `Accept-Language` (got `不得空白`) | T9 | Pin message locale to English |
-| D4 | Prototype date styles ("Friday, 6 November", Today/Tomorrow) vs spec rule 3 (`6 Nov 2026`) | T8 | Spec wins; only change if you say otherwise |
+| D4 | Prototype date styles ("Friday, 6 November", Today/Tomorrow) vs spec rule 3 (`6 Nov 2026`) | T8 | **Decided 2026-11-16:** no-op — `formatDateLabel` already returns `6 Nov 2026` and no Today/Tomorrow wording exists |
 
 ## Discovery notes
 
@@ -42,8 +42,10 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | T4 | `backend/.../plan/{DailyPlanRepository,DailyPlanSummaryProjection,DailyPlanService}.java`, `plan/dto/DailyPlanSummaryResponse.java`, `docs/{api.md,openapi.yaml}` | modify | summary `hasShortfall` flag (any out-of-time task, optional or not) | verified |
 | T5 | `features/preferences/{SettingsForm,settingsModel,MiniRail,typicalDay}.ts(x)`, `components/form/{TimeField,timeInput,schemas}.ts(x)`, `components/ui/field-error.ts` | modify | label rule, error display, key normalization (`fixedBreaks[0].label`), stepping, layout, preview | verified |
 | T6 | `routes/TodayPage.tsx`, `features/commitments/CommitmentsPanel.tsx`, `features/plans/{railModel.ts,DayRail,AgendaList,OutcomeDialog}.tsx` | modify | past-day read-only, mobile fit, rail polish, outcome clarity, commitment messages | verified |
-| T7 | `routes/TodayPage.tsx`, `features/plans/{PlanHealth,PlanSideCards}.tsx` | modify | Tasks card, plan-less rail, Peak chip, ⓘ | verified |
-| T8 | `components/layout/AppShell.tsx`, `index.css`, `components/ui/alert-dialog.tsx`, `routes/{Login,Register}Page.tsx` | modify | shell width/nav/footer, scrim, dialog and auth styling | verified |
+| T7 | `routes/TodayPage.tsx`, `features/plans/{PlanHealth,PlanSideCards,PlanActions}.tsx`, `features/preferences/typicalDay.ts` | modify | Tasks card, plan-less rail, Peak chip, ⓘ, Generate inside the no-plan rail | verified |
+| T7 | `features/plans/{planlessRail,GenerateButton}.ts(x)`, `features/tasks/MiniTasksCard.tsx` | create | plan-less rail source from preferences + commitments; Generate button shared by header and rail | verified |
+| T8 | `components/layout/AppShell.tsx`, `index.css`, `components/ui/alert-dialog.tsx`, `features/auth/{AuthCard,LoginForm,RegisterForm}.tsx`, `features/plans/RailOutcome.tsx` | modify | shell width/nav/footer (incl. "Not a Working day"), scrim, dialog and auth styling | verified |
+| T8 | `components/layout/navIcons.tsx`, `components/ui/field.tsx` (only if the label override stays global) | create/modify | prototype nav glyphs; neutral label colour when invalid | verified |
 | T9 | backend locale config | modify | fixed English message locale | provisional (locate in planning) |
 
 ### Blast radius
@@ -145,7 +147,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T8 — App shell, dialogs, auth
 
-- [ ] **Do:** content max-width per prototype `.page`; nav 14px/500 idle, 14/600 active with prototype icons; footer order (Dark theme, user, Working day); non-working day wording; scrim ink 36% without blur on alert-dialog/sheet; Outcome dialog title Inter 16/600, mono stats, no native number spinner, Skipped/Partly glyphs per DESIGN; auth error alert gets a glyph and labels do not turn red. Date styles follow D4.
+- [ ] **Do:** content max-width per prototype `.page`; nav 14px/500 idle, 14/600 active with prototype icons; footer order (Dark theme, user, Working day); "Not a Working day" line on non-working weekdays (decided 2026-11-16); scrim ink 36% without blur on alert-dialog/sheet; Outcome dialog title Inter 16/600, mono stats, no native number spinner, Skipped/Partly glyphs per DESIGN; auth error alert gets a glyph and labels do not turn red. Date styles: no-op (D4).
 - **Blocked by:** T6 (Outcome dialog edits), D4
 - **Plan mode:** high (global shell and shared dialog)
 - **TDD suitable:** no — token/style changes; focus trap, Esc and focus return guarded by existing tests.
@@ -181,5 +183,6 @@ Per subtask, obey **`TDD suitable`**: `yes` means strict **test-driven-developme
 | 2026-11-15 | Merged 18 subtasks into 10 by screen/area: T1+T2→T1; T3+T15→T2; T4+T11→T3; T5(a)+T12→T4; T5(b)+T14→T5; T5(c)+T6+T7+T8+T9→T6; T13→T7; T16+T17→T8; T10→T9; T18→T10. Added D4. Acceptance criteria preserved | material (user-requested restructure) |
 | 2026-11-15 | T2+T3 planned together; file map adds `DeadlineBadge.tsx`, `InfoPopover.tsx`, `waitingOnLabel`, `HorizonDayList.tsx`; fixed-order copy moves into the Horizon pace ⓘ | equivalent |
 | 2026-11-15 | T4 planned: history Shortfall needs a new backend summary flag `hasShortfall` (`hasWarning` is must-include only, so 15 Nov's optional out-of-time tasks never set it); T4 now also touches backend, docs and generated types | material (user approved) |
+| 2026-11-16 | T7+T8 planned; D4 decided as no-op; "Not a Working day" footer line approved (user); T8 auth files corrected to `features/auth/*`; T7 adds `planlessRail`, `GenerateButton`, `MiniTasksCard`, `PlanActions`, exported block factory | equivalent (files/clarification, user-approved) |
 | 2026-11-16 | D1 decided (user): UI rejects out-of-window commitments inline, backend unchanged. T6 `PastDaySessions.tsx` dropped (reuse `WorkSessions` with `plan.composedRail`); `readOnly` only on `CommitmentsPanel` (DayRail/AgendaList read-only by omitting `onSelect`); T5 file map adds `field-error.ts`, `timeInput.ts`, `schemas.ts` | equivalent (D1 answer, user-approved) |
 | 2026-11-15 | D2 decided (user): 400 via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); T1 Produces/acceptance wording and file map updated; `getLocalMinuteString` widened to `Date \| string` | equivalent (D2 answer, user-approved) |
