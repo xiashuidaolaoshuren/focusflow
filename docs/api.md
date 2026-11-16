@@ -96,7 +96,7 @@ Most application errors return:
 | `message` | string | Human-readable message |
 | `code` | string \| null | Optional stable machine-readable code; omitted when null |
 | `path` | string | Request path |
-| `details` | object → string[] | Optional; field validation errors only |
+| `details` | object → string[] | Optional; field validation errors only. Messages are always English; `Accept-Language` does not localize them. |
 | `requestId` | string | Optional; correlation id when present in MDC |
 
 Omitted null fields are excluded from JSON (`@JsonInclude(NON_NULL)`).

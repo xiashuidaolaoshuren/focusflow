@@ -46,7 +46,7 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | T7 | `features/plans/{planlessRail,GenerateButton}.ts(x)`, `features/tasks/MiniTasksCard.tsx` | create | plan-less rail source from preferences + commitments; Generate button shared by header and rail | verified |
 | T8 | `components/layout/AppShell.tsx`, `index.css`, `components/ui/alert-dialog.tsx`, `features/auth/{AuthCard,LoginForm,RegisterForm}.tsx`, `features/plans/RailOutcome.tsx` | modify | shell width/nav/footer (incl. "Not a Working day"), scrim, dialog and auth styling | verified |
 | T8 | `components/layout/navIcons.tsx`, `components/ui/field.tsx` (only if the label override stays global) | create/modify | prototype nav glyphs; neutral label colour when invalid | verified |
-| T9 | backend locale config | modify | fixed English message locale | provisional (locate in planning) |
+| T9 | `backend/src/main/resources/application.yml`, `SchedulingPreferencesControllerTest.java`, `docs/api.md` | modify | `spring.web.locale` + `locale-resolver: fixed`; zh-TW regression test; api note | verified |
 
 ### Blast radius
 
@@ -100,7 +100,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T4 — Plans: delete refusal and history/detail fidelity
 
-- [ ] **Do:** Deleting a plan with progress (409 `PLAN_HAS_PROGRESS`) shows a message; history shows a Shortfall badge when there is a shortfall; delete dialog uses "15 Nov 2026"; Delete plan is outline/destructive-text, not solid; Read-only badge on historical revisions and past plans; h1 matches prototype heading.
+- [x] **Do:** Deleting a plan with progress (409 `PLAN_HAS_PROGRESS`) shows a message; history shows a Shortfall badge when there is a shortfall; delete dialog uses "15 Nov 2026"; Delete plan is outline/destructive-text, not solid; Read-only badge on historical revisions and past plans; h1 matches prototype heading.
 - **Produces:** `DailyPlanSummaryResponse.hasShortfall`; `deletePlanErrorMessage` in `planConflicts.ts`; `onError` in `useDeletePlan`.
 - **Acceptance:** delete on 15 Nov shows why it was refused and leaves the row; 15 Nov shows Shortfall (two optional out-of-time tasks; `hasWarning` is must-include only, so `hasShortfall` is the badge source); one solid button per view; Rev 1 shows Read-only.
 - **Blast radius:** `DailyPlanSummaryResponse` (API contract, `docs/api.md`): the new field is additive; existing fields and 409 codes unchanged.
@@ -111,7 +111,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T5 — Settings: errors and fidelity
 
-- [ ] **Do:** Require a fixed-break label (inline "Label is required" before any request) and render server `details` on fixed-break fields; time fields mono with ArrowUp/Down ±5 min (Shift ±60); on-blur time message; carded sections; numerics mono right-aligned with "min"; Mon–Sun chips; "Defaults apply until saved" as info alert; help copy to ⓘ; Cancel button; preview adds Preview badge, Focus per day / Sessions stats, Peak marker, trailing buffer.
+- [x] **Do:** Require a fixed-break label (inline "Label is required" before any request) and render server `details` on fixed-break fields; time fields mono with ArrowUp/Down ±5 min (Shift ±60); on-blur time message; carded sections; numerics mono right-aligned with "min"; Mon–Sun chips; "Defaults apply until saved" as info alert; help copy to ⓘ; Cancel button; preview adds Preview badge, Focus per day / Sessions stats, Peak marker, trailing buffer.
 - **Consumes:** `TimeField`, `MiniRail`, `typicalDay.ts`
 - **Acceptance:** empty label shows the error and sends nothing; a server `fixedBreaks[0].label` detail appears on that field; ArrowUp on 10:00 → 10:05, Shift+ArrowUp → 11:00, clamped to 23:55/00:00; Cancel resets to saved values; saves still send `HH:mm:00`.
 - **Blocked by:** —
@@ -121,7 +121,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T6 — Today behavior: past day, mobile fit, rail polish, outcomes
 
-- [ ] **Do:**
+- [x] **Do:**
   1. Past day: › enabled, "Back to today", Commitments add/edit/delete and Record outcome disabled, Work sessions grouped Recorded / Not recorded / No longer needed.
   2. Mobile: no horizontal scroll at 390px; outcome labels not cut off.
   3. Rail: no stray `·` in header meta; 5m/10m blocks keep a min height with readable text; now-line does not strike through text.
@@ -137,7 +137,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T7 — Today structure vs prototype
 
-- [ ] **Do:** compact Tasks card in the side column; no-plan state keeps the rail (gutter, Peak wash, fixed breaks, commitments, buffer, now-line) with Generate inside it; Peak chip right of the Day rail title; block-kind, outcome and Peak explanations behind ⓘ; Plan health rows flattened (no nested box, normal icons, Needs refresh as a row with ⓘ copy).
+- [x] **Do:** compact Tasks card in the side column; no-plan state keeps the rail (gutter, Peak wash, fixed breaks, commitments, buffer, now-line) with Generate inside it; Peak chip right of the Day rail title; block-kind, outcome and Peak explanations behind ⓘ; Plan health rows flattened (no nested box, normal icons, Needs refresh as a row with ⓘ copy).
 - **Consumes:** `buildRail`, `PlanSideCards`, `PlanHealth`, T6 `readOnly`
 - **Acceptance:** matches prototype Today in both states at 1440px (side-by-side screenshots); Plan health still absent with no plan (rule 5); Regenerate/Re-plan rules untouched.
 - **Blocked by:** T6
@@ -147,7 +147,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T8 — App shell, dialogs, auth
 
-- [ ] **Do:** content max-width per prototype `.page`; nav 14px/500 idle, 14/600 active with prototype icons; footer order (Dark theme, user, Working day); "Not a Working day" line on non-working weekdays (decided 2026-11-16); scrim ink 36% without blur on alert-dialog/sheet; Outcome dialog title Inter 16/600, mono stats, no native number spinner, Skipped/Partly glyphs per DESIGN; auth error alert gets a glyph and labels do not turn red. Date styles: no-op (D4).
+- [x] **Do:** content max-width per prototype `.page`; nav 14px/500 idle, 14/600 active with prototype icons; footer order (Dark theme, user, Working day); "Not a Working day" line on non-working weekdays (decided 2026-11-16); scrim ink 36% without blur on alert-dialog/sheet; Outcome dialog title Inter 16/600, mono stats, no native number spinner, Skipped/Partly glyphs per DESIGN; auth error alert gets a glyph and labels do not turn red. Date styles: no-op (D4).
 - **Blocked by:** T6 (Outcome dialog edits), D4
 - **Plan mode:** high (global shell and shared dialog)
 - **TDD suitable:** no — token/style changes; focus trap, Esc and focus return guarded by existing tests.
@@ -155,7 +155,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T9 — Backend messages are English
 
-- [ ] **Do:** Validation messages no longer follow `Accept-Language` (D3).
+- [x] **Do:** Validation messages no longer follow `Accept-Language` (D3).
 - **Acceptance:** blank-label request with `Accept-Language: zh-TW` returns the English message; no other 400 body regresses.
 - **Blocked by:** D3
 - **Plan mode:** medium (named unknown: where the locale is resolved, `LocaleResolver` vs `MessageSource`)
@@ -188,3 +188,4 @@ Per subtask, obey **`TDD suitable`**: `yes` means strict **test-driven-developme
 | 2026-11-16 | Live-check items 10–12 closed: no-plan card overlaid on the rail after now (`railModel.emptyCardTopPx`, `DayRail` `empty`), block duration and fixed/commitment kind in the stacked meta, Tasks card shows "of Nm" (`EffortCell`), "Waiting on …" and due-day suffix on deadline badges (`relativeDueLabel`), Shortfall ⓘ, 16px Plan health icons. Carded T5 sections and T9/T10 still open | equivalent |
 | 2026-11-16 | Live check of T2–T8 at 1440px and 390px; fixed 9 defects: floored short block overprinting the next (`railModel`), Peak chip reading only the plan, 390px overflow on Today (`minmax(0,1fr)` column, wrapping rail header, `px-4`), Plans Sessions/Status columns below `md`, nested alert-dialog scrim (`forceRender`), Horizon deadline ⓘ moved to the header's action slot, Settings and Plan-not-found display titles, MiniRail Peak edge/wash, break-row alignment plus its mobile stacking. Still open: T5 carded sections/day chips/info alert/ⓘ help copy; T7's rail-overlaid empty card, block duration/kind meta, richer Tasks card and Plan health ⓘ | equivalent |
 | 2026-11-15 | D2 decided (user): 400 via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); T1 Produces/acceptance wording and file map updated; `getLocalMinuteString` widened to `Date \| string` | equivalent (D2 answer, user-approved) |
+| 2026-11-16 | T9 done: `spring.web.locale: en` + `locale-resolver: fixed` in `application.yml`; `put_whenAcceptLanguageZhTw_returnsEnglishValidationDetail`; api.md `details` locale note | equivalent |
