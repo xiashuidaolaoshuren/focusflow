@@ -30,7 +30,12 @@ function BlockBody({ block }: { block: RailBlock }) {
   if (block.layout === 'row') {
     return (
       <span className="flex h-full items-center gap-2 overflow-hidden px-2.5">
-        <span className="min-w-0 flex-1 truncate text-sm leading-[18px] font-medium">
+        <span
+          className={cn(
+            'min-w-0 flex-1 truncate text-sm leading-[18px] font-medium',
+            block.outcome?.tone === 'skipped' && 'line-through',
+          )}
+        >
           {block.title}
         </span>
         <span className="font-mono text-xs whitespace-nowrap text-muted-foreground">
@@ -48,6 +53,7 @@ function BlockBody({ block }: { block: RailBlock }) {
           className={cn(
             'truncate text-sm leading-[18px] font-medium',
             block.kind === 'BUFFER' && 'font-normal text-muted-foreground',
+            block.outcome?.tone === 'skipped' && 'line-through',
           )}
         >
           {block.title}

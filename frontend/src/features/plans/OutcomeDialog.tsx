@@ -68,7 +68,7 @@ function SummaryStat({
         divider && 'border-l border-border',
       )}
     >
-      <span className="text-lg leading-7 font-semibold tabular-nums">
+      <span className="font-mono text-lg leading-7 font-semibold tabular-nums">
         {value}
       </span>
       <span className="text-xs leading-4 text-muted-foreground">{caption}</span>
@@ -257,7 +257,7 @@ export function OutcomeDialog({
         <div className="grid gap-4 p-5 pb-4">
           <div className="flex items-start justify-between gap-3">
             <div className="grid min-w-0 gap-0.5">
-              <AlertDialogTitle className="font-display text-lg leading-7">
+              <AlertDialogTitle className="text-md leading-6 font-semibold">
                 {crossing ? 'Reconcile elapsed portion' : 'Record outcome'}
               </AlertDialogTitle>
               <AlertDialogDescription>
@@ -337,6 +337,7 @@ export function OutcomeDialog({
                     min={0}
                     value={actualMinutes}
                     disabled={outcome == null}
+                    className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     onChange={(event) => {
                       setMinutesTouched(true)
                       setActualMinutes(event.target.value)
@@ -402,6 +403,7 @@ export function OutcomeDialog({
                         min={0}
                         value={checkpointMinutes}
                         disabled={crossing && unknownRemainder}
+                        className="[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                         onChange={(event) =>
                           setCheckpointMinutes(event.target.value)
                         }

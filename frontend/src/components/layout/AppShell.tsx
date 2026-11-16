@@ -5,14 +5,15 @@ import {
   type ReactNode,
 } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
+import { PanelLeftIcon } from 'lucide-react'
+
 import {
-  CalendarDaysIcon,
-  CalendarRangeIcon,
-  ListChecksIcon,
-  ListIcon,
-  PanelLeftIcon,
-  SettingsIcon,
-} from 'lucide-react'
+  HorizonNavIcon,
+  PlansNavIcon,
+  SettingsNavIcon,
+  TasksNavIcon,
+  TodayNavIcon,
+} from '@/components/layout/navIcons'
 
 import { BrandMark } from '@/components/brand/BrandMark'
 import { ThemeToggle } from '@/components/theme/ThemeToggle'
@@ -44,14 +45,14 @@ import { useSidebar } from '@/components/ui/sidebar-context'
 import { useCurrentUser, useLogout } from '@/features/auth/hooks'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { formatClock, formatDateLabel } from '@/lib/format'
-import { getLocalDateString } from '@/lib/planningDate'
+import { getLocalDateString, isWorkingDay } from '@/lib/planningDate'
 
 const NAV_ITEMS = [
-  { to: '/today', label: 'Today', icon: CalendarDaysIcon, exact: true },
-  { to: '/tasks', label: 'Tasks', icon: ListChecksIcon, exact: true },
-  { to: '/horizon', label: 'Horizon', icon: CalendarRangeIcon, exact: true },
-  { to: '/plans', label: 'Plans', icon: ListIcon, exact: false },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon, exact: true },
+  { to: '/today', label: 'Today', icon: TodayNavIcon, exact: true },
+  { to: '/tasks', label: 'Tasks', icon: TasksNavIcon, exact: true },
+  { to: '/horizon', label: 'Horizon', icon: HorizonNavIcon, exact: true },
+  { to: '/plans', label: 'Plans', icon: PlansNavIcon, exact: false },
+  { to: '/settings', label: 'Settings', icon: SettingsNavIcon, exact: true },
 ] as const
 
 const ACTIVE_ITEM_CLASSES =
@@ -109,9 +110,9 @@ export function AppShell({ children }: { children?: ReactNode }) {
                         render={<NavLink to={item.to} />}
                         isActive={isActive}
                         tooltip={item.label}
-                        className={`h-9 gap-2.5 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:bg-accent data-[active=true]:font-semibold data-[active=true]:text-foreground ${ACTIVE_ITEM_CLASSES}`}
+                        className={`h-9 gap-2.5 rounded-md px-3 text-base font-medium text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:bg-accent data-[active=true]:font-semibold data-[active=true]:text-foreground ${ACTIVE_ITEM_CLASSES}`}
                       >
-                        <Icon />
+                        <Icon className="size-4" />
                         <span className="group-data-[state=collapsed]:hidden">
                           {item.label}
                         </span>
@@ -124,12 +125,12 @@ export function AppShell({ children }: { children?: ReactNode }) {
             </SidebarGroup>
           </nav>
         </SidebarContent>
-        <SidebarFooter className="mt-auto gap-2 border-t border-sidebar-border p-2">
+        <SidebarFooter className="mt-auto gap-2 p-2">
+          <ThemeToggle withLabel />
+          <UserMenu />
           <div className="group-data-[state=collapsed]:hidden">
             <SidebarFooterInfo />
           </div>
-          <ThemeToggle withLabel />
-          <UserMenu />
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
@@ -151,7 +152,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <div
           id="main-content"
           tabIndex={-1}
-          className="flex w-full max-w-6xl flex-1 flex-col px-6 pt-6 pb-12 md:px-8"
+          className="flex w-full max-w-[1376px] flex-1 flex-col px-6 pt-6 pb-12 md:px-8"
         >
           {children ?? <Outlet />}
         </div>
@@ -204,6 +205,9 @@ function SidebarFooterInfo() {
           {formatClock(preferences.workDayEnd)}
         </span>
       </span>
+      {isWorkingDay(new Date(), preferences.workingDays) ? null : (
+        <span className="text-muted-foreground">Not a Working day</span>
+      )}
     </div>
   )
 }

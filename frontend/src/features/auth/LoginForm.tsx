@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
-import { Loader2Icon } from 'lucide-react'
+import { CircleAlertIcon, Loader2Icon } from 'lucide-react'
 
 import { loginSchema, type LoginFormValues } from '@/components/form/schemas'
 import { Alert, AlertTitle } from '@/components/ui/alert'
@@ -52,6 +52,7 @@ export function LoginForm() {
     >
       {hasLoginError ? (
         <Alert ref={errorAlertRef} variant="destructive" tabIndex={-1}>
+          <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>{error.message}</AlertTitle>
         </Alert>
       ) : null}

@@ -26,16 +26,29 @@ const mockedUseCurrentUser = vi.mocked(useCurrentUser)
 const mockedUseLogout = vi.mocked(useLogout)
 const mockedUseSchedulingPreferences = vi.mocked(useSchedulingPreferences)
 
+const EVERY_DAY = [
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+  'SUNDAY',
+] as const
+
 function mockPreferences(
   value: {
     workDayStart: string
     workDayEnd: string
+    workingDays?: readonly (typeof EVERY_DAY)[number][]
   } | null,
 ) {
+  const preferences =
+    value == null ? null : { workingDays: EVERY_DAY, ...value }
   mockedUseSchedulingPreferences.mockReturnValue({
-    preferences: value,
+    preferences,
     isPending: value === null,
-    data: value,
+    data: preferences,
   } as unknown as ReturnType<typeof useSchedulingPreferences>)
 }
 
@@ -156,6 +169,24 @@ describe('AppShell', () => {
     expect(screen.getByText(/work window/i).textContent).toContain(
       '09:00–18:00',
     )
+  })
+
+  it('says so when today is not a Working day', () => {
+    mockPreferences({
+      workDayStart: '09:00:00',
+      workDayEnd: '18:00:00',
+      workingDays: [],
+    })
+
+    renderAppShell()
+
+    expect(screen.getByText('Not a Working day')).toBeInTheDocument()
+  })
+
+  it('leaves the line out on a Working day', () => {
+    renderAppShell()
+
+    expect(screen.queryByText('Not a Working day')).toBeNull()
   })
 
   it('collapses the sidebar to an icon rail and expands it again', () => {

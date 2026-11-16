@@ -1,3 +1,20 @@
+import type { DayOfWeek } from '@/types/api'
+
+const WEEKDAY_NAMES: DayOfWeek[] = [
+  'SUNDAY',
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+]
+
+/** Whether the day's weekday is one of the saved Working days. */
+export function isWorkingDay(date: Date, workingDays: DayOfWeek[]): boolean {
+  return workingDays.includes(WEEKDAY_NAMES[date.getDay()]!)
+}
+
 export function getLocalDateString(date = new Date()): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
