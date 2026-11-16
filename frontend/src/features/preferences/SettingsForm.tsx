@@ -17,6 +17,7 @@ import {
 } from '@/features/preferences/hooks'
 import { buildRail } from '@/features/plans/railModel'
 import { ApiError } from '@/lib/api'
+import { formatDuration } from '@/lib/format'
 import {
   DAY_OF_WEEK_LABELS,
   DAY_OF_WEEK_ORDER,
@@ -44,13 +45,30 @@ function TypicalDayPreview({ values }: { values: SettingsFormValues }) {
 
   return (
     <section aria-labelledby="settings-preview" className="flex flex-col gap-3 rounded-lg border p-4">
-      <h2 id="settings-preview" className="text-base font-semibold">
-        Typical day
-      </h2>
+      <div className="flex items-center gap-2">
+        <h2 id="settings-preview" className="text-base font-semibold">
+          Typical day
+        </h2>
+        <span className="ml-auto rounded-md border px-2 py-0.5 text-xs text-muted-foreground">
+          Preview
+        </span>
+      </div>
       {result == null ? (
         <p className="text-sm text-muted-foreground">Preview unavailable</p>
       ) : (
-        <MiniRail rail={buildRail(result.plan, null, 'mini')} />
+        <>
+          <MiniRail rail={buildRail(result.plan, null, 'mini')} />
+          <div className="grid grid-cols-2 border-t pt-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="font-mono text-lg">{formatDuration(result.focusMinutes)}</span>
+              <span className="text-xs text-muted-foreground">Focus per day</span>
+            </div>
+            <div className="flex flex-col gap-0.5">
+              <span className="font-mono text-lg">{result.sessions}</span>
+              <span className="text-xs text-muted-foreground">Sessions</span>
+            </div>
+          </div>
+        </>
       )}
     </section>
   )
@@ -231,12 +249,12 @@ export function SettingsForm() {
           ) : (
             breaks.fields.map((item, index) => (
               <div key={item.id} className="grid grid-cols-[1fr_auto_auto_auto] items-end gap-3">
-                <Field label="Label" name={`fixedBreaks.${index}.label`}>
+                <Field label="Label" name={`fixedBreaks.${index}.label`} error={form.formState.errors.fixedBreaks?.[index]?.label?.message} apiError={saveMutation.error}>
                   {(control) => (
                     <Input {...form.register(`fixedBreaks.${index}.label`)} {...control} />
                   )}
                 </Field>
-                <Field label="Start" name={`fixedBreaks.${index}.startTime`}>
+                <Field label="Start" name={`fixedBreaks.${index}.startTime`} error={form.formState.errors.fixedBreaks?.[index]?.startTime?.message} apiError={saveMutation.error}>
                   {(control) => (
                     <Controller
                       control={form.control}
@@ -247,7 +265,7 @@ export function SettingsForm() {
                     />
                   )}
                 </Field>
-                <Field label="End" name={`fixedBreaks.${index}.endTime`}>
+                <Field label="End" name={`fixedBreaks.${index}.endTime`} error={form.formState.errors.fixedBreaks?.[index]?.endTime?.message} apiError={saveMutation.error}>
                   {(control) => (
                     <Controller
                       control={form.control}
@@ -303,7 +321,19 @@ export function SettingsForm() {
             )}
           />
         </section>
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={!form.formState.isDirty}
+            onClick={() => {
+              if (preferences != null) {
+                form.reset(toFormValues(preferences))
+              }
+            }}
+          >
+            Cancel
+          </Button>
           <Button type="submit" disabled={saveMutation.isPending}>
             Save
           </Button>

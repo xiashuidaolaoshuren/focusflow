@@ -13,7 +13,7 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 
 | # | Decision | Dependent | Proposed default |
 |---|----------|-----------|------------------|
-| D1 | Out-of-window commitment: spec says "rejected", backend spec says "stored, ignored" (Dentist 15:00 saved in a 03:00–10:00 window) | T6 | UI rejects inline; backend unchanged |
+| D1 | Out-of-window commitment: spec says "rejected", backend spec says "stored, ignored" (Dentist 15:00 saved in a 03:00–10:00 window) | T6 | **Decided 2026-11-16:** UI rejects inline; backend unchanged |
 | D2 | Seconds in `cutoff`: backend truncates, or returns 400 | T1 | **Decided 2026-11-15:** 400 (never 500) via service-layer `MinutePrecision.requireMinuteAligned` — message `times must be minute-aligned`, no `details`; frontend always sends `HH:mm:00` |
 | D3 | Backend validation messages follow `Accept-Language` (got `不得空白`) | T9 | Pin message locale to English |
 | D4 | Prototype date styles ("Friday, 6 November", Today/Tomorrow) vs spec rule 3 (`6 Nov 2026`) | T8 | Spec wins; only change if you say otherwise |
@@ -38,10 +38,10 @@ Fixes 6 functional bugs, spec-rule gaps and visual drift found in the live check
 | T3 | `features/horizon/{HorizonGridView,HorizonPage,HorizonDayList}.tsx`, `horizonGrid.ts` | modify | column layout, On track badge, English dates, ⓘ, ochre shortfall | verified |
 | T2+T3 | `features/horizon/DeadlineBadge.tsx` | create | shared deadline badge, glyph map, legend (used by Tasks and Horizon) | verified |
 | T2+T3 | `components/InfoPopover.tsx` | create | shared ⓘ popover (reused by T5–T7) | verified |
-| T4 | `features/plans/{hooks.ts,PlanDeleteButton,PlanHistoryList,PlanRevisionSwitch}.tsx`, `routes/{PlanHistoryPage,PlanDetailPage}.tsx` | modify | delete 409 message, Shortfall badge, date copy, non-solid delete, Read-only badge | verified |
-| T5 | `features/preferences/{SettingsForm,settingsModel,MiniRail,typicalDay}.ts(x)`, `components/form/TimeField.tsx` | modify | label rule, error display, stepping, layout, preview | verified |
+| T4 | `features/plans/{hooks.ts,planConflicts.ts,PlanDeleteButton,PlanHistoryList,PlanRevisionSwitch}.tsx`, `routes/{PlanHistoryPage,PlanDetailPage}.tsx`, `types/api.ts`, `types/api.generated.ts`, `planFixtures.ts` | modify | delete 409 message, Shortfall badge from new `hasShortfall`, date copy, non-solid delete, Read-only badge | verified |
+| T4 | `backend/.../plan/{DailyPlanRepository,DailyPlanSummaryProjection,DailyPlanService}.java`, `plan/dto/DailyPlanSummaryResponse.java`, `docs/{api.md,openapi.yaml}` | modify | summary `hasShortfall` flag (any out-of-time task, optional or not) | verified |
+| T5 | `features/preferences/{SettingsForm,settingsModel,MiniRail,typicalDay}.ts(x)`, `components/form/{TimeField,timeInput,schemas}.ts(x)`, `components/ui/field-error.ts` | modify | label rule, error display, key normalization (`fixedBreaks[0].label`), stepping, layout, preview | verified |
 | T6 | `routes/TodayPage.tsx`, `features/commitments/CommitmentsPanel.tsx`, `features/plans/{railModel.ts,DayRail,AgendaList,OutcomeDialog}.tsx` | modify | past-day read-only, mobile fit, rail polish, outcome clarity, commitment messages | verified |
-| T6 | `features/plans/PastDaySessions.tsx` | create | Work sessions groups on a past day | provisional |
 | T7 | `routes/TodayPage.tsx`, `features/plans/{PlanHealth,PlanSideCards}.tsx` | modify | Tasks card, plan-less rail, Peak chip, ⓘ | verified |
 | T8 | `components/layout/AppShell.tsx`, `index.css`, `components/ui/alert-dialog.tsx`, `routes/{Login,Register}Page.tsx` | modify | shell width/nav/footer, scrim, dialog and auth styling | verified |
 | T9 | backend locale config | modify | fixed English message locale | provisional (locate in planning) |
@@ -67,7 +67,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T1 — Re-plan cutoff, end to end
 
-- [ ] **Do:** Re-plan and reconcile saves send `cutoff` as `HH:mm:00`; the backend rejects a non-minute-aligned `cutoff` with 400 (D2) instead of a 500.
+- [x] **Do:** Re-plan and reconcile saves send `cutoff` as `HH:mm:00`; the backend rejects a non-minute-aligned `cutoff` with 400 (D2) instead of a 500.
 - **Consumes:** none
 - **Produces:** `getLocalMinuteString(date?: Date | string): string`; 400 `times must be minute-aligned` via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); updated replan and block-progress contract in `docs/api.md` (~L1031–1057 and ~L1013/L1022).
 - **Acceptance:** `buildReplanRequest` at 04:24:05 gives `cutoff === '04:24:00'`; reconcile PUT `cutoff` ends `:00`; non-crossing saves still send `null`; backend `"04:24:05"` → 400, `"04:24:00"` → 200; 409 responses unchanged. Live: Re-plan after recording the elapsed block returns 200 and writes a new revision.
@@ -78,7 +78,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T2 — Tasks page: blank editor fix and fidelity
 
-- [ ] **Do:** Edit opens with the task's values (key the sheet by task id); the task list and editor match the prototype: priority flag fill level, outline glyph + word badges (At risk ochre, Overdue, On track, Beyond horizon, Can't forecast), Waiting-on line, row hairlines, search icon, deadline legend ⓘ, 400px sheet.
+- [x] **Do:** Edit opens with the task's values (key the sheet by task id); the task list and editor match the prototype: priority flag fill level, outline glyph + word badges (At risk ochre, Overdue, On track, Beyond horizon, Can't forecast), Waiting-on line, row hairlines, search icon, deadline legend ⓘ, 400px sheet.
 - **Acceptance:** Edit on "Write Q4 report draft" shows title, description, HIGH, 120m, due 15 Nov; New task after Edit is empty; dirty-close guard works; save keeps existing values; no filled-pill badges; sheet is 400px.
 - **Blocked by:** —
 - **Plan mode:** medium (named unknown: what the tasks API exposes for the forecast badge; may need `/api/horizon`)
@@ -87,7 +87,7 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 
 ### T3 — Horizon: layout, badges, copy
 
-- [ ] **Do:** Day columns are bounded (no `min-w-max`), cell text wraps; On track badge; English dates and minute-only time in the header ("from 15 Nov 2026 at 04:24"), "Due 15 Nov 2026"; pace assumption and deadline legend behind ⓘ popovers; shortfall in ochre.
+- [x] **Do:** Day columns are bounded (no `min-w-max`), cell text wraps; On track badge; English dates and minute-only time in the header ("from 15 Nov 2026 at 04:24"), "Due 15 Nov 2026"; pace assumption and deadline legend behind ⓘ popovers; shortfall in ochre.
 - **Consumes:** `deadlineBadgeLabel`, `DEADLINE_GLYPHS`
 - **Produces:** `ON_TRACK` entry; updated `horizonGrid.test.ts` (currently asserts `null`).
 - **Acceptance:** with 8 days at 1,088px, scroll width ≤ ~1.3× viewport (all days visible at ≥1280px); no clipped text; all five deadline statuses show glyph + word; no ISO dates or seconds; ⓘ keyboard operable; request still sends `currentDate` + minute-aligned `currentTime`.
@@ -99,8 +99,9 @@ Order: T1 → T2 → T3 → T4 → T5 (independent, any order) → T6 → T7 →
 ### T4 — Plans: delete refusal and history/detail fidelity
 
 - [ ] **Do:** Deleting a plan with progress (409 `PLAN_HAS_PROGRESS`) shows a message; history shows a Shortfall badge when there is a shortfall; delete dialog uses "15 Nov 2026"; Delete plan is outline/destructive-text, not solid; Read-only badge on historical revisions and past plans; h1 matches prototype heading.
-- **Produces:** `onError` in `useDeletePlan`.
-- **Acceptance:** delete on 15 Nov shows why it was refused and leaves the row; 15 Nov (40h 5m shortfall) shows Shortfall; one solid button per view; Rev 1 shows Read-only.
+- **Produces:** `DailyPlanSummaryResponse.hasShortfall`; `deletePlanErrorMessage` in `planConflicts.ts`; `onError` in `useDeletePlan`.
+- **Acceptance:** delete on 15 Nov shows why it was refused and leaves the row; 15 Nov shows Shortfall (two optional out-of-time tasks; `hasWarning` is must-include only, so `hasShortfall` is the badge source); one solid button per view; Rev 1 shows Read-only.
+- **Blast radius:** `DailyPlanSummaryResponse` (API contract, `docs/api.md`): the new field is additive; existing fields and 409 codes unchanged.
 - **Blocked by:** —
 - **Plan mode:** skip
 - **TDD suitable:** partial — error handling and badge logic test-first; styling live.
@@ -179,4 +180,6 @@ Per subtask, obey **`TDD suitable`**: `yes` means strict **test-driven-developme
 | 2026-11-15 | Initial plan from the live browser check (18 subtasks; findings are in the conversation, no separate report file) | — |
 | 2026-11-15 | Merged 18 subtasks into 10 by screen/area: T1+T2→T1; T3+T15→T2; T4+T11→T3; T5(a)+T12→T4; T5(b)+T14→T5; T5(c)+T6+T7+T8+T9→T6; T13→T7; T16+T17→T8; T10→T9; T18→T10. Added D4. Acceptance criteria preserved | material (user-requested restructure) |
 | 2026-11-15 | T2+T3 planned together; file map adds `DeadlineBadge.tsx`, `InfoPopover.tsx`, `waitingOnLabel`, `HorizonDayList.tsx`; fixed-order copy moves into the Horizon pace ⓘ | equivalent |
+| 2026-11-15 | T4 planned: history Shortfall needs a new backend summary flag `hasShortfall` (`hasWarning` is must-include only, so 15 Nov's optional out-of-time tasks never set it); T4 now also touches backend, docs and generated types | material (user approved) |
+| 2026-11-16 | D1 decided (user): UI rejects out-of-window commitments inline, backend unchanged. T6 `PastDaySessions.tsx` dropped (reuse `WorkSessions` with `plan.composedRail`); `readOnly` only on `CommitmentsPanel` (DayRail/AgendaList read-only by omitting `onSelect`); T5 file map adds `field-error.ts`, `timeInput.ts`, `schemas.ts` | equivalent (D1 answer, user-approved) |
 | 2026-11-15 | D2 decided (user): 400 via service-layer `MinutePrecision.requireMinuteAligned` (message only, no `details`); T1 Produces/acceptance wording and file map updated; `getLocalMinuteString` widened to `Date \| string` | equivalent (D2 answer, user-approved) |

@@ -167,7 +167,11 @@ const dayOfWeekSchema = z.enum(
 
 export const fixedBreakFormSchema = z
   .object({
-    label: z.string().max(255, 'Label must be at most 255 characters'),
+    label: z
+      .string()
+      .trim()
+      .min(1, 'Label is required')
+      .max(255, 'Label must be at most 255 characters'),
     startTime: timeSchema,
     endTime: timeSchema,
   })

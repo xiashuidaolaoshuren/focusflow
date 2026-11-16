@@ -293,6 +293,94 @@ describe('SettingsForm fixed breaks', () => {
       within(preview()).queryByRole('listitem', { name: /fixed break/i }),
     ).not.toBeInTheDocument()
   })
+
+  it('requires a fixed break label before any request is sent', async () => {
+    const mutate = vi.fn()
+    mockLoaded(defaultPreferences, mutate)
+    render(<SettingsForm />)
+    const breaks = () => screen.getByRole('region', { name: 'Fixed breaks' })
+
+    fireEvent.click(within(breaks()).getByRole('button', { name: 'Add break' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await within(breaks()).findByText('Label is required')).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('shows a server detail on the fixed break row it names', () => {
+    mockLoaded({
+      ...defaultPreferences,
+      fixedBreaks: [{ label: 'Lunch', startTime: '12:00:00', endTime: '13:00:00' }],
+    } as SchedulingPreferencesResponse)
+    mockedUseUpdateSchedulingPreferences.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isError: true,
+      error: new ApiError({
+        status: 400,
+        message: 'Invalid scheduling preferences',
+        details: { 'fixedBreaks[0].label': ['Label is taken by a commitment'] },
+      } as unknown as ConstructorParameters<typeof ApiError>[0]),
+    } as unknown as ReturnType<typeof useUpdateSchedulingPreferences>)
+
+    render(<SettingsForm />)
+
+    expect(
+      within(screen.getByRole('region', { name: 'Fixed breaks' })).getByText(
+        'Label is taken by a commitment',
+      ),
+    ).toBeInTheDocument()
+  })
+})
+
+describe('SettingsForm cancel', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('restores the saved values when Cancel is clicked after an edit', () => {
+    mockLoaded()
+    render(<SettingsForm />)
+    const workWindow = within(screen.getByRole('region', { name: 'Work window' }))
+
+    fireEvent.change(workWindow.getByLabelText('Start'), { target: { value: '10:00' } })
+    expect(workWindow.getByLabelText('Start')).toHaveValue('10:00')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(workWindow.getByLabelText('Start')).toHaveValue('09:00')
+  })
+})
+
+describe('SettingsForm typical day preview', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('labels the preview and shows focus and session totals for the default day', () => {
+    mockLoaded()
+    render(<SettingsForm />)
+    const preview = () => screen.getByRole('region', { name: 'Typical day' })
+
+    expect(within(preview()).getByText('Preview')).toBeInTheDocument()
+    expect(within(preview()).getByText('Focus per day')).toBeInTheDocument()
+    expect(within(preview()).getByText('Sessions')).toBeInTheDocument()
+    // 09:00–18:00 with 50/10 cadence and 15 min minimum: nine 50-minute sessions.
+    expect(within(preview()).getByText('9')).toBeInTheDocument()
+  })
+
+  it('marks the peak window on the preview rail', () => {
+    mockLoaded({
+      ...defaultPreferences,
+      peakStart: '12:00:00',
+      peakEnd: '14:00:00',
+    } as SchedulingPreferencesResponse)
+    render(<SettingsForm />)
+
+    expect(
+      within(screen.getByRole('region', { name: 'Typical day' })).getByLabelText('Peak window'),
+    ).toBeInTheDocument()
+  })
 })
 
 describe('SettingsForm focus cadence', () => {

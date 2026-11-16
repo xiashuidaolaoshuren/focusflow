@@ -32,19 +32,29 @@ export function MiniRail({ rail }: MiniRailProps) {
           </span>
         ))}
       </div>
-      <div role="list" aria-label="Typical day preview" className="relative">
-        {rail.blocks.map((block) => (
+      <div className="relative">
+        {rail.peak ? (
           <div
-            key={block.id}
-            role="listitem"
-            aria-label={block.label}
-            className={cn(
-              'absolute right-0 left-1 rounded-sm',
-              MINI_KIND_CLASSES[block.kind],
-            )}
-            style={{ top: block.topPx + 1, height: block.heightPx }}
+            role="img"
+            aria-label="Peak window"
+            className="absolute inset-x-0 bg-muted/60"
+            style={{ top: rail.peak.topPx, height: rail.peak.heightPx }}
           />
-        ))}
+        ) : null}
+        <div role="list" aria-label="Typical day preview" className="relative">
+          {rail.blocks.map((block) => (
+            <div
+              key={block.id}
+              role="listitem"
+              aria-label={block.label}
+              className={cn(
+                'absolute right-0 left-1 rounded-sm',
+                MINI_KIND_CLASSES[block.kind],
+              )}
+              style={{ top: block.topPx + 1, height: block.heightPx }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
