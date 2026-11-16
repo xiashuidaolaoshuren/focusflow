@@ -64,7 +64,7 @@ function Panel({
 }) {
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card">
-      <div className="flex min-h-12 items-center gap-2 border-b border-border px-4 py-2">
+      <div className="flex min-h-12 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-2">
         <h2 className="text-base leading-5 font-semibold">{title}</h2>
         {titleExtra}
         <span className="flex-1" />
@@ -129,6 +129,8 @@ export function TodayPage() {
             density,
           )
         : null
+  // The plan-less rail draws its Peak wash from preferences, so the chip reads the same source.
+  const peakSource = plan ?? preferences
   const settled = !isPending && !isError
   const replayedAt = plan?.revisions.at(-1)?.cutoff ?? null
   const selectedBlock =
@@ -210,7 +212,7 @@ export function TodayPage() {
           <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
             Daily plan
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               aria-label={`Previous day: ${formatDateLabel(previousDate(planDate))}`}
@@ -219,7 +221,7 @@ export function TodayPage() {
             >
               <ChevronLeftIcon className="size-4" aria-hidden="true" />
             </button>
-            <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
+            <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em] whitespace-nowrap">
               {formatDateLabel(planDate)}
             </h1>
             <button
@@ -293,7 +295,7 @@ export function TodayPage() {
 
       <StatsStrip stats={stats} />
 
-      <div className="grid items-start gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
         <Panel
           title="Day rail"
           titleExtra={
@@ -307,7 +309,7 @@ export function TodayPage() {
             </>
           }
           action={
-            plan?.peakStart != null && plan.peakEnd != null ? (
+            peakSource?.peakStart != null && peakSource.peakEnd != null ? (
               <>
                 <span className="inline-flex items-center gap-1.5 text-xs tracking-[0.01em] whitespace-nowrap text-muted-foreground">
                   <span
@@ -316,7 +318,8 @@ export function TodayPage() {
                   />
                   <span>Peak window</span>
                   <span className="font-mono text-foreground">
-                    {formatClock(plan.peakStart)}&ndash;{formatClock(plan.peakEnd)}
+                    {formatClock(peakSource.peakStart)}&ndash;
+                    {formatClock(peakSource.peakEnd)}
                   </span>
                 </span>
                 <InfoPopover label="About the Peak window" title="Peak window" align="end">

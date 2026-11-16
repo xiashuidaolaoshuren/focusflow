@@ -152,7 +152,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <div
           id="main-content"
           tabIndex={-1}
-          className="flex w-full max-w-[1376px] flex-1 flex-col px-6 pt-6 pb-12 md:px-8"
+          className="flex w-full max-w-[1376px] flex-1 flex-col px-4 pt-6 pb-12 md:px-8"
         >
           {children ?? <Outlet />}
         </div>

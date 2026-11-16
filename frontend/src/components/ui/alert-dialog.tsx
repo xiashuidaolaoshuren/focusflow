@@ -42,7 +42,8 @@ function AlertDialogContent({
 }: AlertDialogPrimitive.Popup.Props) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
+      {/* forceRender: a confirmation opened over a sheet still dims it (base-ui skips nested backdrops). */}
+      <AlertDialogOverlay forceRender />
       <AlertDialogPrimitive.Popup
         role="alertdialog"
         data-slot="alert-dialog-content"

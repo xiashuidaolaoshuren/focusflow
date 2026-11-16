@@ -151,6 +151,10 @@ export function buildRail(
         }
       : null
 
+  // A floored block can be taller than its slot; the next block starts below it
+  // instead of overprinting it, keeping its own end time.
+  let carriedBottomPx: number | null = null
+
   return {
     hours,
     lines,
@@ -180,7 +184,13 @@ export function buildRail(
         .filter((part) => part != null)
         .join(', ')
       // A 5 or 10 minute block would be 4–14px; the floor keeps one line of its title readable.
-      const heightPx = Math.max(MIN_BLOCK_PX, (end - start) * ppm - 2)
+      const bodyPx = (end - start) * ppm - 2
+      const trueTopPx = (start - windowStart) * ppm
+      const trueBottomPx = trueTopPx + bodyPx
+      const topPx =
+        carriedBottomPx != null ? Math.max(trueTopPx, carriedBottomPx) : trueTopPx
+      const heightPx = Math.max(MIN_BLOCK_PX, trueBottomPx - topPx)
+      carriedBottomPx = topPx + heightPx > trueBottomPx ? topPx + heightPx : null
       return {
         id: block.id,
         kind: block.kind,
@@ -195,7 +205,7 @@ export function buildRail(
         label,
         outcome,
         isCurrent: outcome?.tone === 'current',
-        topPx: (start - windowStart) * ppm,
+        topPx,
         heightPx,
         layout: heightPx >= STACK_MIN_HEIGHT_PX ? 'stack' : 'row',
       }

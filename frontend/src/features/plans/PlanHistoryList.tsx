@@ -120,15 +120,15 @@ export function PlanHistoryList({
           <tr className="border-b border-border text-left text-xs tracking-wider text-muted-foreground uppercase">
             <th scope="col" className="px-3 py-2 font-medium">Date</th>
             <th scope="col" className="px-3 py-2 text-right font-medium">Focus</th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">Sessions</th>
-            <th scope="col" className="px-3 py-2 font-medium">Status</th>
+            <th scope="col" className="hidden px-3 py-2 text-right font-medium md:table-cell">Sessions</th>
+            <th scope="col" className="hidden px-3 py-2 font-medium md:table-cell">Status</th>
             <th scope="col" className="px-3 py-2"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
           {plans.map((plan) => (
             <tr key={plan.id} className="border-t border-border first:border-t-0">
-              <td className="px-3 py-2">
+              <td className="px-3 py-2 whitespace-nowrap">
                 <Link to={`/plans/${plan.id}`} className="font-medium hover:underline">
                   {formatDateLabel(plan.planDate)}
                 </Link>
@@ -136,8 +136,10 @@ export function PlanHistoryList({
               <td className="px-3 py-2 text-right font-mono">
                 {formatDuration(plan.scheduledWorkMinutes)}
               </td>
-              <td className="px-3 py-2 text-right font-mono">{plan.workSessionCount}</td>
-              <td className="px-3 py-2">
+              <td className="hidden px-3 py-2 text-right font-mono md:table-cell">
+                {plan.workSessionCount}
+              </td>
+              <td className="hidden px-3 py-2 md:table-cell">
                 <span className="flex flex-wrap items-center gap-2">
                   {plan.hasShortfall ? (
                     <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-deadline-at-risk">

@@ -161,6 +161,22 @@ describe('buildRail', () => {
     }
   })
 
+  it('keeps a floored short block from overprinting the block after it', () => {
+    // A 5m block is 8px at comfortable; the 20px floor pushed it into the next block.
+    const plan = planWith([
+      work('09:00:00', '09:05:00'),
+      work('09:05:00', '09:50:00'),
+    ])
+
+    for (const density of ['comfortable', 'compact'] as const) {
+      const [five, next] = buildRail(plan, null, density).blocks
+      const trueBottom = 50 * (density === 'comfortable' ? 1.6 : 1.2) - 2
+
+      expect(next!.topPx).toBeGreaterThanOrEqual(five!.topPx + five!.heightPx)
+      expect(next!.topPx + next!.heightPx).toBe(trueBottom)
+    }
+  })
+
   it('summarises outcomes as text with a tone', () => {
     const rail = buildRail(
       planWith([

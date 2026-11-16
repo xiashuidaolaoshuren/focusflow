@@ -99,25 +99,29 @@ export function HorizonPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
-          7 Working days
-        </span>
-        <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">Horizon</h1>
-        <p className="text-sm text-muted-foreground">
-          {horizonRangeCopy(horizon.currentDate, horizon.currentTime)}
-        </p>
-        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <span>Pace assumption</span>
-          <InfoPopover label="About pace assumption" title="Pace assumption">
-            <p>{HORIZON_PACE_COPY}</p>
-            <p className="pt-2">{forecastHeaderCopy()}</p>
-          </InfoPopover>
+      <header className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
+            7 Working days
+          </span>
+          <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">Horizon</h1>
+          <p className="text-sm text-muted-foreground">
+            {horizonRangeCopy(horizon.currentDate, horizon.currentTime)}
+          </p>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <span>Pace assumption</span>
+            <InfoPopover label="About pace assumption" title="Pace assumption">
+              <p>{HORIZON_PACE_COPY}</p>
+              <p className="pt-2">{forecastHeaderCopy()}</p>
+            </InfoPopover>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <InfoPopover label="About deadline forecasts" title="Deadline forecast" align="end">
             <DeadlineLegend />
           </InfoPopover>
         </div>
-      </div>
+      </header>
 
       {horizon.tasks.length === 0 ? (
         <section className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-8 text-center">

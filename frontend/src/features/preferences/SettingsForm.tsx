@@ -248,8 +248,11 @@ export function SettingsForm() {
             <p className="text-sm text-muted-foreground">No fixed breaks yet.</p>
           ) : (
             breaks.fields.map((item, index) => (
-              <div key={item.id} className="grid grid-cols-[1fr_auto_auto_auto] items-end gap-3">
-                <Field label="Label" name={`fixedBreaks.${index}.label`} error={form.formState.errors.fixedBreaks?.[index]?.label?.message} apiError={saveMutation.error}>
+              <div
+                key={item.id}
+                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-start gap-3 md:grid-cols-[1fr_auto_auto_auto]"
+              >
+                <Field className="col-span-3 md:col-span-1" label="Label" name={`fixedBreaks.${index}.label`} error={form.formState.errors.fixedBreaks?.[index]?.label?.message} apiError={saveMutation.error}>
                   {(control) => (
                     <Input {...form.register(`fixedBreaks.${index}.label`)} {...control} />
                   )}
@@ -276,14 +279,20 @@ export function SettingsForm() {
                     />
                   )}
                 </Field>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  aria-label={`Remove ${values.fixedBreaks?.[index]?.label || 'break'}`}
-                  onClick={() => breaks.remove(index)}
-                >
-                  Remove
-                </Button>
+                {/* The spacer keeps Remove level with the inputs when a field grows a message. */}
+                <div className="flex flex-col gap-2">
+                  <span aria-hidden="true" className="text-sm leading-none font-medium">
+                    &nbsp;
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    aria-label={`Remove ${values.fixedBreaks?.[index]?.label || 'break'}`}
+                    onClick={() => breaks.remove(index)}
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
             ))
           )}

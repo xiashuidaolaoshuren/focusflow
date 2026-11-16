@@ -88,7 +88,9 @@ function PlanNotFoundState({ planId }: PlanNotFoundStateProps) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Plan not found</h1>
+        <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
+          Plan not found
+        </h1>
         <p className="text-sm text-muted-foreground">
           This saved plan does not exist or is no longer available.
         </p>

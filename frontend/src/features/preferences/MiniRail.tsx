@@ -22,6 +22,12 @@ export function MiniRail({ rail }: MiniRailProps) {
       style={{ height: rail.totalPx }}
     >
       <div className="relative" aria-hidden="true">
+        {rail.peak ? (
+          <span
+            className="absolute right-0 w-[3px] rounded-sm bg-peak-edge"
+            style={{ top: rail.peak.topPx, height: rail.peak.heightPx }}
+          />
+        ) : null}
         {rail.hours.map((hour) => (
           <span
             key={hour.label}
@@ -37,7 +43,7 @@ export function MiniRail({ rail }: MiniRailProps) {
           <div
             role="img"
             aria-label="Peak window"
-            className="absolute inset-x-0 bg-muted/60"
+            className="absolute inset-x-0 bg-peak"
             style={{ top: rail.peak.topPx, height: rail.peak.heightPx }}
           />
         ) : null}

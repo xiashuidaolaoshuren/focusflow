@@ -71,7 +71,12 @@ const mockedUsePlanByDate = vi.mocked(usePlanByDate)
 const mockedUseCommitments = vi.mocked(useCommitments)
 const mockedUseSchedulingPreferences = vi.mocked(useSchedulingPreferences)
 
-function mockPreferences(windowEnd = '18:00:00', windowStart = '09:00:00') {
+function mockPreferences(
+  windowEnd = '18:00:00',
+  windowStart = '09:00:00',
+  peakStart: string | null = null,
+  peakEnd: string | null = null,
+) {
   mockedUseSchedulingPreferences.mockReturnValue({
     preferences: {
       workDayStart: windowStart,
@@ -81,8 +86,8 @@ function mockPreferences(windowEnd = '18:00:00', windowStart = '09:00:00') {
       breakMinutes: 10,
       minSessionMinutes: 15,
       bufferMinutes: 0,
-      peakStart: null,
-      peakEnd: null,
+      peakStart,
+      peakEnd,
       fixedBreaks: [{ label: 'Lunch', startTime: '12:00:00', endTime: '13:00:00' }],
       workingDays: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
       persisted: true,
@@ -233,6 +238,22 @@ describe('TodayPage', () => {
     renderToday(`/today?date=${getLocalDateString()}`)
 
     expect(screen.queryByText('Peak window')).toBeNull()
+  })
+
+  it('shows the Peak chip from preferences when the day has no plan', () => {
+    mockPlan({ plan: null })
+    mockPreferences('18:00:00', '09:00:00', '05:00:00', '06:30:00')
+
+    renderToday('/today?date=2026-11-06')
+
+    const railSection = screen
+      .getByRole('heading', { name: 'Day rail' })
+      .closest('section') as HTMLElement
+    expect(within(railSection).getByText('Peak window')).toBeInTheDocument()
+    expect(within(railSection).getByText('05:00–06:30')).toBeInTheDocument()
+    expect(
+      within(railSection).getByRole('button', { name: 'About the Peak window' }),
+    ).toBeInTheDocument()
   })
 
   it('shows fixed breaks and commitments on the rail before a plan exists', () => {
