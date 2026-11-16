@@ -938,6 +938,11 @@ class DailyPlanServiceTest {
 					}
 
 					@Override
+					public Boolean getHasShortfall() {
+						return true;
+					}
+
+					@Override
 					public Boolean getHasProgress() {
 						return true;
 					}
@@ -963,6 +968,7 @@ class DailyPlanServiceTest {
 							assertThat(summary.scheduledTaskCount()).isEqualTo(2);
 							assertThat(summary.unplacedWorkCount()).isEqualTo(1);
 							assertThat(summary.hasWarning()).isTrue();
+							assertThat(summary.hasShortfall()).isTrue();
 							assertThat(summary.hasProgress()).isTrue();
 							assertThat(summary.needsRefresh()).isFalse();
 						});

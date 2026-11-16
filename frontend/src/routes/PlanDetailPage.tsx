@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { ClockIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,6 +10,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AgendaList } from '@/features/plans/AgendaList'
@@ -80,7 +82,7 @@ function PlanNotFoundState({ planId }: PlanNotFoundStateProps) {
       : '/plans'
   const recoveryLabel =
     cachedPlanDate != null
-      ? `Back to plan for ${cachedPlanDate}`
+      ? `Back to plan for ${formatDateLabel(cachedPlanDate)}`
       : 'Back to plan history'
 
   return (
@@ -185,7 +187,7 @@ export function PlanDetailPage() {
           <span className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Daily plan
           </span>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
             {plan != null ? formatDateLabel(plan.planDate) : 'Plan detail'}
           </h1>
           {plan != null ? (
@@ -219,6 +221,14 @@ export function PlanDetailPage() {
             aria-label="Day rail"
             className="rounded-lg border border-border bg-card"
           >
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">Day rail</h2>
+              <span className="flex-1" />
+              <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-muted-foreground">
+                <ClockIcon className="size-3" aria-hidden />
+                Read-only
+              </Badge>
+            </div>
             {isMobile ? <AgendaList rail={rail} /> : <DayRail rail={rail} />}
           </section>
           <div className="flex flex-col gap-4">

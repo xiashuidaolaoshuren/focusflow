@@ -190,6 +190,7 @@ export const samplePlanSummary: DailyPlanSummaryResponse = {
   scheduledTaskCount: 2,
   unplacedWorkCount: 1,
   hasWarning: true,
+  hasShortfall: true,
   hasProgress: false,
   needsRefresh: false,
 }

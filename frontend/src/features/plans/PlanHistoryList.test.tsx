@@ -28,6 +28,7 @@ const samplePlans: DailyPlanSummaryResponse[] = [
     scheduledTaskCount: 0,
     unplacedWorkCount: 0,
     hasWarning: false,
+    hasShortfall: false,
     hasProgress: false,
     needsRefresh: false,
   },
@@ -83,7 +84,7 @@ describe('PlanHistoryList', () => {
 
   it('shows each status as a badge with a glyph and its text', () => {
     renderPlanHistoryList({
-      plans: [{ ...samplePlanSummary, hasWarning: true, hasProgress: true, needsRefresh: true }],
+      plans: [{ ...samplePlanSummary, hasShortfall: true, hasProgress: true, needsRefresh: true }],
     })
 
     const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
@@ -92,9 +93,27 @@ describe('PlanHistoryList', () => {
     }
   })
 
+  it('shows Shortfall from hasShortfall, not hasWarning', () => {
+    renderPlanHistoryList({
+      plans: [{ ...samplePlanSummary, hasWarning: false, hasShortfall: true }],
+    })
+
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    expect(within(row).getByText('Shortfall')).toBeInTheDocument()
+  })
+
+  it('shows no Shortfall when only hasWarning is set', () => {
+    renderPlanHistoryList({
+      plans: [{ ...samplePlanSummary, hasWarning: true, hasShortfall: false }],
+    })
+
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    expect(within(row).queryByText('Shortfall')).toBeNull()
+  })
+
   it('shows a dash in the status cell when a plan has no flags', () => {
     renderPlanHistoryList({
-      plans: [{ ...samplePlanSummary, hasWarning: false, hasProgress: false, needsRefresh: false }],
+      plans: [{ ...samplePlanSummary, hasWarning: false, hasShortfall: false, hasProgress: false, needsRefresh: false }],
     })
 
     const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
@@ -165,13 +184,14 @@ describe('PlanHistoryList', () => {
     renderPlanHistoryList()
 
     fireEvent.click(
-      screen.getByRole('button', { name: /delete plan for 2026-06-14/i }),
+      screen.getByRole('button', { name: /delete plan for 14 jun 2026/i }),
     )
 
     expect(deleteMutate).not.toHaveBeenCalled()
     expect(
       screen.getByRole('alertdialog', { name: /delete plan/i }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/plan for 14 jun 2026/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^delete plan$/i }))
     expect(deleteMutate).toHaveBeenCalledWith(

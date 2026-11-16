@@ -21,6 +21,8 @@ public interface DailyPlanSummaryProjection {
 
 	Boolean getHasWarning();
 
+	Boolean getHasShortfall();
+
 	Boolean getHasProgress();
 
 	Boolean getNeedsRefresh();

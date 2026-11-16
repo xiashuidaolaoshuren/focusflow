@@ -1125,6 +1125,72 @@ class PostgresIntegrationTest {
 	}
 
 	@Test
+	void findSummariesByOwner_hasShortfallFollowsAnyOutOfTimeTaskNotOnlyMustInclude() {
+		String suffix = UUID.randomUUID().toString().substring(0, 8);
+		User owner =
+				savedUser(
+						userRepository,
+						UserTestBuilder.user()
+								.withUnique(suffix)
+								.withAccountPrefix("shortfall-flag-owner")
+								.withPasswordHash(
+										"$2a$10$9999999999999999999999999999999999999999999999999999999"));
+
+		Task optional =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Optional overflow")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(45));
+		Task blocked =
+				savedTask(
+						taskRepository,
+						TaskTestBuilder.task(owner)
+								.withTitle("Blocked must")
+								.withPriority(TaskPriority.MEDIUM)
+								.withStatus(TaskStatus.OPEN)
+								.withEstimatedMinutes(30));
+
+		savedPlan(
+				dailyPlanRepository,
+				DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 11, 15))
+						.withCreatedAt(Instant.parse("2026-11-15T08:00:00Z"))
+						.withMetrics(480, 60, 0L, 0, 0)
+						.addTask(optional, 1, false, UnplacedReason.OUT_OF_TIME, 45));
+		savedPlan(
+				dailyPlanRepository,
+				DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 11, 16))
+						.withCreatedAt(Instant.parse("2026-11-16T08:00:00Z"))
+						.withMetrics(480, 60, 0L, 0, 0)
+						.addTask(blocked, 1, true, UnplacedReason.BLOCKED, 30));
+		dailyPlanRepository.flush();
+
+		var summaries =
+				dailyPlanRepository
+						.findSummariesByOwner(owner.getId(), PageRequest.of(0, 20))
+						.getContent();
+
+		assertThat(summaries)
+				.filteredOn(summary -> summary.getPlanDate().equals(LocalDate.of(2026, 11, 15)))
+				.singleElement()
+				.satisfies(
+						summary -> {
+							assertThat(summary.getHasShortfall()).isTrue();
+							assertThat(summary.getHasWarning()).isFalse();
+						});
+		assertThat(summaries)
+				.filteredOn(summary -> summary.getPlanDate().equals(LocalDate.of(2026, 11, 16)))
+				.singleElement()
+				.satisfies(
+						summary -> {
+							assertThat(summary.getHasShortfall()).isFalse();
+							assertThat(summary.getHasWarning()).isTrue();
+						});
+	}
+
+	@Test
 	void findSummariesByOwner_countsLatestRevisionOnlyAndExposesProgressFlags() {
 		String suffix = UUID.randomUUID().toString().substring(0, 8);
 		User owner =

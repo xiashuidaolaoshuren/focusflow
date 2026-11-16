@@ -302,6 +302,7 @@ History list rows only — no blocks or snapshots.
 | `scheduledTaskCount` | integer | yes | |
 | `unplacedWorkCount` | integer | yes | |
 | `hasWarning` | boolean | yes | Derived must-include shortfall present |
+| `hasShortfall` | boolean | yes | Latest revision has any out-of-time task, optional or not. `hasWarning` stays must-include only |
 | `hasProgress` | boolean | yes | Any block on any revision carries a recorded outcome |
 | `needsRefresh` | boolean | yes | Same condition as the detail field |
 
@@ -970,7 +971,10 @@ Paged list of saved plan **summaries** for the current user (newest first by `cr
       "workSessionCount": 3,
       "scheduledTaskCount": 2,
       "unplacedWorkCount": 0,
-      "hasWarning": false
+      "hasWarning": false,
+      "hasShortfall": false,
+      "hasProgress": false,
+      "needsRefresh": false
     }
   ],
   "page": 0,

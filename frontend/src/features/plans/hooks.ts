@@ -15,7 +15,8 @@ import {
   recordBlockProgress,
   replanDailyPlan,
 } from '@/features/plans/api'
-import { isPlanRefetchConflict } from '@/features/plans/planConflicts'
+import { deletePlanErrorMessage, isPlanRefetchConflict } from '@/features/plans/planConflicts'
+import { toast } from 'sonner'
 import {
   horizonQueryPrefix,
   invalidatePlanQueries,
@@ -123,6 +124,10 @@ export function useDeletePlan() {
         queryClient.invalidateQueries({ queryKey: planDetailQueryKey(id) }),
         queryClient.invalidateQueries({ queryKey: horizonQueryPrefix }),
       ])
+    },
+    onError: async (error) => {
+      toast.error(deletePlanErrorMessage(error))
+      await queryClient.invalidateQueries({ queryKey: plansListQueryPrefix })
     },
   })
 }

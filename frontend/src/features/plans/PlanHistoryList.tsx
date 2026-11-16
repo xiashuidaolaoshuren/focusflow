@@ -139,25 +139,25 @@ export function PlanHistoryList({
               <td className="px-3 py-2 text-right font-mono">{plan.workSessionCount}</td>
               <td className="px-3 py-2">
                 <span className="flex flex-wrap items-center gap-2">
-                  {plan.hasWarning ? (
-                    <Badge variant="secondary">
+                  {plan.hasShortfall ? (
+                    <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-deadline-at-risk">
                       <TriangleAlertIcon aria-hidden />
                       Shortfall
                     </Badge>
                   ) : null}
                   {plan.hasProgress ? (
-                    <Badge variant="secondary">
+                    <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-status-in-progress">
                       <ClockIcon aria-hidden />
                       Progress
                     </Badge>
                   ) : null}
                   {plan.needsRefresh ? (
-                    <Badge variant="secondary">
+                    <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-primary">
                       <RefreshCwIcon aria-hidden />
                       Needs refresh
                     </Badge>
                   ) : null}
-                  {!plan.hasWarning && !plan.hasProgress && !plan.needsRefresh ? (
+                  {!plan.hasShortfall && !plan.hasProgress && !plan.needsRefresh ? (
                     <span className="text-muted-foreground">—</span>
                   ) : null}
                 </span>

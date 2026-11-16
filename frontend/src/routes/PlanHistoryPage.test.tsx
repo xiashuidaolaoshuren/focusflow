@@ -34,6 +34,28 @@ describe('PlanHistoryPage', () => {
     vi.clearAllMocks()
   })
 
+  it('titles the page Plans under a History eyebrow, with no subtitle or card title', () => {
+    mockedUsePlans.mockReturnValue({
+      plans: [sampleSummary],
+      page: samplePage,
+      isPending: false,
+      isError: false,
+      isEmpty: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlans>)
+
+    render(
+      <MemoryRouter>
+        <PlanHistoryPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Plans' })).toBeInTheDocument()
+    expect(screen.getByText('History')).toBeInTheDocument()
+    expect(screen.queryByText('Plan history')).toBeNull()
+    expect(screen.queryByText('Saved plans')).toBeNull()
+  })
+
   it('loads the first page with default size on mount', () => {
     mockedUsePlans.mockReturnValue({
       plans: [sampleSummary],

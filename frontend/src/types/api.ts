@@ -345,6 +345,7 @@ export type DailyPlanSummaryResponse = {
   scheduledTaskCount: number
   unplacedWorkCount: number
   hasWarning: boolean
+  hasShortfall: boolean
   hasProgress: boolean
   needsRefresh: boolean
 }

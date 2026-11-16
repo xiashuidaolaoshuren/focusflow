@@ -305,6 +305,7 @@ public class DailyPlanService {
 				projection.getScheduledTaskCount() != null ? projection.getScheduledTaskCount() : 0,
 				projection.getUnplacedWorkCount() != null ? projection.getUnplacedWorkCount() : 0,
 				Boolean.TRUE.equals(projection.getHasWarning()),
+				Boolean.TRUE.equals(projection.getHasShortfall()),
 				Boolean.TRUE.equals(projection.getHasProgress()),
 				Boolean.TRUE.equals(projection.getNeedsRefresh()));
 	}

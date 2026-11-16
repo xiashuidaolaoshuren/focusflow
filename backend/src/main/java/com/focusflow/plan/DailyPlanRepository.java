@@ -67,6 +67,14 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 					                     WHERE r2.dailyPlan.id = p.id)
 					                 AND t.mustInclude = true
 					                 AND t.unplacedReason IS NOT NULL) AS hasWarning,
+					       EXISTS (SELECT t FROM DailyPlanTask t
+					               JOIN t.revision r
+					               WHERE r.dailyPlan.id = p.id
+					                 AND r.revisionNumber = (
+					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					                     WHERE r2.dailyPlan.id = p.id)
+					                 AND t.unplacedReason = com.focusflow.schedule.UnplacedReason.OUT_OF_TIME)
+					           AS hasShortfall,
 					       EXISTS (SELECT b FROM DailyPlanBlock b
 					               JOIN b.revision r
 					               WHERE r.dailyPlan.id = p.id

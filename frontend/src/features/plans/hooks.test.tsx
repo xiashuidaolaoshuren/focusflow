@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook } from '@testing-library/react'
 import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { samplePlan, samplePlanSummary } from '@/features/plans/planFixtures'
@@ -28,6 +29,10 @@ import {
   tasksQueryKey,
 } from '@/lib/query'
 import { markRegeneratePromptNeeded, useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
+
+vi.mock('sonner', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}))
 
 vi.mock('@/features/plans/api', () => ({
   deletePlan: vi.fn(),
@@ -79,6 +84,7 @@ const sampleSummary: DailyPlanSummaryResponse = {
   planDate: '2026-06-15',
   createdAt: '2026-06-15T09:00:00Z',
   hasWarning: false,
+  hasShortfall: false,
 }
 
 const samplePage: PageResponse<DailyPlanSummaryResponse> = {
@@ -303,6 +309,45 @@ describe('useDeletePlan', () => {
     })
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: horizonQueryPrefix,
+    })
+  })
+})
+
+describe('useDeletePlan refusal', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('toasts the refusal reason and refetches the plan lists when a delete is refused', async () => {
+    mockedDeletePlan.mockRejectedValue(
+      new ApiError({
+        status: 409,
+        code: 'PLAN_HAS_PROGRESS',
+        message: 'raw server message',
+      } as never),
+    )
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useDeletePlan(), {
+      wrapper: createWrapper(queryClient),
+    })
+
+    result.current.mutate(1)
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+
+    expect(toast.error).toHaveBeenCalledWith(
+      'This plan has recorded progress, so it cannot be deleted. Its history stays as it is.',
+    )
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: plansListQueryPrefix,
     })
   })
 })

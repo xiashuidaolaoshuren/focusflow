@@ -39,6 +39,7 @@ const cachedSummary: DailyPlanSummaryResponse = {
   scheduledTaskCount: 1,
   unplacedWorkCount: 0,
   hasWarning: false,
+  hasShortfall: false,
   hasProgress: false,
   needsRefresh: false,
 }
@@ -70,7 +71,7 @@ function renderPlanDetailPage(options?: {
       <MemoryRouter initialEntries={[options?.initialEntry ?? '/plans/1']}>
         <Routes>
           <Route path="/dashboard" element={<h1>Dashboard</h1>} />
-          <Route path="/plans" element={<h1>Plan history</h1>} />
+          <Route path="/plans" element={<h1>Plans</h1>} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
         </Routes>
       </MemoryRouter>
@@ -135,7 +136,7 @@ describe('PlanDetailPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: /plan history/i }),
+        screen.getByRole('heading', { level: 1, name: 'Plans' }),
       ).toBeInTheDocument()
     })
   })
@@ -173,6 +174,30 @@ describe('PlanDetailPage', () => {
     expect(
       screen.getByLabelText(/work: write tests, 16:00–16:30/i),
     ).toBeInTheDocument()
+  })
+
+  it('marks the day rail Read-only for the current view and for Rev 1', () => {
+    mockedUsePlan.mockReturnValue({
+      plan: {
+        ...samplePlan,
+        revisions: [
+          { ...samplePlan.revisions[0]!, id: 1, revisionNumber: 1 },
+          { ...samplePlan.revisions[0]!, id: 2, revisionNumber: 2 },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>)
+
+    renderPlanDetailPage()
+
+    expect(screen.getByText('Read-only')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
+
+    expect(screen.getByText('Read-only')).toBeInTheDocument()
   })
 
   it('renders the selected revision read-only with no record or add controls', () => {
@@ -216,7 +241,7 @@ describe('PlanDetailPage', () => {
     renderPlanDetailPage({ seedHistoryCache: true })
 
     const recoveryLink = screen.getByRole('link', {
-      name: /back to plan for 2026-06-14/i,
+      name: /back to plan for 14 jun 2026/i,
     })
     expect(recoveryLink).toHaveAttribute('href', '/today?date=2026-06-14')
   })

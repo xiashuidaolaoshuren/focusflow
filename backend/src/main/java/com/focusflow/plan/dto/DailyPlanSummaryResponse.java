@@ -12,5 +12,6 @@ public record DailyPlanSummaryResponse(
 		int scheduledTaskCount,
 		int unplacedWorkCount,
 		boolean hasWarning,
+		boolean hasShortfall,
 		boolean hasProgress,
 		boolean needsRefresh) {}

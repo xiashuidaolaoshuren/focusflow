@@ -550,6 +550,7 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
             hasProgress?: boolean;
+            hasShortfall?: boolean;
             hasWarning?: boolean;
             /** Format: int64 */
             id?: number;
