@@ -18,12 +18,19 @@ import {
   useDeleteCommitment,
   useUpdateCommitment,
 } from '@/features/commitments/hooks'
+import {
+  commitmentErrorMessage,
+  outsideWorkWindowMessage,
+} from '@/features/commitments/commitmentMessages'
+import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { ApiError } from '@/lib/api'
 import { formatClock } from '@/lib/format'
 import type { CommitmentResponse } from '@/types/api'
 
 type CommitmentsPanelProps = {
   planDate: string
+  /** A past day: the list shows, but nothing can be added, edited or deleted. */
+  readOnly?: boolean
 }
 
 function emptyValues(planDate: string): CommitmentFormValues {
@@ -43,8 +50,9 @@ function toFormTime(apiTime: string): string {
   return apiTime.slice(0, 5)
 }
 
-export function CommitmentsPanel({ planDate }: CommitmentsPanelProps) {
+export function CommitmentsPanel({ planDate, readOnly = false }: CommitmentsPanelProps) {
   const { commitments } = useCommitments(planDate)
+  const { preferences } = useSchedulingPreferences()
   const createMutation = useCreateCommitment(planDate)
   const updateMutation = useUpdateCommitment(planDate)
   const deleteMutation = useDeleteCommitment(planDate)
@@ -74,6 +82,13 @@ export function CommitmentsPanel({ planDate }: CommitmentsPanelProps) {
   }
 
   const submit = form.handleSubmit((values) => {
+    if (preferences != null) {
+      const windowMessage = outsideWorkWindowMessage(values.startTime, values.endTime, preferences)
+      if (windowMessage != null) {
+        form.setError('startTime', { type: 'custom', message: windowMessage })
+        return
+      }
+    }
     if (editing) {
       updateMutation.mutate(
         {
@@ -137,23 +152,25 @@ export function CommitmentsPanel({ planDate }: CommitmentsPanelProps) {
         <span className="font-mono text-xs text-muted-foreground">
           {commitments.length}
         </span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={openAdd}
-        >
-          <PlusIcon aria-hidden="true" />
-          Add
-        </Button>
+        {readOnly ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={openAdd}
+          >
+            <PlusIcon aria-hidden="true" />
+            Add
+          </Button>
+        )}
       </div>
 
       {formOpen ? (
         <form className="grid gap-3 border-b border-border p-4" onSubmit={submit}>
           {formLevelError ? (
             <Alert variant="destructive">
-              <AlertDescription>{formLevelError.message}</AlertDescription>
+              <AlertDescription>{commitmentErrorMessage(formLevelError)}</AlertDescription>
             </Alert>
           ) : null}
           <Field
@@ -239,6 +256,8 @@ export function CommitmentsPanel({ planDate }: CommitmentsPanelProps) {
                   {formatClock(commitment.startTime)}–{formatClock(commitment.endTime)}
                 </p>
               </div>
+              {readOnly ? null : (
+                <>
               <Button
                 type="button"
                 variant="ghost"
@@ -264,6 +283,8 @@ export function CommitmentsPanel({ planDate }: CommitmentsPanelProps) {
               >
                 <Trash2Icon aria-hidden="true" />
               </Button>
+                </>
+              )}
               {deleting?.id === commitment.id ? (
                 <div
                   role="group"

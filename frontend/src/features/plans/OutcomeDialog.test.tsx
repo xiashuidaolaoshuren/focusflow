@@ -3,6 +3,7 @@ import { fireEvent, screen } from '@testing-library/dom'
 import { describe, expect, it, vi } from 'vitest'
 
 import { samplePlan, sampleWorkBlock } from '@/features/plans/planFixtures'
+import { formatDuration } from '@/lib/format'
 import type { TaskResponse, WorkBlockResponse } from '@/types/api'
 
 vi.mock('@/features/plans/hooks', async (importOriginal) => {
@@ -88,6 +89,32 @@ describe('OutcomeDialog existing outcome', () => {
   })
 })
 
+describe('OutcomeDialog effort exhaustion', () => {
+  const fiveMinuteBlock = { ...sampleWorkBlock, startTime: '09:00:00', endTime: '09:05:00' }
+
+  it('explains why Save is disabled and clears the reason once Finish task is ticked', () => {
+    mockMutation()
+    renderDialog({
+      block: fiveMinuteBlock,
+      task: { ...liveTask, remainingEffortMinutes: 5 },
+    })
+
+    fireEvent.click(screen.getByRole('radio', { name: /^done$/i }))
+
+    expect(
+      screen.getByText(/finishing would use all remaining effort/i),
+    ).toBeInTheDocument()
+    expect(saveButton()).toBeDisabled()
+
+    fireEvent.click(screen.getByLabelText(/finish task/i))
+
+    expect(
+      screen.queryByText(/finishing would use all remaining effort/i),
+    ).not.toBeInTheDocument()
+    expect(saveButton()).toBeEnabled()
+  })
+})
+
 describe('OutcomeDialog reconcile', () => {
   const crossingBlock = { ...sampleWorkBlock, endTime: '10:30:00' }
 
@@ -126,6 +153,16 @@ describe('OutcomeDialog reconcile', () => {
     renderDialog({ block: crossingBlock })
 
     expect(screen.getByLabelText(/finish task/i)).toBeInTheDocument()
+  })
+
+  it('shows the remaining effort before an outcome is picked', () => {
+    mockMutation()
+    renderDialog({
+      block: crossingBlock,
+      task: { ...liveTask, remainingEffortMinutes: 120 },
+    })
+
+    expect(screen.getByText(formatDuration(120))).toBeInTheDocument()
   })
 
   it('prefills the reassess box with the computed remainder', () => {

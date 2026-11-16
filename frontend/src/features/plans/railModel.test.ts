@@ -147,6 +147,20 @@ describe('buildRail', () => {
     expect(long!.layout).toBe('stack')
   })
 
+  it('gives 5 and 10 minute blocks room for one readable line in both densities', () => {
+    // 20px fits a single line of the row layout; below it the title is clipped.
+    const plan = planWith([
+      work('09:00:00', '09:05:00'),
+      work('10:00:00', '10:10:00'),
+    ])
+
+    for (const density of ['comfortable', 'compact'] as const) {
+      const [five, ten] = buildRail(plan, null, density).blocks
+      expect(five!.heightPx).toBeGreaterThanOrEqual(20)
+      expect(ten!.heightPx).toBeGreaterThanOrEqual(20)
+    }
+  })
+
   it('summarises outcomes as text with a tone', () => {
     const rail = buildRail(
       planWith([

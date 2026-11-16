@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -7,9 +7,11 @@ import { CommitmentsPanel } from '@/features/commitments/CommitmentsPanel'
 import { AgendaList } from '@/features/plans/AgendaList'
 import { DayRail } from '@/features/plans/DayRail'
 import { OutcomeDialog } from '@/features/plans/OutcomeDialog'
+import { headerMetaParts, type HeaderMetaPart } from '@/features/plans/headerMeta'
 import { PlanActions } from '@/features/plans/PlanActions'
 import { PlanHealth } from '@/features/plans/PlanHealth'
 import { StatsStrip } from '@/features/plans/StatsStrip'
+import { WorkSessions } from '@/features/plans/WorkSessions'
 import { usePlanByDate } from '@/features/plans/hooks'
 import { useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
 import {
@@ -26,6 +28,8 @@ import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
 import {
   getLocalDateString,
   getLocalTimeString,
+  isPastPlanningDate,
+  nextPlanningDate,
   resolvePlanningDate,
 } from '@/lib/planningDate'
 import { cn } from '@/lib/utils'
@@ -83,6 +87,8 @@ export function TodayPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const planDate = resolvePlanningDate(searchParams.get('date'))
   const today = getLocalDateString()
+  // A past day is a record: blocks open nothing and commitments cannot change.
+  const readOnly = isPastPlanningDate(planDate, today)
   const { plan, hasPlan, isPending, isError, refetch } = usePlanByDate(planDate)
   const { preferences } = useSchedulingPreferences()
   const { needed: regenerateNeeded, dismiss: dismissRegeneratePrompt } =
@@ -134,6 +140,40 @@ export function TodayPage() {
     }
   }, [planDate, searchParams, setSearchParams])
 
+  function renderMetaPart(part: HeaderMetaPart): ReactNode {
+    switch (part) {
+      case 'schedule':
+        return preferences == null ? null : (
+          <>
+            Work window{' '}
+            <span className="font-mono text-xs text-foreground">
+              {formatClock(preferences.workDayStart)}&ndash;
+              {formatClock(preferences.workDayEnd)}
+            </span>{' '}
+            &middot; Trailing buffer{' '}
+            <span className="font-mono text-xs text-foreground">
+              {formatDuration(preferences.bufferMinutes)}
+            </span>
+          </>
+        )
+      case 'replanned':
+        return replayedAt == null ? null : (
+          <>
+            Re-planned{' '}
+            <span className="font-mono text-xs text-foreground">
+              {formatClock(replayedAt)}
+            </span>
+          </>
+        )
+      case 'noPlan':
+        return 'No Daily plan yet'
+      case 'past':
+        return 'Past day · read-only'
+      case 'upcoming':
+        return 'Upcoming day'
+    }
+  }
+
   function goToDate(next: string) {
     const nextParams = new URLSearchParams(searchParams)
     nextParams.set('date', next)
@@ -161,48 +201,35 @@ export function TodayPage() {
             </h1>
             <button
               type="button"
-              disabled
-              aria-label="Next day (see Horizon)"
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              aria-label={`Next day: ${formatDateLabel(nextPlanningDate(planDate))}`}
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              onClick={() => goToDate(nextPlanningDate(planDate))}
             >
               <ChevronRightIcon className="size-4" aria-hidden="true" />
             </button>
+            {planDate === today ? null : (
+              <button
+                type="button"
+                className="ml-1 inline-flex h-8 items-center rounded-md px-2 text-sm font-medium text-primary outline-none hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={() => goToDate(today)}
+              >
+                Back to today
+              </button>
+            )}
           </div>
           <p className="text-sm leading-5 text-muted-foreground">
-            {preferences != null ? (
-              <>
-                Work window{' '}
-                <span className="font-mono text-xs text-foreground">
-                  {formatClock(preferences.workDayStart)}&ndash;
-                  {formatClock(preferences.workDayEnd)}
-                </span>{' '}
-                &middot; Trailing buffer{' '}
-                <span className="font-mono text-xs text-foreground">
-                  {formatDuration(preferences.bufferMinutes)}
-                </span>
-              </>
-            ) : null}
-            {hasPlan ? (
-              <>
-                {preferences != null ? ' · ' : null}
-                {replayedAt != null ? (
-                  <>
-                    Re-planned{' '}
-                    <span className="font-mono text-xs text-foreground">
-                      {formatClock(replayedAt)}
-                    </span>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                {preferences != null ? ' · ' : null}
-                No Daily plan yet
-              </>
-            )}
-            {planDate === today ? null : (
-              <> · {planDate < today ? 'Past day · read-only' : 'Upcoming day'}</>
-            )}
+            {headerMetaParts({
+              hasPreferences: preferences != null,
+              hasPlan,
+              replayedAt,
+              planDate,
+              today,
+            }).map((part, index) => (
+              <Fragment key={part}>
+                {index > 0 ? ' · ' : null}
+                {renderMetaPart(part)}
+              </Fragment>
+            ))}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -272,8 +299,8 @@ export function TodayPage() {
           ) : null}
           {settled && rail != null
             ? isMobile
-              ? <AgendaList rail={rail} onSelect={setSelectedBlockId} />
-              : <DayRail rail={rail} onSelect={setSelectedBlockId} />
+              ? <AgendaList rail={rail} onSelect={readOnly ? undefined : setSelectedBlockId} />
+              : <DayRail rail={rail} onSelect={readOnly ? undefined : setSelectedBlockId} />
             : null}
           {settled && plan == null ? (
             <div className="p-4">
@@ -285,6 +312,11 @@ export function TodayPage() {
                   Generate a plan to place today&rsquo;s work on the rail.
                 </p>
               </div>
+            </div>
+          ) : null}
+          {settled && readOnly && plan != null ? (
+            <div className="p-4">
+              <WorkSessions blocks={plan.composedRail} />
             </div>
           ) : null}
         </Panel>
@@ -310,7 +342,7 @@ export function TodayPage() {
               <PlanHealth plan={plan} today={today} replan={replan} />
             </Panel>
           ) : null}
-          <CommitmentsPanel planDate={planDate} />
+          <CommitmentsPanel planDate={planDate} readOnly={readOnly} />
         </div>
       </div>
 

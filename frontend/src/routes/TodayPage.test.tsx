@@ -247,10 +247,50 @@ describe('TodayPage', () => {
     expect(screen.getByTestId('location').textContent).toBe('?date=2026-11-05')
   })
 
+  it('steps forward a day from the date arrow', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday('/today?date=2000-01-14')
+
+    fireEvent.click(screen.getByRole('button', { name: /next day: 15 jan 2000/i }))
+
+    expect(screen.getByTestId('location').textContent).toBe('?date=2000-01-15')
+  })
+
+  it('offers Back to today only on a day other than today', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday(`/today?date=${getLocalDateString()}`)
+    expect(screen.queryByRole('button', { name: 'Back to today' })).not.toBeInTheDocument()
+  })
+
+  it('makes a past day read-only: no outcome button, no commitment adds, and work sessions', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday('/today?date=2000-01-14')
+
+    expect(
+      screen.queryByRole('button', { name: /write report.*record outcome/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Work sessions' })).toBeInTheDocument()
+  })
+
+  it('returns to today from Back to today', () => {
+    mockPlan({ plan: railTestPlan, hasPlan: true })
+
+    renderToday('/today?date=2000-01-14')
+    fireEvent.click(screen.getByRole('button', { name: 'Back to today' }))
+
+    expect(screen.getByTestId('location').textContent).toBe(
+      `?date=${getLocalDateString()}`,
+    )
+  })
+
   it('renders the Commitments panel for the viewed date', () => {
     mockPlan({ plan: null })
 
-    renderToday('/today?date=2026-11-06')
+    renderToday('/today?date=2099-11-06')
 
     expect(screen.getByRole('heading', { name: 'Commitments' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^add$/i })).toBeInTheDocument()

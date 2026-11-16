@@ -42,6 +42,7 @@ export type OutcomeTone =
 export type OutcomeView = { tone: OutcomeTone; text: string }
 
 const STACK_MIN_HEIGHT_PX = 44
+const MIN_BLOCK_PX = 20
 const NEAR_NOW_MINUTES = 14
 
 const KIND_LABELS: Record<BlockKind, string> = {
@@ -178,7 +179,8 @@ export function buildRail(
       ]
         .filter((part) => part != null)
         .join(', ')
-      const heightPx = (end - start) * ppm - 2
+      // A 5 or 10 minute block would be 4–14px; the floor keeps one line of its title readable.
+      const heightPx = Math.max(MIN_BLOCK_PX, (end - start) * ppm - 2)
       return {
         id: block.id,
         kind: block.kind,

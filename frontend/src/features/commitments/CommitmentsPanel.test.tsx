@@ -19,6 +19,12 @@ import {
   useUpdateCommitment,
 } from '@/features/commitments/hooks'
 
+vi.mock('@/features/preferences/hooks', () => ({
+  useSchedulingPreferences: vi.fn(() => ({
+    preferences: { workDayStart: '09:00:00', workDayEnd: '18:00:00' },
+  })),
+}))
+
 const mockedUseCommitments = vi.mocked(useCommitments)
 const mockedUseCreateCommitment = vi.mocked(useCreateCommitment)
 const mockedUseUpdateCommitment = vi.mocked(useUpdateCommitment)
@@ -369,5 +375,47 @@ describe('CommitmentsPanel', () => {
 
     expect(screen.getByRole('alert')).toHaveTextContent('Commitment overlaps Standup')
     expect(screen.getByLabelText(/^title/i)).toBeInTheDocument()
+  })
+
+  it('explains an overlap in plain English', () => {
+    mockCommitments([])
+    mockedUseCreateCommitment.mockReturnValue(
+      mockMutation({
+        isError: true,
+        error: new ApiError({
+          status: 400,
+          message: 'commitments must not overlap on the same date',
+        }),
+      }),
+    )
+    mockedUseUpdateCommitment.mockReturnValue(mockMutation())
+    mockedUseDeleteCommitment.mockReturnValue(mockMutation())
+
+    renderPanel('2026-06-16')
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }))
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'That time overlaps another commitment.',
+    )
+  })
+
+  it('refuses a commitment outside the Work window before any request', async () => {
+    const mutate = vi.fn()
+    mockCommitments([])
+    mockedUseCreateCommitment.mockReturnValue(mockMutation({ mutate }))
+    mockedUseUpdateCommitment.mockReturnValue(mockMutation())
+    mockedUseDeleteCommitment.mockReturnValue(mockMutation())
+
+    renderPanel('2026-06-16')
+    fireEvent.click(screen.getByRole('button', { name: /^add$/i }))
+    fireEvent.change(screen.getByLabelText(/^title/i), { target: { value: 'Dentist' } })
+    fireEvent.change(screen.getByLabelText(/^start$/i), { target: { value: '03:00' } })
+    fireEvent.change(screen.getByLabelText(/^end$/i), { target: { value: '04:00' } })
+    fireEvent.click(screen.getByRole('button', { name: /^save commitment$/i }))
+
+    expect(
+      await screen.findByText('Keep it inside the Work window (09:00–18:00).'),
+    ).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
   })
 })

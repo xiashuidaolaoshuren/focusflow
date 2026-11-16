@@ -27,6 +27,17 @@ export function isValidPlanningDate(value: string | null): value is string {
   return !Number.isNaN(parsed)
 }
 
+/** The calendar day after a `YYYY-MM-DD` date, computed in UTC so no local offset can shift it. */
+export function nextPlanningDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year!, month! - 1, day! + 1)).toISOString().slice(0, 10)
+}
+
+/** True when a planned `YYYY-MM-DD` day falls before today's; equal-length ISO dates compare as text. */
+export function isPastPlanningDate(date: string, today: string): boolean {
+  return date < today
+}
+
 export function resolvePlanningDate(
   searchParam: string | null,
   now = new Date(),

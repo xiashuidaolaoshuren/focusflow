@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils'
 
 type AgendaListProps = {
   rail: Rail
-  onSelect?: (blockId: number) => void
+  /** Omit (or pass undefined) for a read-only rail: blocks open nothing. */
+  onSelect?: ((blockId: number) => void) | undefined
 }
 
 const ITEM_CLASSES: Record<RailBlock['kind'], string> = {

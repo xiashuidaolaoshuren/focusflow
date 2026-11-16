@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import { getLocalMinuteString } from '@/lib/planningDate'
+import {
+  getLocalMinuteString,
+  isPastPlanningDate,
+  nextPlanningDate,
+} from '@/lib/planningDate'
+
+describe('planning date steps', () => {
+  it('moves one day forward, rolling over month ends', () => {
+    expect(nextPlanningDate('2026-11-14')).toBe('2026-11-15')
+    expect(nextPlanningDate('2026-11-30')).toBe('2026-12-01')
+  })
+
+  it('says whether a planned day is before today', () => {
+    expect(isPastPlanningDate('2026-11-14', '2026-11-15')).toBe(true)
+    expect(isPastPlanningDate('2026-11-15', '2026-11-15')).toBe(false)
+    expect(isPastPlanningDate('2026-11-16', '2026-11-15')).toBe(false)
+  })
+})
 
 describe('getLocalMinuteString', () => {
   it('zeroes the seconds of a local date', () => {

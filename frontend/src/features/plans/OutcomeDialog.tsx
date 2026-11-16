@@ -162,9 +162,12 @@ export function OutcomeDialog({
         )
       : capturedRemaining
   const checkpointValue = Number.parseInt(checkpointMinutes, 10)
+  // Reconciling a running block shows what is left before any outcome is chosen.
   const projectedRemaining =
     outcome == null
-      ? null
+      ? crossing
+        ? computedRemainder
+        : null
       : finish
         ? 0
         : crossing
@@ -428,6 +431,12 @@ export function OutcomeDialog({
             ) : null}
           </div>
         </div>
+
+        {isExhaustionBlocked() ? (
+          <p className="px-5 text-sm text-muted-foreground">
+            Finishing would use all remaining effort &mdash; tick Finish task or lower the minutes.
+          </p>
+        ) : null}
 
         <AlertDialogFooter className="flex-row items-center justify-end gap-2 border-t border-border px-5 pt-3 pb-4">
           <Button type="button" variant="ghost" onClick={onClose}>
