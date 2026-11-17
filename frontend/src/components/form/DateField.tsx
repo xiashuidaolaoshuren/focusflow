@@ -222,7 +222,7 @@ export function DateField({
                 aria-selected={selected}
                 data-today={isToday ? 'true' : undefined}
                 className={cn(
-                  'h-8 w-8 rounded-md text-sm',
+                  'h-8 w-8 rounded-md text-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
                   !cell.inMonth && 'text-muted-foreground',
                   selected && 'bg-primary text-primary-foreground',
                   isToday && !selected && 'ring-1 ring-ring',

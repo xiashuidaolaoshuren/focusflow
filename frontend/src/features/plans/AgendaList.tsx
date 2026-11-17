@@ -1,3 +1,4 @@
+import { SHARED_BLOCK_KIND_CLASSES } from '@/features/plans/blockKindStyles'
 import { RailOutcome } from '@/features/plans/RailOutcome'
 import type { Rail, RailBlock } from '@/features/plans/railModel'
 import { cn } from '@/lib/utils'
@@ -9,12 +10,9 @@ type AgendaListProps = {
 }
 
 const ITEM_CLASSES: Record<RailBlock['kind'], string> = {
-  WORK: 'border-l-[3px] border-l-block-work-edge bg-block-work',
+  ...SHARED_BLOCK_KIND_CLASSES,
   CADENCE_BREAK:
     'min-h-7 bg-[repeating-linear-gradient(135deg,var(--block-cadence)_0_1px,transparent_1px_6px)]',
-  FIXED_BREAK: 'bg-block-fixed',
-  COMMITMENT: 'border-[1.5px] border-block-commitment bg-card',
-  BUFFER: 'border-[1.5px] border-dotted border-block-buffer bg-transparent',
 }
 
 const KIND_SUBTITLE: Partial<Record<RailBlock['kind'], string>> = {
@@ -51,7 +49,7 @@ function AgendaItem({
 }) {
   const [start = '', end = ''] = block.range.split('–')
   const className = cn(
-    'grid min-h-12 w-full grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2 text-left text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring',
+    'grid min-h-12 w-full grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-3 rounded-md px-3 py-2 text-left text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
     ITEM_CLASSES[block.kind],
     block.isCurrent && 'outline-1 -outline-offset-1 outline-block-work-edge',
     block.outcome?.tone === 'skipped' && 'opacity-60',

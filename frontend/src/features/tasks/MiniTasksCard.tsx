@@ -29,7 +29,7 @@ export function MiniTasksCard({ tasks, horizonRowByTaskId }: MiniTasksCardProps)
         <span className="font-mono text-xs text-muted-foreground">{rows.length}</span>
         <Link
           to="/tasks"
-          className="ml-auto inline-flex h-8 items-center rounded-md px-2 text-sm font-medium text-foreground outline-none hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="ml-auto inline-flex h-8 items-center rounded-md px-2 text-sm font-medium text-foreground outline-hidden hover:bg-secondary focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           All tasks
         </Link>

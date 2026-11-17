@@ -160,7 +160,7 @@ function HorizonTaskRow({
         tabIndex={0}
         onFocus={onHighlightBlockers}
         onBlur={onClearHighlight}
-        className={`sticky left-0 z-10 space-y-1 rounded-sm p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        className={`sticky left-0 z-10 space-y-1 rounded-sm p-2 text-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring ${
           highlighted ? 'bg-muted' : 'bg-background'
         }`}
       >
@@ -272,7 +272,7 @@ function HorizonSegmentCell({
       <div
         tabIndex={0}
         aria-label={ariaLabel}
-        className="space-y-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="space-y-1 rounded-sm outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         {segment.minutes > 0 ? (
           <div className="h-2 w-full rounded-full bg-muted">

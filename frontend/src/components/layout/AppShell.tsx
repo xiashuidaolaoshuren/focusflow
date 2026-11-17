@@ -82,7 +82,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
             <Link
               to="/today"
               aria-label="FocusFlow, Today"
-              className="flex min-w-0 items-center gap-2 px-2 text-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-data-[state=collapsed]:px-0"
+              className="flex min-w-0 items-center gap-2 px-2 text-foreground outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring group-data-[state=collapsed]:px-0"
             >
               <BrandMark className="size-5 shrink-0" />
               <span className="font-display text-lg leading-7 font-medium tracking-[-0.01em] whitespace-nowrap group-data-[state=collapsed]:hidden">
@@ -249,7 +249,7 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="flex h-11 w-full items-center gap-2.5 rounded-md px-2 text-left outline-none transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring group-data-[state=collapsed]:h-8 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:px-0"
+        className="flex h-11 w-full items-center gap-2.5 rounded-md px-2 text-left outline-hidden transition-colors hover:bg-secondary focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring group-data-[state=collapsed]:h-8 group-data-[state=collapsed]:justify-center group-data-[state=collapsed]:px-0"
         aria-label="User menu"
       >
         <span

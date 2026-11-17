@@ -68,8 +68,8 @@ export function PlanHealth({
             <span className="font-mono">{formatDuration(health.shortfall.minutes)}</span>
             <InfoPopover label="About this shortfall" title="Shortfall">
               <p>
-                Work due by tomorrow that no longer fits today&rsquo;s Work window.
-                Re-plan moves it to the next Working day.
+                Work that does not fit today&rsquo;s Work window. Re-plan re-fits the
+                rest of today; it does not move work to another day.
               </p>
             </InfoPopover>
           </AlertTitle>

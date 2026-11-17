@@ -12,6 +12,7 @@ import {
   isDueDateColumn,
   longestFullWorkWindow,
   savedConflictCopy,
+  savedShortfallMinutes,
   segmentAriaLabel,
   segmentCellCopy,
   timeSpanMinutes,
@@ -231,5 +232,37 @@ describe('horizonRangeCopy', () => {
     expect(horizonRangeCopy('2026-11-15', '04:24:05')).toBe(
       'Seven working days from 15 Nov 2026 at 04:24',
     )
+  })
+})
+
+describe('savedShortfallMinutes', () => {
+  type Row = Parameters<typeof savedShortfallMinutes>[0][number]
+
+  function row(
+    segment: Pick<HorizonSegmentResponse, 'unplacedReason' | 'unplacedMinutes'>,
+  ): Row {
+    return {
+      taskId: 1,
+      segments: [
+        {
+          date: '2026-06-01',
+          minutes: 0,
+          assumedCreditMinutes: null,
+          creditExclusions: [],
+          unplacedScope: 'SAVED_SHORTFALL',
+          ...segment,
+        },
+      ],
+    } as unknown as Row
+  }
+
+  it('counts only out-of-time minutes, not blocked or unestimated work', () => {
+    const tasks = [
+      row({ unplacedReason: 'OUT_OF_TIME', unplacedMinutes: 450 }),
+      row({ unplacedReason: 'BLOCKED', unplacedMinutes: 60 }),
+      row({ unplacedReason: 'NO_ESTIMATE', unplacedMinutes: null }),
+    ]
+
+    expect(savedShortfallMinutes(tasks, '2026-06-01')).toBe(450)
   })
 })

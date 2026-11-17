@@ -194,6 +194,39 @@ describe('HorizonPage', () => {
     expect(screen.getByText('No work forecast')).toBeInTheDocument()
   })
 
+  it('lists blocked and unestimated work on the mobile day instead of "No work forecast"', () => {
+    setViewport(375)
+    const dayOnly = { ...horizonDay0, kind: 'FORECAST' as const }
+    const segmentOn = (
+      unplacedReason: 'BLOCKED' | 'NO_ESTIMATE',
+      unplacedMinutes: number | null,
+    ) => ({
+      date: dayOnly.date,
+      minutes: 0,
+      assumedCreditMinutes: null,
+      creditExclusions: [],
+      unplacedReason,
+      unplacedMinutes,
+      unplacedScope: 'FORECAST' as const,
+    })
+    mockHorizon({
+      ...horizon,
+      days: [dayOnly],
+      tasks: [
+        { ...horizonTask0, taskId: 21, title: 'Waiting task', segments: [segmentOn('BLOCKED', 60)] },
+        { ...horizonTask0, taskId: 22, title: 'Unestimated task', segments: [segmentOn('NO_ESTIMATE', null)] },
+      ],
+    })
+
+    renderHorizonPage()
+
+    expect(screen.queryByText('No work forecast')).toBeNull()
+    expect(screen.getByText('Waiting task')).toBeInTheDocument()
+    expect(screen.getByText('Blocked')).toBeInTheDocument()
+    expect(screen.getByText('Unestimated task')).toBeInTheDocument()
+    expect(screen.getByText('No estimate')).toBeInTheDocument()
+  })
+
   it('renders the grid and no day list at 768px and wider', () => {
     setViewport(768)
     mockHorizon(horizon)

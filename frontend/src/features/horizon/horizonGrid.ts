@@ -230,10 +230,15 @@ export function dayTotalMinutes(tasks: SegmentRow[], date: string): number {
   )
 }
 
+/**
+ * Shortfall is the saved day's out-of-time minutes only, the same figure Today's Shortfall shows.
+ * Blocked and unestimated work stay visible in their cells but are not counted here.
+ */
 export function savedShortfallMinutes(tasks: SegmentRow[], date: string): number {
   return tasks.reduce((sum, task) => {
     const segment = segmentOn(task, date)
-    return segment?.unplacedScope === 'SAVED_SHORTFALL'
+    return segment?.unplacedScope === 'SAVED_SHORTFALL' &&
+      segment.unplacedReason === 'OUT_OF_TIME'
       ? sum + (segment.unplacedMinutes ?? 0)
       : sum
   }, 0)

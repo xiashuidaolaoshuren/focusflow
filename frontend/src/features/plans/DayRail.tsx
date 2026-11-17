@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 
+import { SHARED_BLOCK_KIND_CLASSES } from '@/features/plans/blockKindStyles'
 import { RailOutcome } from '@/features/plans/RailOutcome'
 import { KIND_LABELS, type Rail, type RailBlock } from '@/features/plans/railModel'
 import { cn } from '@/lib/utils'
@@ -13,16 +14,13 @@ type DayRailProps = {
 }
 
 const KIND_CLASSES: Record<RailBlock['kind'], string> = {
-  WORK: 'border-l-[3px] border-l-block-work-edge bg-block-work',
+  ...SHARED_BLOCK_KIND_CLASSES,
   CADENCE_BREAK:
     'z-1 rounded-sm bg-[repeating-linear-gradient(135deg,var(--block-cadence)_0_1px,transparent_1px_6px)]',
-  FIXED_BREAK: 'bg-block-fixed',
-  COMMITMENT: 'border-[1.5px] border-block-commitment bg-card',
-  BUFFER: 'border-[1.5px] border-dotted border-block-buffer bg-transparent',
 }
 
 const BLOCK_BASE =
-  'absolute right-0 left-2 z-2 m-0 block w-auto rounded-md p-0 text-left text-foreground outline-none focus-visible:z-6 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring'
+  'absolute right-0 left-2 z-2 m-0 block w-auto rounded-md p-0 text-left text-foreground outline-hidden focus-visible:z-6 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring'
 
 function BlockBody({ block }: { block: RailBlock }) {
   const meta =
@@ -117,7 +115,7 @@ function RailBlockNode({
         <button
           type="button"
           aria-label={`${block.label}. Record outcome`}
-          className="block h-full w-full cursor-pointer rounded-md text-left outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring"
+          className="block h-full w-full cursor-pointer rounded-md text-left outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
           onClick={() => onSelect(block.id)}
         >
           <BlockBody block={block} />

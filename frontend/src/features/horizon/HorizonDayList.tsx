@@ -4,6 +4,7 @@ import {
   barPercent,
   dayTotalMinutes,
   savedShortfallMinutes,
+  segmentCellCopy,
   segmentOn,
 } from '@/features/horizon/horizonGrid'
 import { formatDateLabel, formatDuration } from '@/lib/format'
@@ -25,7 +26,8 @@ export function HorizonDayList({ horizon, scaleMinutes }: HorizonDayListProps) {
           : 0
         const items = horizon.tasks.flatMap((task) => {
           const segment = segmentOn(task, day.date)
-          return segment != null && segment.minutes > 0
+          const hasWork = segment != null && (segment.minutes > 0 || segment.unplacedReason != null)
+          return segment != null && hasWork
             ? [{ taskId: task.taskId, title: task.title, segment }]
             : []
         })
@@ -69,8 +71,13 @@ export function HorizonDayList({ horizon, scaleMinutes }: HorizonDayListProps) {
                   >
                     <span className="truncate text-sm">{item.title}</span>
                     <span className="font-mono text-xs text-muted-foreground">
-                      {formatDuration(item.segment.minutes)}
+                      {item.segment.minutes > 0 ? formatDuration(item.segment.minutes) : null}
                     </span>
+                    {segmentCellCopy(item.segment).length > 0 ? (
+                      <span className="col-span-2 text-xs text-muted-foreground">
+                        {segmentCellCopy(item.segment).join(' · ')}
+                      </span>
+                    ) : null}
                     <span className="col-span-2 block h-2 rounded-full bg-muted">
                       <span
                         className="block h-2 rounded-full bg-primary"

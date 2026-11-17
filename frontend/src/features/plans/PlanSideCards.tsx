@@ -12,6 +12,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { useDeleteUnplannedWork } from '@/features/plans/hooks'
+import {
+  formatWaitingOn,
+  indexSnapshotTitles,
+  type SnapshotTitleInfo,
+} from '@/features/plans/planSnapshotCopy'
+import { UnplannedWorkDialog } from '@/features/plans/UnplannedWorkDialog'
 import { useTasks } from '@/features/tasks/hooks'
 import type { DailyPlanResponse, UnplacedWorkResponse } from '@/types/api'
 
@@ -21,12 +27,22 @@ const UNPLACED_REASON_TEXT: Record<UnplacedWorkResponse['reason'], string> = {
   OUT_OF_TIME: 'Out of time',
 }
 
+/** Blocked work names its blockers from the plan's own snapshots, so the names survive later edits. */
+function unplacedReasonText(entry: UnplacedWorkResponse, snapshotTitles: Map<number, SnapshotTitleInfo>): string {
+  if (entry.reason === 'BLOCKED' && entry.blockerSourceTaskIds.length > 0) {
+    return `Waiting on ${formatWaitingOn(entry.blockerSourceTaskIds, snapshotTitles)}`
+  }
+  return UNPLACED_REASON_TEXT[entry.reason]
+}
+
 /** Unplanned work (recorded outside the plan) and unplaced work (did not fit), for a saved plan. */
 export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
   const { tasks } = useTasks()
   const { mutate: deleteUnplannedWork, isPending: isDeleting } =
     useDeleteUnplannedWork()
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
+  const [logging, setLogging] = useState(false)
+  const snapshotTitles = indexSnapshotTitles(plan)
 
   function handleDelete(entryId: number) {
     const entry = plan.unplannedWork.find((item) => item.id === entryId)
@@ -47,9 +63,19 @@ export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
         aria-labelledby="unplanned-work-title"
         className="rounded-lg border border-border bg-card"
       >
-        <h2 id="unplanned-work-title" className="px-4 py-3 text-base font-semibold">
-          Unplanned work
-        </h2>
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <h2 id="unplanned-work-title" className="text-base font-semibold">
+            Unplanned work
+          </h2>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setLogging(true)}
+          >
+            Log unplanned work
+          </Button>
+        </div>
         {plan.unplannedWork.length > 0 ? (
           <ul className="border-t border-border">
             {plan.unplannedWork.map((entry) => (
@@ -94,7 +120,7 @@ export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
               >
                 <span className="truncate">{entry.taskSnapshot.title}</span>
                 <span className="font-mono text-xs text-muted-foreground">
-                  {UNPLACED_REASON_TEXT[entry.reason]}
+                  <span>{unplacedReasonText(entry, snapshotTitles)}</span>
                   {entry.unplacedMinutes != null ? ` · ${entry.unplacedMinutes}m` : ''}
                 </span>
               </li>
@@ -104,6 +130,14 @@ export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
           <p className="border-t border-border px-4 py-2.5 text-sm text-muted-foreground">None</p>
         )}
       </section>
+
+      {logging ? (
+        <UnplannedWorkDialog
+          planDate={plan.planDate}
+          tasks={tasks}
+          onClose={() => setLogging(false)}
+        />
+      ) : null}
 
       <AlertDialog
         open={pendingDeleteId != null}

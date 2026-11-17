@@ -120,7 +120,7 @@ export function TaskRow({
   const titleButton = (
     <button
       type="button"
-      className="task-title text-left text-sm font-medium outline-none hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="task-title text-left text-sm font-medium outline-hidden hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
       onClick={() => onEdit(task)}
     >
       {task.title}

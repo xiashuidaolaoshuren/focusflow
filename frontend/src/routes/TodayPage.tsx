@@ -231,7 +231,7 @@ export function TodayPage() {
             <button
               type="button"
               aria-label={`Previous day: ${formatDateLabel(previousDate(planDate))}`}
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={() => goToDate(previousDate(planDate))}
             >
               <ChevronLeftIcon className="size-4" aria-hidden="true" />
@@ -242,7 +242,7 @@ export function TodayPage() {
             <button
               type="button"
               aria-label={`Next day: ${formatDateLabel(nextPlanningDate(planDate))}`}
-              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
               onClick={() => goToDate(nextPlanningDate(planDate))}
             >
               <ChevronRightIcon className="size-4" aria-hidden="true" />
@@ -250,7 +250,7 @@ export function TodayPage() {
             {planDate === today ? null : (
               <button
                 type="button"
-                className="ml-1 inline-flex h-8 items-center rounded-md px-2 text-sm font-medium text-primary outline-none hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="ml-1 inline-flex h-8 items-center rounded-md px-2 text-sm font-medium text-primary outline-hidden hover:bg-secondary focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 onClick={() => goToDate(today)}
               >
                 Back to today
@@ -285,7 +285,7 @@ export function TodayPage() {
                   type="button"
                   aria-pressed={active}
                   className={cn(
-                    'inline-flex h-full items-center rounded px-2.5 text-sm font-medium tracking-[0.02em] whitespace-nowrap outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                    'inline-flex h-full items-center rounded px-2.5 text-sm font-medium tracking-[0.02em] whitespace-nowrap outline-hidden transition-colors focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
                     active
                       ? 'bg-accent text-foreground ring-1 ring-primary ring-inset'
                       : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
@@ -386,7 +386,7 @@ export function TodayPage() {
               <span>Regenerate to apply changes.</span>
               <button
                 type="button"
-                className="rounded px-2 py-1 text-xs font-medium text-muted-foreground outline-none hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                className="rounded px-2 py-1 text-xs font-medium text-muted-foreground outline-hidden hover:bg-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
                 onClick={dismissRegeneratePrompt}
               >
                 Dismiss

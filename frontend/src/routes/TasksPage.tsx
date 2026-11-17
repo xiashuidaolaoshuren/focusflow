@@ -142,7 +142,7 @@ export function TasksPage() {
                 aria-controls="tasks-panel"
                 tabIndex={selected ? 0 : -1}
                 className={cn(
-                  'relative inline-flex items-center gap-1.5 px-2 py-2 text-sm font-medium outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                  'relative inline-flex items-center gap-1.5 px-2 py-2 text-sm font-medium outline-hidden focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring',
                   selected ? 'text-foreground' : 'text-muted-foreground',
                 )}
                 onClick={() => setTab(entry.value)}

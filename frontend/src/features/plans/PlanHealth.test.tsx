@@ -75,6 +75,23 @@ describe('PlanHealth', () => {
     ).toBeInTheDocument()
   })
 
+  it('explains the shortfall without promising to move work to another day', () => {
+    render(
+      <PlanHealth
+        plan={planWith(
+          [unplaced('OUT_OF_TIME', 'Prepare slides', 10)],
+          [block('Prepare slides', '09:00:00', '10:20:00')],
+        )}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'About this shortfall' }))
+
+    const help = screen.getByText(/does not fit today/i)
+    expect(help.textContent).toMatch(/Re-plan re-fits the rest of today/)
+    expect(help.textContent).not.toMatch(/tomorrow|next Working day/i)
+  })
+
   it('shows no shortfall when everything fits', () => {
     render(<PlanHealth plan={planWith([])} />)
 
