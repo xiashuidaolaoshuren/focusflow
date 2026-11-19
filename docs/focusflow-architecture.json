@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FocusFlow AI",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [1280, 760],
+    "views": [
+      {
+        "id": "request-path",
+        "label": "Request path",
+        "focus": ["browser", "security", "controllers", "services", "postgres"],
+        "note": "A signed-in request crosses session and CSRF checks, then a controller and a service, before JPA reaches PostgreSQL."
+      },
+      {
+        "id": "planning",
+        "label": "Planning",
+        "focus": ["services", "domain", "provider", "postgres"],
+        "note": "Services call the pure domain in process and the ranking provider over HTTP. Only services write PostgreSQL."
+      },
+      {
+        "id": "session",
+        "label": "Session",
+        "focus": ["browser", "security", "controllers"],
+        "note": "The browser keeps the session cookie and sends the CSRF token on every mutation."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "React app",
+      "sublabel": "Vite",
+      "pos": [40, 370],
+      "size": [190, 76]
+    },
+    {
+      "id": "security",
+      "type": "security",
+      "label": "Security filter",
+      "sublabel": "Session and CSRF",
+      "tag": "JSESSIONID",
+      "pos": [300, 370],
+      "size": [190, 76]
+    },
+    {
+      "id": "controllers",
+      "type": "backend",
+      "label": "REST controllers",
+      "sublabel": "/api",
+      "pos": [560, 370],
+      "size": [190, 76]
+    },
+    {
+      "id": "services",
+      "type": "backend",
+      "label": "Domain services",
+      "sublabel": "owner lock",
+      "pos": [820, 370],
+      "size": [190, 76]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "Flyway",
+      "pos": [1080, 370],
+      "size": [180, 76]
+    },
+    {
+      "id": "domain",
+      "type": "backend",
+      "label": "Pure domain",
+      "sublabel": "schedule, effort, horizon",
+      "pos": [820, 120],
+      "size": [230, 84]
+    },
+    {
+      "id": "provider",
+      "type": "external",
+      "label": "Ranking provider",
+      "sublabel": "OpenAI-compatible",
+      "pos": [1080, 560],
+      "size": [190, 76]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Spring Boot process",
+      "wraps": ["security", "controllers", "services", "domain"]
+    }
+  ],
+  "connections": [
+    { "id": "browser-security", "from": "browser", "to": "security", "label": "cookies and CSRF", "variant": "emphasis", "labelDy": -32 },
+    { "id": "security-controllers", "from": "security", "to": "controllers", "label": "authenticated" },
+    { "id": "controllers-services", "from": "controllers", "to": "services", "label": "DTO" },
+    { "id": "services-postgres", "from": "services", "to": "postgres", "label": "JPA" },
+    { "id": "services-domain", "from": "services", "to": "domain", "label": "in process", "fromSide": "top", "toSide": "bottom" },
+    { "id": "services-provider", "from": "services", "to": "provider", "label": "ranking", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Request path",
+      "items": [
+        "React sends the session cookie to /api",
+        "CSRF is required on every mutation",
+        "Controllers validate DTOs, never repositories"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Planning",
+      "items": [
+        "Pure modules place work, fold effort, and forecast",
+        "They call neither Spring, JPA, nor the provider",
+        "Progress keeps a plan; re-plan adds a revision"
+      ]
+    }
+  ]
+}
