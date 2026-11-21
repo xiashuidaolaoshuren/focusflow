@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -27,6 +28,7 @@ const samplePlans: DailyPlanSummaryResponse[] = [
     scheduledTaskCount: 0,
     unplacedWorkCount: 0,
     hasWarning: false,
+    hasShortfall: false,
     hasProgress: false,
     needsRefresh: false,
   },
@@ -70,40 +72,53 @@ describe('PlanHistoryList', () => {
     } as unknown as ReturnType<typeof useDeletePlan>)
   })
 
-  it('renders summary counts instead of legacy item count', () => {
+  it('renders a table row per plan with a formatted date link and focus duration', () => {
     renderPlanHistoryList()
 
-    const links = screen.getAllByRole('link')
-    expect(links[0]).toHaveAttribute('href', '/plans/1')
-    expect(links[0]).toHaveTextContent('2026-06-14')
-    expect(links[0]).toHaveTextContent('120 min')
-    expect(links[0]).toHaveTextContent('3 sessions')
-    expect(links[0]).toHaveTextContent('2 tasks')
-    expect(links[0]).toHaveTextContent('1 unplaced')
-    expect(links[0]).not.toHaveTextContent(/block/i)
+    const link = screen.getByRole('link', { name: '14 Jun 2026' })
+    expect(link).toHaveAttribute('href', '/plans/1')
+    const row = link.closest('tr')!
+    expect(within(row).getByText('2h')).toBeInTheDocument()
+    expect(within(row).getByText('3')).toBeInTheDocument()
   })
 
-  it('marks plans with recorded progress and plans that need a refresh', () => {
+  it('shows each status as a badge with a glyph and its text', () => {
     renderPlanHistoryList({
-      plans: [
-        { ...samplePlanSummary, hasProgress: true, needsRefresh: true },
-        { ...samplePlanSummary, id: 3, hasProgress: false, needsRefresh: false },
-      ],
+      plans: [{ ...samplePlanSummary, hasShortfall: true, hasProgress: true, needsRefresh: true }],
     })
 
-    const links = screen.getAllByRole('link')
-    expect(links[0]).toHaveTextContent(/progress/i)
-    expect(links[0]).toHaveTextContent(/needs refresh/i)
-    expect(links[1]).not.toHaveTextContent(/progress/i)
-    expect(links[1]).not.toHaveTextContent(/needs refresh/i)
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    for (const label of ['Shortfall', 'Progress', 'Needs refresh']) {
+      expect(within(row).getByText(label).querySelector('svg')).not.toBeNull()
+    }
   })
 
-  it('shows a Shortfall indicator only for plans with hasWarning', () => {
-    renderPlanHistoryList()
+  it('shows Shortfall from hasShortfall, not hasWarning', () => {
+    renderPlanHistoryList({
+      plans: [{ ...samplePlanSummary, hasWarning: false, hasShortfall: true }],
+    })
 
-    const links = screen.getAllByRole('link')
-    expect(links[0]).toHaveTextContent(/shortfall/i)
-    expect(links[1]).not.toHaveTextContent(/shortfall/i)
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    expect(within(row).getByText('Shortfall')).toBeInTheDocument()
+  })
+
+  it('shows no Shortfall when only hasWarning is set', () => {
+    renderPlanHistoryList({
+      plans: [{ ...samplePlanSummary, hasWarning: true, hasShortfall: false }],
+    })
+
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    expect(within(row).queryByText('Shortfall')).toBeNull()
+  })
+
+  it('shows a dash in the status cell when a plan has no flags', () => {
+    renderPlanHistoryList({
+      plans: [{ ...samplePlanSummary, hasWarning: false, hasShortfall: false, hasProgress: false, needsRefresh: false }],
+    })
+
+    const row = screen.getByRole('link', { name: '14 Jun 2026' }).closest('tr')!
+    expect(within(row).getByText('—')).toBeInTheDocument()
+    expect(within(row).queryByText(/shortfall|progress|needs refresh/i)).toBeNull()
   })
 
   it('renders empty-state message when plans is empty', () => {
@@ -112,11 +127,11 @@ describe('PlanHistoryList', () => {
     expect(screen.getByText(/no saved plans yet/i)).toBeInTheDocument()
   })
 
-  it('renders empty-state CTA link to dashboard', () => {
+  it('renders empty-state CTA link to Today', () => {
     renderPlanHistoryList({ plans: [] })
 
-    const dashboardLink = screen.getByRole('link', { name: /go to dashboard/i })
-    expect(dashboardLink).toHaveAttribute('href', '/dashboard')
+    const todayLink = screen.getByRole('link', { name: /go to today/i })
+    expect(todayLink).toHaveAttribute('href', '/today')
   })
 
   it('renders error alert with retry when isError', () => {
@@ -152,10 +167,11 @@ describe('PlanHistoryList', () => {
     expect(onPageChange).toHaveBeenCalledWith(2)
   })
 
-  it('shows current page position', () => {
-    renderPlanHistoryList({ page: 1, totalPages: 3 })
+  it('shows the visible range and total', () => {
+    renderPlanHistoryList({ page: 1, totalPages: 3, totalElements: 42 })
 
-    expect(screen.getByText(/page 2 of 3/i)).toBeInTheDocument()
+    expect(screen.getByText('21–22')).toBeInTheDocument()
+    expect(screen.getByText('42')).toBeInTheDocument()
   })
 
   it('calls delete mutation only after confirmation', async () => {
@@ -168,13 +184,14 @@ describe('PlanHistoryList', () => {
     renderPlanHistoryList()
 
     fireEvent.click(
-      screen.getByRole('button', { name: /delete plan for 2026-06-14/i }),
+      screen.getByRole('button', { name: /delete plan for 14 jun 2026/i }),
     )
 
     expect(deleteMutate).not.toHaveBeenCalled()
     expect(
       screen.getByRole('alertdialog', { name: /delete plan/i }),
     ).toBeInTheDocument()
+    expect(screen.getByText(/plan for 14 jun 2026/i)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /^delete plan$/i }))
     expect(deleteMutate).toHaveBeenCalledWith(

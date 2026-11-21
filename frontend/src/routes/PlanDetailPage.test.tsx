@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { plansListQueryPrefix } from '@/features/plans/hooks'
+import { plansListQueryPrefix } from '@/lib/query'
 import { samplePlan } from '@/features/plans/planFixtures'
 import { PlanDetailPage } from '@/routes/PlanDetailPage'
 import { ApiError } from '@/lib/api'
@@ -38,6 +39,7 @@ const cachedSummary: DailyPlanSummaryResponse = {
   scheduledTaskCount: 1,
   unplacedWorkCount: 0,
   hasWarning: false,
+  hasShortfall: false,
   hasProgress: false,
   needsRefresh: false,
 }
@@ -69,7 +71,7 @@ function renderPlanDetailPage(options?: {
       <MemoryRouter initialEntries={[options?.initialEntry ?? '/plans/1']}>
         <Routes>
           <Route path="/dashboard" element={<h1>Dashboard</h1>} />
-          <Route path="/plans" element={<h1>Plan history</h1>} />
+          <Route path="/plans" element={<h1>Plans</h1>} />
           <Route path="/plans/:id" element={<PlanDetailPage />} />
         </Routes>
       </MemoryRouter>
@@ -79,6 +81,19 @@ function renderPlanDetailPage(options?: {
 
 describe('PlanDetailPage', () => {
   beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    })
     mockedUsePlan.mockReturnValue({
       plan: samplePlan,
       isPending: false,
@@ -121,7 +136,7 @@ describe('PlanDetailPage', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('heading', { name: /plan history/i }),
+        screen.getByRole('heading', { level: 1, name: 'Plans' }),
       ).toBeInTheDocument()
     })
   })
@@ -143,6 +158,7 @@ describe('PlanDetailPage', () => {
               },
             ],
           },
+          { ...samplePlan.revisions[0]!, id: 2, revisionNumber: 2 },
         ],
       },
       isPending: false,
@@ -153,17 +169,64 @@ describe('PlanDetailPage', () => {
 
     renderPlanDetailPage()
 
-    fireEvent.click(screen.getByRole('combobox', { name: /revision/i }))
-    return screen
-      .findByRole('option', { name: /revision 1/i })
-      .then((option) => {
-        fireEvent.pointerDown(option)
-        fireEvent.click(option)
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
 
-        expect(
-          screen.getByLabelText(/work: write tests, session 1 of 1, 16:00–16:30/i),
-        ).toBeInTheDocument()
-      })
+    expect(
+      screen.getByLabelText(/work: write tests, 16:00–16:30/i),
+    ).toBeInTheDocument()
+  })
+
+  it('marks the day rail Read-only for the current view and for Rev 1', () => {
+    mockedUsePlan.mockReturnValue({
+      plan: {
+        ...samplePlan,
+        revisions: [
+          { ...samplePlan.revisions[0]!, id: 1, revisionNumber: 1 },
+          { ...samplePlan.revisions[0]!, id: 2, revisionNumber: 2 },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>)
+
+    renderPlanDetailPage()
+
+    expect(screen.getByText('Read-only')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
+
+    expect(screen.getByText('Read-only')).toBeInTheDocument()
+  })
+
+  it('renders the selected revision read-only with no record or add controls', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('list', { name: /daily plan blocks/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /record outcome/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /add unplanned work/i })).toBeNull()
+  })
+
+  it('titles the page with the plan date and shows focus, sessions and saved time', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { level: 1, name: '15 Jun 2026' })).toBeInTheDocument()
+    expect(screen.getByText(/^Focus/)).toHaveTextContent(/Sessions/)
+  })
+
+  it('shows Unplanned work and Unplaced work cards beside the rail', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { name: 'Unplanned work' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Unplaced work' })).toBeInTheDocument()
+  })
+
+  it('lists work sessions for the selected revision in their groups', () => {
+    renderPlanDetailPage()
+
+    expect(screen.getByRole('heading', { name: /work sessions/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /not recorded/i })).toBeInTheDocument()
   })
 
   it('links to the cached planning date when a stale plan id returns 404', () => {
@@ -178,9 +241,9 @@ describe('PlanDetailPage', () => {
     renderPlanDetailPage({ seedHistoryCache: true })
 
     const recoveryLink = screen.getByRole('link', {
-      name: /back to plan for 2026-06-14/i,
+      name: /back to plan for 14 jun 2026/i,
     })
-    expect(recoveryLink).toHaveAttribute('href', '/dashboard?date=2026-06-14')
+    expect(recoveryLink).toHaveAttribute('href', '/today?date=2026-06-14')
   })
 
   it('links to plan history when a 404 has no cached summary', () => {

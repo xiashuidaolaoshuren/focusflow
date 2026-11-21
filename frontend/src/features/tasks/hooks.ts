@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
+import { horizonQueryPrefix, tasksQueryKey } from '@/lib/query'
 import {
   addBlocker,
   createTask,
@@ -18,7 +18,6 @@ import type {
   UpdateTaskRequest,
 } from '@/types/api'
 
-export const tasksQueryKey = ['tasks', 'list'] as const
 export const createTaskMutationKey = ['tasks', 'create'] as const
 export const updateTaskMutationKey = ['tasks', 'update'] as const
 export const formUpdateTaskMutationKey = ['tasks', 'form-update'] as const

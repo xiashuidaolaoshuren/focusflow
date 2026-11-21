@@ -162,6 +162,7 @@ describe('listPlans', () => {
           scheduledTaskCount: 0,
           unplacedWorkCount: 0,
           hasWarning: false,
+          hasShortfall: false,
         },
       ],
       page: 1,

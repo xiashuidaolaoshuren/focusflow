@@ -37,6 +37,9 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+	// Docker Engine 29 (GitHub ubuntu-26.04) rejects clients below API 1.44.
+	// Testcontainers 1.20.6 defaults to 1.32. See testcontainers-java#11212.
+	systemProperty 'api.version', '1.44'
 }
 
 tasks.register('updateOpenApiSnapshot', Test) {
@@ -45,6 +48,7 @@ tasks.register('updateOpenApiSnapshot', Test) {
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	useJUnitPlatform()
+	systemProperty 'api.version', '1.44'
 	systemProperty 'updateOpenApiSnapshot', 'true'
 	filter {
 		includeTestsMatching '*OpenApiSnapshotTest'

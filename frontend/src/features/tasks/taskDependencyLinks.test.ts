@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { liveNeededForLabel } from '@/features/tasks/taskDependencyLinks'
+import { liveNeededForLabel, waitingOnLabel } from '@/features/tasks/taskDependencyLinks'
 import type { TaskResponse } from '@/types/api'
 
 const PLANNING_DATE = '2026-06-15'
@@ -101,5 +101,32 @@ describe('liveNeededForLabel', () => {
         PLANNING_DATE,
       ),
     ).toBe('Needed for Earlier (due 2026-06-10)')
+  })
+})
+
+describe('waitingOnLabel', () => {
+  it('lists only active blockers', () => {
+    const waiting = task({
+      id: 1,
+      title: 'Write report',
+      status: 'OPEN',
+      blockedBy: [
+        { taskId: 11, title: 'Collect data', status: 'OPEN' },
+        { taskId: 12, title: 'Draft outline', status: 'IN_PROGRESS' },
+        { taskId: 13, title: 'Old blocker', status: 'DONE' },
+      ],
+    })
+
+    expect(waitingOnLabel(waiting)).toBe('Waiting on Collect data, Draft outline')
+  })
+
+  it('returns null when no active blocker remains', () => {
+    const free = task({
+      id: 1,
+      title: 'Write report',
+      blockedBy: [{ taskId: 13, title: 'Old blocker', status: 'DONE' }],
+    })
+
+    expect(waitingOnLabel(free)).toBeNull()
   })
 })

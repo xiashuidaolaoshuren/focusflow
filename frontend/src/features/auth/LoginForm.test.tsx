@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -43,89 +44,129 @@ function renderLoginForm() {
   }
 }
 
+function mockLogin(state: {
+  mutate?: ReturnType<typeof vi.fn>
+  isPending?: boolean
+  isError?: boolean
+  error?: Error | null
+}) {
+  mockedUseLogin.mockReturnValue({
+    mutate: state.mutate ?? vi.fn(),
+    isPending: state.isPending ?? false,
+    isError: state.isError ?? false,
+    error: state.error ?? null,
+  } as unknown as ReturnType<typeof useLogin>)
+}
+
 describe('LoginForm', () => {
-  it('renders fields, submits credentials, and disables submit while pending', () => {
+  it('renders a real form that submits credentials', async () => {
     const mutate = vi.fn()
-    mockedUseLogin.mockReturnValue({
-      mutate,
-      isPending: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useLogin>)
+    mockLogin({ mutate })
 
-    const { rerenderForm } = renderLoginForm()
+    renderLoginForm()
 
-    expect(screen.getByLabelText(/username/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    const username = screen.getByLabelText(/username/i)
+    const password = screen.getByLabelText(/password/i)
+    const submit = screen.getByRole('button', { name: /sign in/i })
 
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'user' },
+    expect(submit.closest('form')).not.toBeNull()
+    expect(username).toHaveAttribute('autocomplete', 'username')
+    expect(password).toHaveAttribute('autocomplete', 'current-password')
+
+    fireEvent.change(username, { target: { value: 'user' } })
+    fireEvent.change(password, { target: { value: 'password123' } })
+    fireEvent.submit(submit.closest('form')!)
+
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalledWith({
+        username: 'user',
+        password: 'password123',
+      })
     })
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: 'password123' },
+  })
+
+  it('shows inline validation errors and does not submit when empty', async () => {
+    const mutate = vi.fn()
+    mockLogin({ mutate })
+
+    renderLoginForm()
+
+    fireEvent.submit(
+      screen.getByRole('button', { name: /sign in/i }).closest('form')!,
+    )
+
+    expect(await screen.findByText(/enter your username/i)).toBeInTheDocument()
+    expect(screen.getByText(/enter your password/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('shows a top-level alert when login fails', () => {
+    mockLogin({
+      isError: true,
+      error: new ApiError({ status: 401, message: 'Invalid credentials' }),
     })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
-    expect(mutate).toHaveBeenCalledWith({
-      username: 'user',
-      password: 'password123',
+    renderLoginForm()
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Invalid credentials')
+    expect(alert).not.toHaveTextContent(/sign-in failed/i)
+  })
+
+  it('shows API field errors inline', () => {
+    mockLogin({
+      isError: true,
+      error: new ApiError({
+        status: 400,
+        message: 'Validation failed',
+        details: { username: ['Unknown username'] },
+      }),
     })
 
-    mockedUseLogin.mockReturnValue({
-      mutate,
-      isPending: true,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useLogin>)
+    renderLoginForm()
 
-    rerenderForm()
+    expect(screen.getByText('Unknown username')).toBeInTheDocument()
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+  })
+
+  it('disables submit while pending', () => {
+    mockLogin({ isPending: true })
+
+    renderLoginForm()
 
     expect(screen.getByRole('button', { name: /sign in/i })).toBeDisabled()
   })
 
-  it('shows a top-level alert when login fails', () => {
-    mockedUseLogin.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: true,
-      error: new ApiError({
-        status: 401,
-        message: 'Invalid credentials',
-      }),
-    } as unknown as ReturnType<typeof useLogin>)
+  it('shows the required marker and the alternate link copy', () => {
+    mockLogin({})
 
     renderLoginForm()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials')
+    expect(screen.getAllByText('*').length).toBeGreaterThanOrEqual(2)
+    expect(
+      screen.getByText(/new to focusflow\?/i).closest('p'),
+    ).toHaveTextContent(/create account/i)
   })
 
-  it('marks fields invalid and shows an alert title when login fails', () => {
-    mockedUseLogin.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: true,
-      error: new ApiError({
-        status: 401,
-        message: 'Invalid credentials',
-      }),
-    } as unknown as ReturnType<typeof useLogin>)
+  it('validates a field when it loses focus', async () => {
+    mockLogin({})
 
     renderLoginForm()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Sign-in failed')
-    expect(screen.getByLabelText(/username/i)).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByLabelText(/password/i)).toHaveAttribute('aria-invalid', 'true')
+    fireEvent.focusOut(screen.getByLabelText(/username/i))
+
+    expect(await screen.findByText(/enter your username/i)).toBeInTheDocument()
   })
 
   it('moves focus to the error alert when login fails', () => {
-    const mutate = vi.fn()
-    mockedUseLogin.mockReturnValue({
-      mutate,
-      isPending: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useLogin>)
+    mockLogin({})
 
     const { rerenderForm } = renderLoginForm()
 
@@ -135,18 +176,11 @@ describe('LoginForm', () => {
     fireEvent.change(screen.getByLabelText(/password/i), {
       target: { value: 'wrong' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }))
 
-    mockedUseLogin.mockReturnValue({
-      mutate,
-      isPending: false,
+    mockLogin({
       isError: true,
-      error: new ApiError({
-        status: 401,
-        message: 'Invalid credentials',
-      }),
-    } as unknown as ReturnType<typeof useLogin>)
-
+      error: new ApiError({ status: 401, message: 'Invalid credentials' }),
+    })
     rerenderForm()
 
     expect(screen.getByRole('alert')).toHaveFocus()

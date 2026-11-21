@@ -3,6 +3,7 @@ package com.focusflow.plan;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
@@ -37,7 +38,11 @@ import com.focusflow.schedule.CommitmentWindow;
 import com.focusflow.dependency.DependencyLink;
 import com.focusflow.dependency.RankingGroup;
 import com.focusflow.task.Task;
+import com.focusflow.schedule.BlockKind;
 import com.focusflow.task.TaskPriority;
+import com.focusflow.testsupport.DailyPlanTestBuilder;
+import com.focusflow.testsupport.TaskTestBuilder;
+import com.focusflow.testsupport.UserTestBuilder;
 import com.focusflow.task.TaskQueryService;
 import com.focusflow.task.TaskService;
 import com.focusflow.testsupport.DailyPlanResponseTestSupport;
@@ -913,16 +918,6 @@ class DailyPlanServiceTest {
 					}
 
 					@Override
-					public Integer getScheduledWorkMinutes() {
-						return 180;
-					}
-
-					@Override
-					public Integer getWorkSessionCount() {
-						return 3;
-					}
-
-					@Override
 					public Integer getScheduledTaskCount() {
 						return 2;
 					}
@@ -934,6 +929,11 @@ class DailyPlanServiceTest {
 
 					@Override
 					public Boolean getHasWarning() {
+						return true;
+					}
+
+					@Override
+					public Boolean getHasShortfall() {
 						return true;
 					}
 
@@ -958,11 +958,10 @@ class DailyPlanServiceTest {
 						summary -> {
 							assertThat(summary.id()).isEqualTo(1L);
 							assertThat(summary.planDate()).isEqualTo(LocalDate.of(2026, 6, 1));
-							assertThat(summary.scheduledWorkMinutes()).isEqualTo(180);
-							assertThat(summary.workSessionCount()).isEqualTo(3);
 							assertThat(summary.scheduledTaskCount()).isEqualTo(2);
 							assertThat(summary.unplacedWorkCount()).isEqualTo(1);
 							assertThat(summary.hasWarning()).isTrue();
+							assertThat(summary.hasShortfall()).isTrue();
 							assertThat(summary.hasProgress()).isTrue();
 							assertThat(summary.needsRefresh()).isFalse();
 						});
@@ -970,6 +969,91 @@ class DailyPlanServiceTest {
 		assertThat(response.size()).isEqualTo(20);
 		assertThat(response.totalElements()).isEqualTo(1L);
 		assertThat(response.totalPages()).isEqualTo(1);
+	}
+
+	@Test
+	void listForCurrentUser_takesWorkTotalsFromComposedRailNotProjection() {
+		when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		User owner = UserTestBuilder.user().build();
+		Task task =
+				TaskTestBuilder.task(owner)
+						.withTitle("Write report")
+						.withPriority(TaskPriority.MEDIUM)
+						.withStatus(TaskStatus.OPEN)
+						.withEstimatedMinutes(120)
+						.build();
+		DailyPlan plan =
+				DailyPlanTestBuilder.plan(owner, LocalDate.of(2026, 6, 1))
+						.withWindow(LocalTime.of(9, 0), LocalTime.of(17, 0))
+						.withMetrics(480, 120, 120L, 0, 0)
+						.addTask(task, 1, false, null, null)
+						.addBlock(0, BlockKind.WORK, LocalTime.of(9, 0), LocalTime.of(10, 0), null, 1)
+						.addBlock(0, BlockKind.WORK, LocalTime.of(10, 0), LocalTime.of(11, 0), null, 2)
+						.build();
+		ReflectionTestUtils.setField(plan, "id", 1L);
+
+		DailyPlanSummaryProjection staleProjection =
+				new DailyPlanSummaryProjection() {
+					@Override
+					public Long getId() {
+						return 1L;
+					}
+
+					@Override
+					public LocalDate getPlanDate() {
+						return LocalDate.of(2026, 6, 1);
+					}
+
+					@Override
+					public Instant getCreatedAt() {
+						return Instant.parse("2026-06-01T09:00:00Z");
+					}
+
+					@Override
+					public Integer getScheduledTaskCount() {
+						return 1;
+					}
+
+					@Override
+					public Integer getUnplacedWorkCount() {
+						return 0;
+					}
+
+					@Override
+					public Boolean getHasWarning() {
+						return false;
+					}
+
+					@Override
+					public Boolean getHasShortfall() {
+						return false;
+					}
+
+					@Override
+					public Boolean getHasProgress() {
+						return false;
+					}
+
+					@Override
+					public Boolean getNeedsRefresh() {
+						return false;
+					}
+				};
+		when(dailyPlanRepository.findSummariesByOwner(eq(42L), eq(PageRequest.of(0, 20))))
+				.thenReturn(new PageImpl<>(List.of(staleProjection), PageRequest.of(0, 20), 1));
+		when(dailyPlanRepository.findByOwner_IdAndIdIn(eq(42L), anyCollection()))
+				.thenReturn(List.of(plan));
+
+		PageResponse<DailyPlanSummaryResponse> response = dailyPlanService.listForCurrentUser(0, 20);
+
+		assertThat(response.content())
+				.singleElement()
+				.satisfies(
+						summary -> {
+							assertThat(summary.scheduledWorkMinutes()).isEqualTo(120);
+							assertThat(summary.workSessionCount()).isEqualTo(2);
+						});
 	}
 
 	@Test
@@ -1274,6 +1358,47 @@ class DailyPlanServiceTest {
 										.isEqualTo("REPLAN_WINDOW_ENDED"));
 
 		verify(aiClient, never()).generate(any());
+	}
+
+	@Test
+	void replan_whenCutoffIsNotMinuteAligned_throwsBadRequest() {
+		lenient()
+				.when(currentUser.getCurrentUser())
+				.thenReturn(new UserContext(42L, "user@example.com", "user"));
+		DailyPlan plan = planWithCompleteSnapshot(7L, LocalDate.of(2026, 6, 1));
+		lenient()
+				.when(dailyPlanRepository.findByOwner_IdAndId(42L, 7L))
+				.thenReturn(Optional.of(plan));
+		lenient().when(taskQueryService.findPlannableTasksByOwnerId(42L)).thenReturn(List.of());
+		lenient()
+				.when(commitmentQueryService.windowsFor(42L, LocalDate.of(2026, 6, 1)))
+				.thenReturn(List.of());
+		lenient()
+				.when(scheduler.compose(any(), any(), any(), any(), any()))
+				.thenReturn(stubSchedule());
+		lenient()
+				.when(persister.appendRevision(any(), any(), any(), any(), any(), any(), any(), any()))
+				.thenReturn(
+						DailyPlanResponseTestSupport.minimal(
+								7L,
+								LocalDate.of(2026, 6, 1),
+								Instant.parse("2026-06-01T09:00:00Z"),
+								null));
+
+		ReplanRequest request =
+				new ReplanRequest(
+						LocalDate.of(2026, 6, 1),
+						LocalTime.of(14, 0, 30),
+						100L,
+						List.of());
+
+		assertThatThrownBy(() -> dailyPlanService.replan(7L, request))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("times must be minute-aligned");
+
+		verify(aiClient, never()).generate(any());
+		verify(persister, never())
+				.appendRevision(any(), any(), any(), any(), any(), any(), any(), any());
 	}
 
 	@Test

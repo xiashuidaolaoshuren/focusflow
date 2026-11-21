@@ -21,6 +21,7 @@ class DailyPlanSummaryResponseTest {
 						1,
 						true,
 						true,
+						true,
 						false);
 
 		assertThat(response.id()).isEqualTo(1L);
@@ -31,6 +32,7 @@ class DailyPlanSummaryResponseTest {
 		assertThat(response.scheduledTaskCount()).isEqualTo(2);
 		assertThat(response.unplacedWorkCount()).isEqualTo(1);
 		assertThat(response.hasWarning()).isTrue();
+		assertThat(response.hasShortfall()).isTrue();
 		assertThat(response.hasProgress()).isTrue();
 		assertThat(response.needsRefresh()).isFalse();
 	}

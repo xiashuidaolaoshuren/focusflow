@@ -1,4 +1,12 @@
-# React + TypeScript + Vite
+# FocusFlow frontend
+
+> **Redesign in progress.** The frontend is being rebuilt from the approved design
+> ground truth in [`docs/design/`](../docs/design/README.md) under
+> [`2026-11-08-focusflow-frontend-redesign-design.md`](../docs/superpowers/specs/2026-11-08-focusflow-frontend-redesign-design.md).
+> The Vite template instructions below describe the current scaffold, not the
+> target UI.
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

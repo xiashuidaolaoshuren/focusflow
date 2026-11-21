@@ -1,12 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App'
 import { ThemeProvider } from '@/components/theme/ThemeProvider'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { formatDateLabel } from '@/lib/format'
+import { getLocalDateString } from '@/lib/planningDate'
 import type { SchedulingPreferencesResponse, UserResponse } from '@/types/api'
+
+const todayHeading = formatDateLabel(getLocalDateString())
 
 vi.mock('@/features/auth/api', () => ({
   getCurrentUser: vi.fn(),
@@ -29,9 +34,24 @@ vi.mock('@/features/preferences/api', () => ({
 
 vi.mock('@/features/horizon/hooks', () => ({
   useHorizon: vi.fn(),
-  horizonQueryPrefix: ['horizon'],
-  horizonQueryKey: vi.fn(),
 }))
+
+vi.mock('@/features/plans/api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/plans/api')>()
+  return {
+    ...actual,
+    getPlanByDate: vi.fn(async () => null),
+  }
+})
+
+vi.mock('@/features/commitments/api', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/features/commitments/api')>()
+  return {
+    ...actual,
+    listCommitments: vi.fn(async () => []),
+  }
+})
 
 import { getCurrentUser } from '@/features/auth/api'
 import { useHorizon } from '@/features/horizon/hooks'
@@ -62,6 +82,12 @@ const defaultPreferences: SchedulingPreferencesResponse = {
     'FRIDAY',
   ],
   persisted: false,
+}
+
+// Lazy routes plus the session query can exceed the 1s default under a full
+// suite run; this keeps the routing assertions deterministic.
+function waitForApp(callback: () => void) {
+  return waitFor(callback, { timeout: 5000 })
 }
 
 function renderApp(initialPath: string) {
@@ -126,31 +152,35 @@ describe('App auth routing', () => {
     } as unknown as ReturnType<typeof useHorizon>)
   })
 
-  it('redirects unauthenticated users away from protected routes', async () => {
+  it('redirects unauthenticated users away from /today', async () => {
     mockedGetCurrentUser.mockResolvedValue(null)
 
-    renderApp('/dashboard')
+    renderApp('/today')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(
         screen.getByRole('button', { name: /sign in/i }),
       ).toBeInTheDocument()
     })
-    expect(screen.queryByRole('heading', { name: /^tasks$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: todayHeading })).not.toBeInTheDocument()
   })
 
-  it('allows authenticated users to access protected routes', async () => {
+  it('allows authenticated users to access /today', async () => {
     mockedGetCurrentUser.mockResolvedValue({
       id: 1,
       email: 'user@example.com',
       username: 'user',
     })
 
-    renderApp('/dashboard')
+    renderApp('/today')
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /^tasks$/i })).toBeInTheDocument()
-      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: todayHeading }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('region', { name: /today at a glance/i }),
+      ).toBeInTheDocument()
     })
     expect(
       screen.queryByRole('button', { name: /sign in/i }),
@@ -165,10 +195,12 @@ describe('App auth routing', () => {
       }),
     )
 
-    renderApp('/dashboard')
+    renderApp('/today')
 
     expect(screen.getByRole('status')).toHaveTextContent(/loading session/i)
-    expect(screen.queryByRole('heading', { name: /^tasks$/i })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: todayHeading }),
+    ).not.toBeInTheDocument()
 
     resolveUser({
       id: 1,
@@ -176,9 +208,10 @@ describe('App auth routing', () => {
       username: 'user',
     })
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /^tasks$/i })).toBeInTheDocument()
-      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: todayHeading }),
+      ).toBeInTheDocument()
     })
     expect(screen.queryByText(/loading session/i)).not.toBeInTheDocument()
   })
@@ -186,9 +219,9 @@ describe('App auth routing', () => {
   it('does not render authenticated shell controls after session is absent', async () => {
     mockedGetCurrentUser.mockResolvedValue(null)
 
-    renderApp('/dashboard')
+    renderApp('/today')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(
         screen.getByRole('button', { name: /sign in/i }),
       ).toBeInTheDocument()
@@ -205,9 +238,9 @@ describe('App auth routing', () => {
       username: 'user',
     })
 
-    renderApp('/dashboard')
+    renderApp('/today')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(
         screen.getByRole('button', { name: /user menu/i }),
       ).toBeInTheDocument()
@@ -223,9 +256,9 @@ describe('App auth routing', () => {
 
     renderApp('/settings')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(
-        screen.getByRole('heading', { name: /scheduling preferences/i }),
+        screen.getByRole('heading', { name: 'Settings' }),
       ).toBeInTheDocument()
     })
   })
@@ -235,7 +268,7 @@ describe('App auth routing', () => {
 
     renderApp('/horizon')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(
         screen.getByRole('button', { name: /sign in/i }),
       ).toBeInTheDocument()
@@ -252,8 +285,95 @@ describe('App auth routing', () => {
 
     renderApp('/horizon')
 
-    await waitFor(() => {
+    await waitForApp(() => {
       expect(screen.getByRole('heading', { name: /^horizon$/i })).toBeInTheDocument()
     })
+  })
+
+  it('sends anonymous visitors at / to /login', async () => {
+    mockedGetCurrentUser.mockResolvedValue(null)
+
+    renderApp('/')
+
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('button', { name: /sign in/i }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('sends authenticated visitors at / to /today', async () => {
+    mockedGetCurrentUser.mockResolvedValue({
+      id: 1,
+      email: 'user@example.com',
+      username: 'user',
+    })
+
+    renderApp('/')
+
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: todayHeading }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  it('lets authenticated users reach /tasks', async () => {
+    mockedGetCurrentUser.mockResolvedValue({
+      id: 1,
+      email: 'user@example.com',
+      username: 'user',
+    })
+
+    renderApp('/tasks')
+
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: /^tasks$/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('tablist', { name: /task filter/i }),
+      ).toBeInTheDocument()
+      expect(screen.getByText(/no tasks yet/i)).toBeInTheDocument()
+    })
+  })
+
+  it('renders the 404 page for unknown paths', async () => {
+    mockedGetCurrentUser.mockResolvedValue(null)
+
+    renderApp('/unknown')
+
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: /page not found/i }),
+      ).toBeInTheDocument()
+    })
+    expect(screen.getByText('/unknown')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /go to today/i })).toHaveAttribute(
+      'href',
+      '/today',
+    )
+    expect(
+      screen.queryByRole('navigation', { name: /main/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the shell around the 404 for authenticated users', async () => {
+    mockedGetCurrentUser.mockResolvedValue({
+      id: 1,
+      email: 'user@example.com',
+      username: 'user',
+    })
+
+    renderApp('/unknown')
+
+    await waitForApp(() => {
+      expect(
+        screen.getByRole('heading', { name: /page not found/i }),
+      ).toBeInTheDocument()
+    })
+    expect(
+      screen.getByRole('navigation', { name: /main/i }),
+    ).toBeInTheDocument()
   })
 })

@@ -1,0 +1,102 @@
+import { TriangleAlertIcon } from 'lucide-react'
+
+import {
+  barPercent,
+  dayTotalMinutes,
+  savedShortfallMinutes,
+  segmentCellCopy,
+  segmentOn,
+} from '@/features/horizon/horizonGrid'
+import { formatDateLabel, formatDuration } from '@/lib/format'
+import type { HorizonResponse } from '@/types/api'
+
+type HorizonDayListProps = {
+  horizon: HorizonResponse
+  scaleMinutes: number
+}
+
+export function HorizonDayList({ horizon, scaleMinutes }: HorizonDayListProps) {
+  return (
+    <div className="flex flex-col gap-3">
+      {horizon.days.map((day, index) => {
+        const isSaved = day.kind === 'SAVED'
+        const totalMinutes = dayTotalMinutes(horizon.tasks, day.date)
+        const shortfallMinutes = isSaved
+          ? savedShortfallMinutes(horizon.tasks, day.date)
+          : 0
+        const items = horizon.tasks.flatMap((task) => {
+          const segment = segmentOn(task, day.date)
+          const hasWork = segment != null && (segment.minutes > 0 || segment.unplacedReason != null)
+          return segment != null && hasWork
+            ? [{ taskId: task.taskId, title: task.title, segment }]
+            : []
+        })
+        const headingId = `horizon-day-${index}`
+
+        return (
+          <section
+            key={day.date}
+            aria-labelledby={headingId}
+            className={`rounded-lg border border-border ${
+              isSaved ? 'bg-secondary' : 'bg-card'
+            }`}
+          >
+            <header className="flex items-start justify-between gap-3 p-3">
+              <div className="space-y-0.5">
+                <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  {isSaved ? 'Saved' : 'Forecast'}
+                </span>
+                <h2 id={headingId} className="text-sm font-semibold">
+                  {formatDateLabel(day.date)}
+                </h2>
+              </div>
+              <div className="space-y-0.5 text-right">
+                <div className="font-mono text-xs text-muted-foreground">
+                  {formatDuration(totalMinutes)}
+                </div>
+                {shortfallMinutes > 0 ? (
+                  <div className="flex items-center justify-end gap-1 text-xs font-medium text-deadline-at-risk">
+                    <TriangleAlertIcon className="size-3" aria-hidden="true" />
+                    Shortfall {formatDuration(shortfallMinutes)}
+                  </div>
+                ) : null}
+              </div>
+            </header>
+            {items.length > 0 ? (
+              <ul className="border-t border-border">
+                {items.map((item) => (
+                  <li
+                    key={item.taskId}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 border-t border-border px-3 py-2 first:border-t-0"
+                  >
+                    <span className="truncate text-sm">{item.title}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {item.segment.minutes > 0 ? formatDuration(item.segment.minutes) : null}
+                    </span>
+                    {segmentCellCopy(item.segment).length > 0 ? (
+                      <span className="col-span-2 text-xs text-muted-foreground">
+                        {segmentCellCopy(item.segment).join(' · ')}
+                      </span>
+                    ) : null}
+                    <span className="col-span-2 block h-2 rounded-full bg-muted">
+                      <span
+                        className="block h-2 rounded-full bg-primary"
+                        style={{
+                          width: `${barPercent(item.segment.minutes, scaleMinutes)}%`,
+                        }}
+                      />
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                No work forecast
+              </p>
+            )}
+          </section>
+        )
+      })}
+    </div>
+  )
+}

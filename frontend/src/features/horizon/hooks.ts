@@ -2,13 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 
 import { getHorizon } from '@/features/horizon/api'
+import { horizonQueryKey, horizonQueryPrefix } from '@/lib/query'
 import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
-
-export const horizonQueryPrefix = ['horizon'] as const
-
-export function horizonQueryKey(currentDate: string, currentTime: string) {
-  return [...horizonQueryPrefix, currentDate, currentTime] as const
-}
 
 export function minuteAlignedTimeString(date = new Date()): string {
   return getLocalTimeString(date).slice(0, 5)

@@ -4,6 +4,19 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 const CSRF_COOKIE_NAME = 'XSRF-TOKEN'
 const CSRF_HEADER_NAME = 'X-XSRF-TOKEN'
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+const REQUEST_TIMEOUT_MS = 15_000
+
+let unauthorizedHandler: (() => void) | undefined
+
+/** Registers the single 401 listener. Replaces any previous handler. Returns unsubscribe. */
+export function onUnauthorized(handler: () => void): () => void {
+  unauthorizedHandler = handler
+  return () => {
+    if (unauthorizedHandler === handler) {
+      unauthorizedHandler = undefined
+    }
+  }
+}
 
 export class ApiError extends Error {
   readonly status: number
@@ -17,11 +30,21 @@ export class ApiError extends Error {
     super(body.message)
     this.name = 'ApiError'
     this.status = body.status
-    this.error = body.error
-    this.code = body.code
-    this.path = body.path
-    this.details = body.details
-    this.timestamp = body.timestamp
+    if (body.error !== undefined) {
+      this.error = body.error
+    }
+    if (body.code !== undefined) {
+      this.code = body.code
+    }
+    if (body.path !== undefined) {
+      this.path = body.path
+    }
+    if (body.details !== undefined) {
+      this.details = body.details
+    }
+    if (body.timestamp !== undefined) {
+      this.timestamp = body.timestamp
+    }
   }
 }
 
@@ -29,6 +52,7 @@ export type ApiRequestOptions = {
   method?: string
   body?: unknown
   headers?: Record<string, string>
+  signal?: AbortSignal
 }
 
 function isMutatingMethod(method: string): boolean {
@@ -42,7 +66,8 @@ function getCsrfToken(): string | undefined {
   const match = document.cookie.match(
     new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`),
   )
-  return match ? decodeURIComponent(match[1]) : undefined
+  const raw = match?.[1]
+  return raw !== undefined ? decodeURIComponent(raw) : undefined
 }
 
 function resolveUrl(path: string): string {
@@ -57,18 +82,27 @@ async function normalizeError(response: Response): Promise<ApiError> {
   if (contentType?.includes('application/json')) {
     try {
       const data = (await response.json()) as Partial<ApiErrorResponse>
-      return new ApiError({
-        status: response.status,
-        timestamp: data.timestamp,
-        error: data.error,
-        message:
-          data.message ??
-          data.error ??
-          `Request failed with status ${response.status}`,
-        code: data.code,
-        path: data.path,
-        details: data.details,
-      })
+      const message =
+        data.message ??
+        data.error ??
+        `Request failed with status ${response.status}`
+      const body: ApiErrorResponse = { status: response.status, message }
+      if (data.timestamp !== undefined) {
+        body.timestamp = data.timestamp
+      }
+      if (data.error !== undefined) {
+        body.error = data.error
+      }
+      if (data.code !== undefined) {
+        body.code = data.code
+      }
+      if (data.path !== undefined) {
+        body.path = data.path
+      }
+      if (data.details !== undefined) {
+        body.details = data.details
+      }
+      return new ApiError(body)
     } catch {
       // fall through to generic error
     }
@@ -84,13 +118,27 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, headers = {} } = options
+  const { method = 'GET', body, headers = {}, signal } = options
   const url = resolveUrl(path)
+
+  const controller = new AbortController()
+  let timedOut = false
+  const timeoutId = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, REQUEST_TIMEOUT_MS)
+  const onCallerAbort = () => controller.abort()
+  if (signal?.aborted) {
+    controller.abort()
+  } else {
+    signal?.addEventListener('abort', onCallerAbort, { once: true })
+  }
 
   const init: RequestInit = {
     method,
     credentials: 'include',
     headers: { ...headers },
+    signal: controller.signal,
   }
 
   if (body !== undefined) {
@@ -111,9 +159,26 @@ export async function apiRequest<T>(
     }
   }
 
-  const response = await fetch(url, init)
+  let response: Response
+  try {
+    response = await fetch(url, init)
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiError({
+        status: 408,
+        message: 'Request timed out',
+      })
+    }
+    throw error
+  } finally {
+    clearTimeout(timeoutId)
+    signal?.removeEventListener('abort', onCallerAbort)
+  }
 
   if (!response.ok) {
+    if (response.status === 401) {
+      unauthorizedHandler?.()
+    }
     throw await normalizeError(response)
   }
 

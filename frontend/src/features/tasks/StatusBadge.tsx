@@ -1,34 +1,32 @@
-import { cva } from 'class-variance-authority'
+import { CircleCheckIcon, CircleDotIcon, CircleIcon, CircleXIcon } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { STATUS_LABELS } from '@/features/tasks/labels'
 import type { TaskStatus } from '@/types/api'
 
-const statusBadgeVariants = cva('border', {
-  variants: {
-    status: {
-      OPEN: 'border-border bg-status-open/15 text-status-open-foreground',
-      IN_PROGRESS:
-        'border-status-in-progress/30 bg-status-in-progress/15 text-status-in-progress-foreground',
-      DONE: 'border-status-done/30 bg-status-done/15 text-status-done-foreground',
-      CANCELLED:
-        'border-border bg-status-cancelled/15 text-status-cancelled-foreground',
-    },
-  },
-})
+const STATUS_GLYPHS: Record<TaskStatus, { Icon: typeof CircleIcon; tone: string }> = {
+  OPEN: { Icon: CircleIcon, tone: 'text-status-open' },
+  IN_PROGRESS: { Icon: CircleDotIcon, tone: 'text-status-in-progress' },
+  DONE: { Icon: CircleCheckIcon, tone: 'text-status-done' },
+  CANCELLED: { Icon: CircleXIcon, tone: 'text-status-cancelled' },
+}
 
 type StatusBadgeProps = {
   status: TaskStatus
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
+  const { Icon, tone } = STATUS_GLYPHS[status]
   return (
     <Badge
       variant="outline"
-      className={statusBadgeVariants({ status })}
+      className={`h-5 gap-1 rounded-sm bg-card ${tone}`}
       data-status={status}
     >
-      {STATUS_LABELS[status]}
+      <Icon className="size-3" aria-hidden="true" />
+      <span className={status === 'CANCELLED' ? 'line-through' : undefined}>
+        {STATUS_LABELS[status]}
+      </span>
     </Badge>
   )
 }

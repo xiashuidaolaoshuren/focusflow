@@ -4,7 +4,21 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>FocusFlow</title>
+    <script>
+      ;(function () {
+        try {
+          var stored = localStorage.getItem('focusflow-theme')
+          var prefersDark = window.matchMedia(
+            '(prefers-color-scheme: dark)',
+          ).matches
+          var dark = stored === 'dark' || (stored !== 'light' && prefersDark)
+          document.documentElement.classList.toggle('dark', dark)
+        } catch (error) {
+          // A blocked localStorage must not stop the first paint.
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

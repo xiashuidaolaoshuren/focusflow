@@ -15,6 +15,14 @@ const REPLAN_ERROR_MESSAGES: Record<string, string> = {
     'Resolve the elapsed sessions first: record what happened, then re-plan.',
 }
 
+/** The explanation a refused or failed delete shows. A 409 `PLAN_HAS_PROGRESS` names the reason. */
+export function deletePlanErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409 && error.code === 'PLAN_HAS_PROGRESS') {
+    return 'This plan has recorded progress, so it cannot be deleted. Its history stays as it is.'
+  }
+  return 'Could not delete the plan.'
+}
+
 /**
  * A conflict the client resolves by refetching: another writer changed the same plan or task
  * effort, and the newer server state must win over the in-flight edit.

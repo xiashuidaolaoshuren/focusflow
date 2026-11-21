@@ -1,12 +1,6 @@
 import { useState } from 'react'
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { PlanHistoryList } from '@/features/plans/PlanHistoryList'
 import { usePlans } from '@/features/plans/hooks'
 
@@ -27,18 +21,12 @@ export function PlanHistoryPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Plan history</h1>
-        <p className="text-sm text-muted-foreground">
-          Review your saved daily plans and open any plan for details.
-        </p>
+        <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
+          History
+        </span>
+        <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">Plans</h1>
       </div>
       <Card>
-        <CardHeader>
-          <CardTitle>Saved plans</CardTitle>
-          <CardDescription>
-            Each entry links to the full plan timeline for that day.
-          </CardDescription>
-        </CardHeader>
         <CardContent>
           <PlanHistoryList
             plans={plans}

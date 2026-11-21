@@ -1,6 +1,7 @@
 package com.focusflow.plan;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -29,20 +30,6 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 			value =
 					"""
 					SELECT p.id AS id, p.planDate AS planDate, p.createdAt AS createdAt,
-					       (SELECT r.scheduledWorkMinutes FROM DailyPlanRevision r
-					        WHERE r.dailyPlan.id = p.id
-					          AND r.revisionNumber = (
-					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
-					              WHERE r2.dailyPlan.id = p.id))
-					           AS scheduledWorkMinutes,
-					       (SELECT COUNT(b) FROM DailyPlanBlock b
-					        JOIN b.revision r
-					        WHERE r.dailyPlan.id = p.id
-					          AND r.revisionNumber = (
-					              SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
-					              WHERE r2.dailyPlan.id = p.id)
-					          AND b.kind = com.focusflow.schedule.BlockKind.WORK)
-					           AS workSessionCount,
 					       (SELECT COUNT(DISTINCT b.dailyPlanTask.id) FROM DailyPlanBlock b
 					        JOIN b.revision r
 					        WHERE r.dailyPlan.id = p.id
@@ -67,6 +54,14 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 					                     WHERE r2.dailyPlan.id = p.id)
 					                 AND t.mustInclude = true
 					                 AND t.unplacedReason IS NOT NULL) AS hasWarning,
+					       EXISTS (SELECT t FROM DailyPlanTask t
+					               JOIN t.revision r
+					               WHERE r.dailyPlan.id = p.id
+					                 AND r.revisionNumber = (
+					                     SELECT MAX(r2.revisionNumber) FROM DailyPlanRevision r2
+					                     WHERE r2.dailyPlan.id = p.id)
+					                 AND t.unplacedReason = com.focusflow.schedule.UnplacedReason.OUT_OF_TIME)
+					           AS hasShortfall,
 					       EXISTS (SELECT b FROM DailyPlanBlock b
 					               JOIN b.revision r
 					               WHERE r.dailyPlan.id = p.id
@@ -132,4 +127,17 @@ public interface DailyPlanRepository extends JpaRepository<DailyPlan, Long> {
 			})
 	List<DailyPlan> findByOwner_IdAndPlanDateBetween(
 			Long ownerId, LocalDate planDateStart, LocalDate planDateEnd);
+
+	@EntityGraph(
+			attributePaths = {
+				"revisions",
+				"revisions.tasks",
+				"revisions.tasks.taskReference",
+				"revisions.blocks",
+				"revisions.blocks.dailyPlanTask",
+				"revisions.blocks.dailyPlanTask.taskReference",
+				"revisions.dependencies",
+				"fixedBreakSnapshots"
+			})
+	List<DailyPlan> findByOwner_IdAndIdIn(Long ownerId, Collection<Long> ids);
 }

@@ -4,17 +4,19 @@ import type { HorizonDayResponse, HorizonSegmentResponse } from '@/types/api'
 
 import {
   barPercent,
-  dashboardHref,
   deadlineBadgeLabel,
   forecastHeaderCopy,
   formatDueDateTitle,
   HORIZON_PACE_COPY,
+  horizonRangeCopy,
   isDueDateColumn,
   longestFullWorkWindow,
   savedConflictCopy,
+  savedShortfallMinutes,
   segmentAriaLabel,
   segmentCellCopy,
   timeSpanMinutes,
+  todayHref,
   upstreamCopy,
 } from '@/features/horizon/horizonGrid'
 
@@ -70,7 +72,7 @@ describe('segmentCellCopy', () => {
       unplacedMinutes: 30,
       unplacedScope: 'SAVED_SHORTFALL',
     }
-    expect(segmentCellCopy(shortfall)).toContain('Saved shortfall: 30 min')
+    expect(segmentCellCopy(shortfall)).toContain('Saved shortfall: 30m')
   })
 
   it('states credit when it differs from displayed minutes', () => {
@@ -84,9 +86,22 @@ describe('segmentCellCopy', () => {
       unplacedScope: null,
     }
     expect(segmentCellCopy(segment)).toEqual([
-      '60 min',
-      '30 min credited of 60 min displayed (checkpoint)',
+      '1h',
+      '30m credited of 1h displayed (checkpoint)',
     ])
+  })
+
+  it('formats durations as 1h 25m, never as raw minutes', () => {
+    const segment: HorizonSegmentResponse = {
+      date: '2026-06-01',
+      minutes: 85,
+      assumedCreditMinutes: null,
+      creditExclusions: [],
+      unplacedReason: null,
+      unplacedMinutes: null,
+      unplacedScope: null,
+    }
+    expect(segmentCellCopy(segment)).toEqual(['1h 25m'])
   })
 
   it('states a fully excluded saved session as zero credited', () => {
@@ -100,8 +115,8 @@ describe('segmentCellCopy', () => {
       unplacedScope: null,
     }
     expect(segmentCellCopy(segment)).toEqual([
-      '60 min',
-      '0 min credited of 60 min displayed (checkpoint)',
+      '1h',
+      '0m credited of 1h displayed (checkpoint)',
     ])
   })
 })
@@ -128,7 +143,8 @@ describe('segmentAriaLabel', () => {
 
 describe('due date helpers', () => {
   it('shows actual due date in title and marker only on column dates', () => {
-    expect(formatDueDateTitle('2026-06-08')).toBe('2026-06-08')
+    expect(formatDueDateTitle('2026-06-08')).toBe('Due 8 Jun 2026')
+    expect(formatDueDateTitle(null)).toBeNull()
     expect(isDueDateColumn('2026-06-08', ['2026-06-01', '2026-06-08'])).toBe(
       true,
     )
@@ -170,7 +186,7 @@ describe('horizon copy helpers', () => {
     expect(forecastHeaderCopy()).toBe(
       'Fixed order: must-continue, then due or overdue, then optional. Generating a Daily plan for this date can choose a different order inside those groups.',
     )
-    expect(dashboardHref('2026-06-02')).toBe('/dashboard?date=2026-06-02')
+    expect(todayHref('2026-06-02')).toBe('/today?date=2026-06-02')
   })
 
   it('names the upstream cause when one exists', () => {
@@ -194,8 +210,10 @@ describe('deadlineBadgeLabel', () => {
       deadlineBadgeLabel('CANNOT_FORECAST', [
         { taskId: 2, title: 'Blocker' },
       ]),
-    ).toBe('Cannot forecast: Blocker')
-    expect(deadlineBadgeLabel('ON_TRACK', [])).toBeNull()
+    ).toBe("Can't forecast: Blocker")
+    expect(deadlineBadgeLabel('CANNOT_FORECAST', [])).toBe("Can't forecast")
+    expect(deadlineBadgeLabel('BEYOND_HORIZON', [])).toBe('Beyond horizon')
+    expect(deadlineBadgeLabel('ON_TRACK', [])).toBe('On track')
     expect(deadlineBadgeLabel(null, [])).toBeNull()
   })
 })
@@ -203,5 +221,48 @@ describe('deadlineBadgeLabel', () => {
 describe('timeSpanMinutes', () => {
   it('computes window length from clock strings', () => {
     expect(timeSpanMinutes('09:00:00', '18:00:00')).toBe(540)
+  })
+})
+
+describe('horizonRangeCopy', () => {
+  it('states the window in English with minute precision', () => {
+    expect(horizonRangeCopy('2026-06-01', '09:00:00')).toBe(
+      'Seven working days from 1 Jun 2026 at 09:00',
+    )
+    expect(horizonRangeCopy('2026-11-15', '04:24:05')).toBe(
+      'Seven working days from 15 Nov 2026 at 04:24',
+    )
+  })
+})
+
+describe('savedShortfallMinutes', () => {
+  type Row = Parameters<typeof savedShortfallMinutes>[0][number]
+
+  function row(
+    segment: Pick<HorizonSegmentResponse, 'unplacedReason' | 'unplacedMinutes'>,
+  ): Row {
+    return {
+      taskId: 1,
+      segments: [
+        {
+          date: '2026-06-01',
+          minutes: 0,
+          assumedCreditMinutes: null,
+          creditExclusions: [],
+          unplacedScope: 'SAVED_SHORTFALL',
+          ...segment,
+        },
+      ],
+    } as unknown as Row
+  }
+
+  it('counts only out-of-time minutes, not blocked or unestimated work', () => {
+    const tasks = [
+      row({ unplacedReason: 'OUT_OF_TIME', unplacedMinutes: 450 }),
+      row({ unplacedReason: 'BLOCKED', unplacedMinutes: 60 }),
+      row({ unplacedReason: 'NO_ESTIMATE', unplacedMinutes: null }),
+    ]
+
+    expect(savedShortfallMinutes(tasks, '2026-06-01')).toBe(450)
   })
 })

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { apiRequest, ApiError } from '@/lib/api'
+import { apiRequest, ApiError, onUnauthorized } from '@/lib/api'
 import type { ApiErrorResponse, LoginRequest, UserResponse } from '@/types/api'
 
 describe('apiRequest', () => {
@@ -95,6 +95,114 @@ describe('apiRequest', () => {
       status: 401,
       message: expect.stringMatching(/401/i),
     })
+  })
+})
+
+describe('onUnauthorized', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('invokes the registered handler once on 401 and still throws ApiError', async () => {
+    const handler = vi.fn()
+    const unsubscribe = onUnauthorized(handler)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 401 })),
+    )
+
+    await expect(apiRequest('/api/auth/me')).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 401,
+    })
+    expect(handler).toHaveBeenCalledTimes(1)
+    unsubscribe()
+  })
+
+  it('does not invoke the handler for other error statuses', async () => {
+    const handler = vi.fn()
+    const unsubscribe = onUnauthorized(handler)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 500 })),
+    )
+
+    await expect(apiRequest('/api/auth/me')).rejects.toBeInstanceOf(ApiError)
+    expect(handler).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('passes the caller AbortSignal through to fetch and rejects with AbortError', async () => {
+    const controller = new AbortController()
+    let captured: AbortSignal | undefined
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      captured = init?.signal ?? undefined
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal?.aborted) {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+          return
+        }
+        signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('The operation was aborted.', 'AbortError')),
+          { once: true },
+        )
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const pending = apiRequest('/api/auth/me', { signal: controller.signal })
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    controller.abort()
+
+    await assertion
+    expect(captured).toBeDefined()
+    expect(captured?.aborted).toBe(true)
+  })
+
+  it('aborts an in-flight request at 15 seconds as ApiError 408', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        const signal = init?.signal
+        if (signal?.aborted) {
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+          return
+        }
+        signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('The operation was aborted.', 'AbortError')),
+          { once: true },
+        )
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const pending = apiRequest('/api/auth/me')
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 408,
+      message: 'Request timed out',
+    })
+    await vi.advanceTimersByTimeAsync(15_000)
+    await assertion
+    vi.useRealTimers()
+  })
+
+  it('does not invoke the handler after unsubscribe', async () => {
+    const handler = vi.fn()
+    const unsubscribe = onUnauthorized(handler)
+    unsubscribe()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('', { status: 401 })),
+    )
+
+    await expect(apiRequest('/api/auth/me')).rejects.toBeInstanceOf(ApiError)
+    expect(handler).not.toHaveBeenCalled()
   })
 })
 

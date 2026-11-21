@@ -1,17 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
+import { horizonQueryPrefix, schedulingPreferencesQueryKey } from '@/lib/query'
 import {
   getSchedulingPreferences,
   updateSchedulingPreferences,
 } from '@/features/preferences/api'
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
 import type { SchedulingPreferencesRequest } from '@/types/api'
-
-export const schedulingPreferencesQueryKey = [
-  'scheduling-preferences',
-] as const
 
 export function useSchedulingPreferences() {
   const query = useQuery({

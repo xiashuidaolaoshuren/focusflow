@@ -28,7 +28,7 @@ function AlertDialogOverlay({
     <AlertDialogPrimitive.Backdrop
       data-slot="alert-dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/10 supports-backdrop-filter:backdrop-blur-xs",
+        "fixed inset-0 z-50 bg-scrim",
         className,
       )}
       {...props}
@@ -42,7 +42,8 @@ function AlertDialogContent({
 }: AlertDialogPrimitive.Popup.Props) {
   return (
     <AlertDialogPortal>
-      <AlertDialogOverlay />
+      {/* forceRender: a confirmation opened over a sheet still dims it (base-ui skips nested backdrops). */}
+      <AlertDialogOverlay forceRender />
       <AlertDialogPrimitive.Popup
         role="alertdialog"
         data-slot="alert-dialog-content"

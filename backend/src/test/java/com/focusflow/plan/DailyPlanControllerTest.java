@@ -373,6 +373,7 @@ class DailyPlanControllerTest {
 												0,
 												false,
 												false,
+												false,
 												false)),
 								0,
 								20,
@@ -389,6 +390,7 @@ class DailyPlanControllerTest {
 				.andExpect(jsonPath("$.content[0].scheduledTaskCount").value(1))
 				.andExpect(jsonPath("$.content[0].unplacedWorkCount").value(0))
 				.andExpect(jsonPath("$.content[0].hasWarning").value(false))
+				.andExpect(jsonPath("$.content[0].hasShortfall").value(false))
 				.andExpect(jsonPath("$.content[0].hasProgress").value(false))
 				.andExpect(jsonPath("$.content[0].needsRefresh").value(false))
 				.andExpect(jsonPath("$.page").value(0))
