@@ -297,8 +297,8 @@ History list rows only — no blocks or snapshots.
 | `id` | integer | yes | |
 | `planDate` | string (date) | yes | `YYYY-MM-DD` |
 | `createdAt` | string (instant) | yes | ISO-8601 |
-| `scheduledWorkMinutes` | integer | yes | |
-| `workSessionCount` | integer | yes | |
+| `scheduledWorkMinutes` | integer | yes | Work on the composed rail, the same Focus figure plan detail shows (all revisions, not only the latest) |
+| `workSessionCount` | integer | yes | Work sessions on the composed rail, the same Sessions figure plan detail shows |
 | `scheduledTaskCount` | integer | yes | |
 | `unplacedWorkCount` | integer | yes | |
 | `hasWarning` | boolean | yes | Derived must-include shortfall present |

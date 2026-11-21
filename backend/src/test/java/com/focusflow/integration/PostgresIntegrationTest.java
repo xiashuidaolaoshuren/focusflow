@@ -16,6 +16,7 @@ import com.focusflow.plan.DailyPlanRevision;
 import com.focusflow.plan.DailyPlanSchedule;
 import com.focusflow.plan.DailyPlanTask;
 import com.focusflow.plan.DailyPlanRepository;
+import com.focusflow.plan.DailyPlanResponseMapper;
 import com.focusflow.plan.DailyPlanService;
 import com.focusflow.plan.DailyPlanSummaryProjection;
 import com.focusflow.plan.PlanFixedBreakSnapshot;
@@ -66,6 +67,8 @@ class PostgresIntegrationTest {
 	@Autowired DailyPlanPersister dailyPlanPersister;
 
 	@Autowired DailyPlanService dailyPlanService;
+
+	@Autowired DailyPlanResponseMapper responseMapper;
 
 	@Autowired TransactionTemplate transactionTemplate;
 
@@ -1119,7 +1122,6 @@ class PostgresIntegrationTest {
 				.satisfies(
 						summary -> {
 							assertThat(summary.getScheduledTaskCount()).isEqualTo(1);
-							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
 							assertThat(summary.getUnplacedWorkCount()).isEqualTo(2);
 						});
 	}
@@ -1191,7 +1193,7 @@ class PostgresIntegrationTest {
 	}
 
 	@Test
-	void findSummariesByOwner_countsLatestRevisionOnlyAndExposesProgressFlags() {
+	void findSummariesByOwner_exposesProgressFlagsAndComposedWorkTotals() {
 		String suffix = UUID.randomUUID().toString().substring(0, 8);
 		User owner =
 				savedUser(
@@ -1299,11 +1301,14 @@ class PostgresIntegrationTest {
 				.singleElement()
 				.satisfies(
 						summary -> {
-							assertThat(summary.getScheduledWorkMinutes()).isEqualTo(60);
-							assertThat(summary.getWorkSessionCount()).isEqualTo(1);
 							assertThat(summary.getHasProgress()).isTrue();
 							assertThat(summary.getNeedsRefresh()).isFalse();
 						});
+
+		DailyPlan loaded =
+				dailyPlanRepository.findByOwner_IdAndIdIn(owner.getId(), List.of(plan.getId())).get(0);
+		assertThat(responseMapper.composedWorkTotals(loaded))
+				.isEqualTo(new DailyPlanResponseMapper.WorkTotals(180, 3));
 
 		forward.setRemainingEffortMinutes(30);
 		taskRepository.save(forward);

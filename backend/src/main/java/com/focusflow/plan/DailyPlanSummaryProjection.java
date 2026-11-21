@@ -11,10 +11,6 @@ public interface DailyPlanSummaryProjection {
 
 	Instant getCreatedAt();
 
-	Integer getScheduledWorkMinutes();
-
-	Integer getWorkSessionCount();
-
 	Integer getScheduledTaskCount();
 
 	Integer getUnplacedWorkCount();

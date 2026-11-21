@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form'
 
@@ -23,6 +23,23 @@ import {
   DAY_OF_WEEK_ORDER,
   type DayOfWeek,
 } from '@/types/api'
+
+const SECTION_CARD = 'flex flex-col gap-4 rounded-lg border border-border bg-card p-4'
+
+/** Puts the "min" unit inside a numeric field, so it reads as part of the value. */
+function WithMinutesUnit({ children }: { children: ReactNode }) {
+  return (
+    <div className="relative">
+      {children}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground"
+      >
+        min
+      </span>
+    </div>
+  )
+}
 
 const EMPTY_VALUES: SettingsFormValues = {
   workDayStart: '09:00',
@@ -116,10 +133,12 @@ export function SettingsForm() {
         </Alert>
       ) : null}
       {preferences?.persisted === false ? (
-          <p className="text-sm text-muted-foreground">Defaults apply until saved</p>
+          <Alert>
+            <AlertDescription>Defaults apply until saved</AlertDescription>
+          </Alert>
         ) : null}
 
-        <section aria-labelledby="settings-work-window" className="flex flex-col gap-4">
+        <section aria-labelledby="settings-work-window" className={SECTION_CARD}>
           <h2 id="settings-work-window" className="text-base font-semibold">
             Work window
           </h2>
@@ -148,13 +167,15 @@ export function SettingsForm() {
             </Field>
             <Field label="Trailing buffer" name="bufferMinutes" error={form.formState.errors.bufferMinutes?.message} apiError={saveMutation.error}>
               {(control) => (
-                <Input {...form.register('bufferMinutes')} {...control} inputMode="numeric" />
+                <WithMinutesUnit>
+                  <Input {...form.register('bufferMinutes')} {...control} inputMode="numeric" className="pr-12 text-right font-mono" />
+                </WithMinutesUnit>
               )}
             </Field>
           </div>
         </section>
 
-        <section aria-labelledby="settings-cadence" className="flex flex-col gap-4">
+        <section aria-labelledby="settings-cadence" className={SECTION_CARD}>
           <h2 id="settings-cadence" className="text-base font-semibold">
             Focus cadence
           </h2>
@@ -180,25 +201,31 @@ export function SettingsForm() {
               <>
                 <Field label="Focus session" name="targetFocusMinutes" error={form.formState.errors.targetFocusMinutes?.message} apiError={saveMutation.error}>
                   {(control) => (
-                    <Input {...form.register('targetFocusMinutes')} {...control} inputMode="numeric" />
+                    <WithMinutesUnit>
+                      <Input {...form.register('targetFocusMinutes')} {...control} inputMode="numeric" className="pr-12 text-right font-mono" />
+                    </WithMinutesUnit>
                   )}
                 </Field>
                 <Field label="Cadence break" name="breakMinutes" error={form.formState.errors.breakMinutes?.message} apiError={saveMutation.error}>
                   {(control) => (
-                    <Input {...form.register('breakMinutes')} {...control} inputMode="numeric" />
+                    <WithMinutesUnit>
+                      <Input {...form.register('breakMinutes')} {...control} inputMode="numeric" className="pr-12 text-right font-mono" />
+                    </WithMinutesUnit>
                   )}
                 </Field>
               </>
             ) : null}
             <Field label="Minimum session" name="minSessionMinutes" error={form.formState.errors.minSessionMinutes?.message} apiError={saveMutation.error}>
               {(control) => (
-                <Input {...form.register('minSessionMinutes')} {...control} inputMode="numeric" />
+                <WithMinutesUnit>
+                  <Input {...form.register('minSessionMinutes')} {...control} inputMode="numeric" className="pr-12 text-right font-mono" />
+                </WithMinutesUnit>
               )}
             </Field>
           </div>
         </section>
 
-        <section aria-labelledby="settings-peak" className="flex flex-col gap-4">
+        <section aria-labelledby="settings-peak" className={SECTION_CARD}>
           <h2 id="settings-peak" className="text-base font-semibold">
             Peak window
           </h2>
@@ -231,7 +258,7 @@ export function SettingsForm() {
           </div>
         </section>
 
-        <section aria-labelledby="settings-fixed-breaks" className="flex flex-col gap-4">
+        <section aria-labelledby="settings-fixed-breaks" className={SECTION_CARD}>
           <div className="flex items-center justify-between gap-2">
             <h2 id="settings-fixed-breaks" className="text-base font-semibold">
               Fixed breaks
@@ -297,7 +324,7 @@ export function SettingsForm() {
             ))
           )}
         </section>
-        <section aria-labelledby="settings-days" className="flex flex-col gap-4">
+        <section aria-labelledby="settings-days" className={SECTION_CARD}>
           <h2 id="settings-days" className="text-base font-semibold">
             Working days
           </h2>
@@ -308,9 +335,12 @@ export function SettingsForm() {
             control={form.control}
             name="workingDays"
             render={({ field }) => (
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex flex-wrap gap-2">
                 {DAY_OF_WEEK_ORDER.map((day: DayOfWeek) => (
-                  <label key={day} className="flex items-center gap-2 text-sm font-medium">
+                  <label
+                    key={day}
+                    className="inline-flex cursor-pointer items-center rounded-md border border-border px-3 py-1.5 text-sm font-medium has-[:checked]:border-primary has-[:checked]:bg-primary/10 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50"
+                  >
                     <input
                       type="checkbox"
                       value={day}
@@ -321,7 +351,7 @@ export function SettingsForm() {
                           : field.value.filter((selected) => selected !== day)
                         field.onChange(DAY_OF_WEEK_ORDER.filter((d) => next.includes(d)))
                       }}
-                      className="size-4 accent-primary"
+                      className="sr-only"
                     />
                     {DAY_OF_WEEK_LABELS[day]}
                   </label>
@@ -330,7 +360,10 @@ export function SettingsForm() {
             )}
           />
         </section>
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          <span className="mr-auto text-sm text-muted-foreground">
+            {form.formState.isDirty ? 'Unsaved changes' : null}
+          </span>
           <Button
             type="button"
             variant="ghost"

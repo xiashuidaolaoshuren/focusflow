@@ -223,7 +223,7 @@ No Spring or JPA dependencies (enforced by ArchUnit). Consumed by plan generatio
 | `DailyPlan` / `DailyPlanRevision` / `DailyPlanTask` / `DailyPlanBlock` | Aggregate: revisions, each holding its ranked task snapshots and ordered scheduled blocks |
 | `DailyPlanRepository` | Owner-scoped reads: projection queries for paged summaries; detail loads revisions with their tasks and blocks |
 
-**Summary vs detail:** History list endpoints return `DailyPlanSummaryResponse` via repository projections (`scheduledWorkMinutes`, `workSessionCount`, `scheduledTaskCount`, `unplacedWorkCount`, `hasWarning`, `hasProgress`, `needsRefresh`) without loading blocks. Detail, generate, by-date, and re-plan load the full graph for `DailyPlanResponse`, whose top-level metrics and `blocks` come from the latest revision.
+**Summary vs detail:** History list endpoints return `DailyPlanSummaryResponse`. The counts and flags (`scheduledTaskCount`, `unplacedWorkCount`, `hasWarning`, `hasShortfall`, `hasProgress`, `needsRefresh`) come from repository projections without loading blocks. `scheduledWorkMinutes` and `workSessionCount` are the composed-rail totals (`DailyPlanResponseMapper.composedWorkTotals`), so the page loads its own plans' revisions and blocks in one query to match plan detail's Focus and Sessions. Detail, generate, by-date, and re-plan load the full graph for `DailyPlanResponse`, whose top-level metrics and `blocks` come from the latest revision.
 
 **Generate flow** (the main orchestration):
 

@@ -133,7 +133,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </div>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-30 flex h-[52px] items-center gap-2 border-b border-border bg-background px-3 md:hidden">
           <MobileMenuButton />
           <Link
@@ -152,7 +152,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
         <div
           id="main-content"
           tabIndex={-1}
-          className="flex w-full max-w-[1376px] flex-1 flex-col px-4 pt-6 pb-12 md:px-8"
+          className="mx-auto flex w-full max-w-[1376px] flex-1 flex-col px-4 pt-6 pb-12 md:px-8"
         >
           {children ?? <Outlet />}
         </div>
