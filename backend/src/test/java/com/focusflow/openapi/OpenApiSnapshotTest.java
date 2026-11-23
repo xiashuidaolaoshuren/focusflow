@@ -49,6 +49,24 @@ class OpenApiSnapshotTest {
 	private MockMvc mockMvc;
 
 	@Test
+	void horizonCurrentTimeQueryParameterIsLocalTimeString() throws Exception {
+		OpenAPI doc = fetchOpenApiDocument();
+		var horizonPath = doc.getPaths().get("/api/horizon");
+		assertThat(horizonPath).isNotNull();
+		var operation = horizonPath.getGet();
+		assertThat(operation).isNotNull();
+		var currentTimeParam =
+				operation.getParameters().stream()
+						.filter(p -> "currentTime".equals(p.getName()) && "query".equals(p.getIn()))
+						.findFirst()
+						.orElseThrow();
+		var schema = currentTimeParam.getSchema();
+		assertThat(schema.getType()).isEqualTo("string");
+		assertThat(schema.getExample()).isEqualTo("09:00:00");
+		assertThat(schema.getFormat()).isNull();
+	}
+
+	@Test
 	void generatedSnapshotMatchesCommitted() throws Exception {
 		String generated = normalizeToYaml(fetchOpenApiDocument());
 

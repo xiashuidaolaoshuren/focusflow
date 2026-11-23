@@ -67,7 +67,7 @@ public class BlockProgressService {
 		if (crossing) {
 			requireReconciliationInputs(request);
 		} else {
-			requireValidActualMinutes(request);
+			requireValidActualMinutes(request, request.finish() && isCrossing(plan, block, request.cutoff()));
 		}
 		requireMatchingProgressVersion(block, request.expectedProgressVersion());
 		boolean correction = block.getOutcome() != null;
@@ -273,7 +273,11 @@ public class BlockProgressService {
 		return outcome == WorkOutcome.DONE || outcome == WorkOutcome.PARTLY_DONE;
 	}
 
-	private static void requireValidActualMinutes(BlockProgressRequest request) {
+	private static void requireValidActualMinutes(BlockProgressRequest request, boolean crossingFinish) {
+		if (request.outcome() == WorkOutcome.DONE && request.actualMinutes() != null
+				&& (request.actualMinutes() < 0 || (request.actualMinutes() == 0 && !crossingFinish))) {
+			throw new BadRequestException("done requires positive actual minutes when provided");
+		}
 		if (request.outcome() == WorkOutcome.PARTLY_DONE
 				&& (request.actualMinutes() == null || request.actualMinutes() <= 0)) {
 			throw new BadRequestException("partly done requires positive actual minutes");

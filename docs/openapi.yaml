@@ -1333,7 +1333,7 @@ paths:
         name: "currentTime"
         required: false
         schema:
-          format: "date-time"
+          example: "09:00:00"
           type: "string"
       responses:
         "200":

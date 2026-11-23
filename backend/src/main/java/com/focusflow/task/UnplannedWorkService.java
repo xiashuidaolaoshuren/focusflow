@@ -55,7 +55,10 @@ public class UnplannedWorkService {
 		Long ownerId = currentUser.getCurrentUser().id();
 		ownerSchedulingLock.lockCurrentOwner();
 		UnplannedWork entry = loadEntry(ownerId, entryId);
-		Task task = loadTask(ownerId, request.taskId());
+		if (!entry.getSourceTaskId().equals(request.taskId())) {
+			throw new BadRequestException("task id cannot be changed");
+		}
+		Task task = loadTask(ownerId, entry.getSourceTaskId());
 		requireValidCreate(request);
 		requireMatchingEffortVersion(task, request.effortVersion());
 		requireStoredWorkDate(entry, request);
@@ -77,6 +80,11 @@ public class UnplannedWorkService {
 		Task task = loadTask(ownerId, request.taskId());
 		requireValidCreate(request);
 		requireMatchingEffortVersion(task, request.effortVersion());
+		if (!request.finish() && request.checkpoint() != null
+				&& request.checkpoint().remainingEffortMinutes() != null
+				&& request.checkpoint().remainingEffortMinutes() <= 0) {
+			throw new BadRequestException("remaining effort must be positive or unknown");
+		}
 
 		UnplannedWork entry = newEntry(owner, task, request);
 		boolean shieldedByLaterCheckpoint = isShieldedByLaterCheckpoint(entry, task);
@@ -195,6 +203,9 @@ public class UnplannedWorkService {
 		}
 		if (request.currentDate() == null) {
 			throw new BadRequestException("current date is required");
+		}
+		if (request.workDate() == null) {
+			throw new BadRequestException("work date is required");
 		}
 		if (request.workDate().isAfter(request.currentDate())) {
 			throw new BadRequestException("FUTURE_ACTUAL", "work date is after the current date");

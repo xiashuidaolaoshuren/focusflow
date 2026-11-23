@@ -1009,7 +1009,7 @@ Record an outcome for one work block. A first save credits provisionally: `DONE`
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `outcome` | `WorkOutcome` | yes | `PARTLY_DONE` without positive `actualMinutes` → **400** |
-| `actualMinutes` | integer | no | Time spent; null means not recorded, which is not zero |
+| `actualMinutes` | integer | no | Ordinary Done requires a positive value when provided; null means unknown. A crossing reconciliation allows zero; a Done finish on a genuinely crossing block also allows zero |
 | `currentDate` | string (date) | yes | Client-supplied current date |
 | `expectedProgressVersion` | integer | no | Block's `progressVersion`; stale → **409** `PROGRESS_CONFLICT` |
 | `finish` | boolean | no | Finishes the task; wins over `cutoff` when both are sent |
@@ -1127,7 +1127,7 @@ Dated work credited to a task that was not on the rail. Create and correct credi
 
 ### `POST /api/unplanned-work`
 
-Creating an entry credits `actualMinutes` against the task's remaining effort and moves an `OPEN` task to `IN_PROGRESS`. A `finish` or a `checkpoint` replaces the remainder instead of subtracting.
+Creating an entry credits `actualMinutes` against the task's remaining effort and moves an `OPEN` task to `IN_PROGRESS`. A `finish` or a `checkpoint` replaces the remainder instead of subtracting. Without `finish`, an explicit checkpoint must be positive or null (unknown); zero or negative values return **400**.
 
 **Request body — `UnplannedWorkRequest`**
 
@@ -1153,7 +1153,7 @@ Creating an entry credits `actualMinutes` against the task's remaining effort an
 
 ### `PUT /api/unplanned-work/{id}`
 
-Correct an entry: same body as create. Minutes are delta-adjusted, and `workDate` must repeat the stored date (changing it → **400**), so the entry keeps its recorded order and an earlier-dated correction does not move later credit.
+Correct an entry: same body as create. `taskId` and `workDate` must match the stored entry (a mismatch → **400**). Minutes are delta-adjusted, and the entry keeps its recorded order, so an earlier-dated correction does not move later credit.
 
 **Responses**
 

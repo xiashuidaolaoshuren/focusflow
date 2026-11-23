@@ -100,6 +100,31 @@ class BlockProgressServiceTest {
 	}
 
 	@Test
+	void record_doneWithNonPositiveActual_rejectsWithoutChanges() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		for (int actual : new int[] {0, -1}) {
+			BlockProgressRequest request = new BlockProgressRequest(WorkOutcome.DONE, actual, PLAN_DATE, 0, false, null);
+			assertThatThrownBy(() -> service.record(PLAN_ID, BLOCK_ID, request))
+					.isInstanceOf(BadRequestException.class);
+			assertThat(block.getOutcome()).isNull();
+			assertThat(block.getActualMinutes()).isNull();
+			assertThat(block.getRecordedAt()).isNull();
+			assertThat(block.getProgressVersion()).isZero();
+			assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+		}
+	}
+
+	@Test
+	void record_crossingDoneFinishWithZeroActual_isAllowed() {
+		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
+		BlockProgressRequest request = new BlockProgressRequest(WorkOutcome.DONE, 0, PLAN_DATE, 0, true, null, LocalTime.of(9, 20));
+		service.record(PLAN_ID, BLOCK_ID, request);
+		assertThat(block.getActualMinutes()).isZero();
+		assertThat(task.getRemainingEffortMinutes()).isZero();
+		assertThat(task.getStatus()).isEqualTo(TaskStatus.DONE);
+	}
+
+	@Test
 	void record_doneCreditsPlannedDurationAndLeavesActualUnknown() {
 		stubOwnerAndPlan(planWithWorkBlock(LocalTime.of(9, 0), LocalTime.of(9, 50)));
 		BlockProgressRequest request =

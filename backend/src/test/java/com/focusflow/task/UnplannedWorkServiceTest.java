@@ -135,6 +135,26 @@ class UnplannedWorkServiceTest {
 	}
 
 	@Test
+	void create_whenWorkDateIsMissing_throwsBadRequestAndWritesNothing() {
+		stubOwnerAndTaskLookup();
+		assertThatThrownBy(() -> service.create(new UnplannedWorkRequest(TASK_ID, null, 10, WORK_DATE, 0, false, null)))
+				.isInstanceOf(BadRequestException.class);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+		verify(unplannedWorkRepository, never()).save(any());
+	}
+
+	@Test
+	void correct_whenWorkDateIsMissing_throwsBadRequestAndWritesNothing() {
+		UnplannedWork entry = savedEntry(35);
+		stubOwnerTaskAndEntryLookup(entry);
+		assertThatThrownBy(() -> service.correct(entry.getId(), new UnplannedWorkRequest(TASK_ID, null, 10, WORK_DATE, 0, false, null)))
+				.isInstanceOf(BadRequestException.class);
+		assertThat(entry.getActualMinutes()).isEqualTo(35);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+		verify(unplannedWorkRepository, never()).save(any());
+	}
+
+	@Test
 	void create_whenCurrentDateIsMissing_throwsBadRequestAndWritesNothing() {
 		stubOwnerAndTaskLookup();
 
@@ -261,6 +281,22 @@ class UnplannedWorkServiceTest {
 	}
 
 	@Test
+	void create_withNonPositiveCheckpoint_rejectsWithoutChanges() {
+		stubOwnerAndTaskLookup();
+		for (int remaining : new int[] {0, -1}) {
+			assertThatThrownBy(() -> service.create(new UnplannedWorkRequest(TASK_ID, WORK_DATE, 10, WORK_DATE, 0, false,
+					new UnplannedWorkRequest.Checkpoint(remaining))))
+					.isInstanceOf(BadRequestException.class);
+			assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+			assertThat(task.getStatus()).isEqualTo(TaskStatus.OPEN);
+			assertThat(task.getEffortVersion()).isZero();
+		}
+		verify(taskRepository, never()).save(any());
+		verify(unplannedWorkRepository, never()).save(any());
+		verify(taskService, never()).recordRemainingEffortCheckpoint(any(), any(), any());
+	}
+
+	@Test
 	void create_withCheckpoint_replacesRemainderWithoutCreditingMinutes() {
 		stubOwnerAndTask();
 		when(unplannedWorkRepository.save(any(UnplannedWork.class)))
@@ -316,6 +352,29 @@ class UnplannedWorkServiceTest {
 		assertThat(task.getStatus()).isEqualTo(TaskStatus.OPEN);
 		verify(unplannedWorkRepository, never()).save(any(UnplannedWork.class));
 		verify(taskRepository, never()).save(task);
+	}
+
+	@Test
+	void correct_whenTaskIdDiffers_rejectsWithoutChangingEitherTask() {
+		UnplannedWork entry = savedEntry(35);
+		Task other = TaskTestBuilder.task(owner).withTitle("Other").withEstimatedMinutes(100).build();
+		other.setRemainingEffortMinutes(100);
+		ReflectionTestUtils.setField(other, "id", 8L);
+		when(currentUser.getCurrentUser()).thenReturn(new UserContext(OWNER_ID, "owner@example.com", "owner"));
+		when(ownerSchedulingLock.lockCurrentOwner()).thenReturn(owner);
+		when(unplannedWorkRepository.findByOwner_IdAndId(OWNER_ID, entry.getId())).thenReturn(Optional.of(entry));
+		org.mockito.Mockito.lenient().when(taskRepository.findByOwner_IdAndId(OWNER_ID, 8L)).thenReturn(Optional.of(other));
+
+		assertThatThrownBy(() -> service.correct(entry.getId(),
+				new UnplannedWorkRequest(8L, WORK_DATE, 50, WORK_DATE, 0, false, null)))
+				.isInstanceOf(BadRequestException.class);
+		assertThat(entry.getActualMinutes()).isEqualTo(35);
+		assertThat(task.getRemainingEffortMinutes()).isEqualTo(100);
+		assertThat(other.getRemainingEffortMinutes()).isEqualTo(100);
+		assertThat(other.getEffortVersion()).isZero();
+		verify(taskRepository, never()).findByOwner_IdAndId(OWNER_ID, 8L);
+		verify(taskRepository, never()).save(any());
+		verify(unplannedWorkRepository, never()).save(any());
 	}
 
 	@Test
