@@ -89,6 +89,28 @@ class TaskControllerTest {
 
 	@Test
 	@WithMockUser
+	void create_withTitleLongerThan255_returns400WithDetails() throws Exception {
+		String title256 = "T".repeat(256);
+		mockMvc.perform(
+					post("/api/tasks")
+							.with(csrf())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(
+									"""
+									{
+									  "title": "%s"
+									}
+									""".formatted(title256)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.path").value("/api/tasks"))
+				.andExpect(jsonPath("$.details.title").isArray());
+
+		verify(taskService, never()).create(any(CreateTaskRequest.class));
+	}
+
+	@Test
+	@WithMockUser
 	void create_withNonPositiveEstimatedMinutes_returns400WithDetails() throws Exception {
 		mockMvc.perform(
 						post("/api/tasks")
@@ -277,6 +299,28 @@ class TaskControllerTest {
 										  "title": ""
 										}
 										"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.status").value(400))
+				.andExpect(jsonPath("$.path").value("/api/tasks/1"))
+				.andExpect(jsonPath("$.details.title").isArray());
+
+		verify(taskService, never()).updateForCurrentUser(any(Long.class), any(UpdateTaskRequest.class));
+	}
+
+	@Test
+	@WithMockUser
+	void update_withTitleLongerThan255_returns400WithDetails() throws Exception {
+		String title256 = "T".repeat(256);
+		mockMvc.perform(
+					put("/api/tasks/1")
+							.with(csrf())
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(
+									"""
+									{
+									  "title": "%s"
+									}
+									""".formatted(title256)))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.status").value(400))
 				.andExpect(jsonPath("$.path").value("/api/tasks/1"))

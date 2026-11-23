@@ -73,10 +73,10 @@ export function PlanHealth({
               </p>
             </InfoPopover>
           </AlertTitle>
-          <AlertDescription>
-            <ul className="flex flex-col gap-1">
+          <AlertDescription className="min-w-0">
+            <ul className="flex min-w-0 flex-col gap-1">
               {health.shortfall.rows.map((row) => (
-                <li key={row.title}>
+                <li key={row.title} className="min-w-0 truncate">
                   {row.title} &middot; {row.placed} of {row.total}m placed
                 </li>
               ))}

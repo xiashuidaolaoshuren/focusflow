@@ -135,7 +135,8 @@ components:
           - "HIGH"
           type: "string"
         title:
-          minLength: 1
+          maxLength: 255
+          minLength: 0
           type: "string"
       type: "object"
     DailyPlanResponse:
@@ -927,7 +928,8 @@ components:
           - "CANCELLED"
           type: "string"
         title:
-          minLength: 1
+          maxLength: 255
+          minLength: 0
           type: "string"
       type: "object"
     UserResponse:

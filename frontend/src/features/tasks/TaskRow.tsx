@@ -120,7 +120,7 @@ export function TaskRow({
   const titleButton = (
     <button
       type="button"
-      className="task-title text-left text-sm font-medium outline-hidden hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className="task-title block max-w-full min-w-0 truncate text-left text-sm font-medium outline-hidden hover:underline hover:underline-offset-2 focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-ring"
       onClick={() => onEdit(task)}
     >
       {task.title}
@@ -194,7 +194,7 @@ export function TaskRow({
       <td className="w-7 px-3 py-2">
         <PriorityFlag priority={task.priority} />
       </td>
-      <td className="px-3 py-2">
+      <td className="max-w-0 overflow-hidden px-3 py-2">
         {titleButton}
         {waiting != null ? (
           <p className="flex items-center gap-1 text-xs text-muted-foreground">

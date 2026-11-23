@@ -555,7 +555,7 @@ Create task.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `title` | string | yes | Not blank |
+| `title` | string | yes | Not blank, max 255 |
 | `description` | string | no | |
 | `priority` | `TaskPriority` | no | Default `MEDIUM` |
 | `dueDate` | string (date) | no | `YYYY-MM-DD` |
@@ -606,7 +606,7 @@ Update task.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `title` | string | yes | Not blank |
+| `title` | string | yes | Not blank, max 255 |
 | `description` | string | no | |
 | `priority` | `TaskPriority` | no | Default `MEDIUM` if omitted |
 | `status` | `TaskStatus` | no | Default `OPEN` if omitted |
