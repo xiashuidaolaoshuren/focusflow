@@ -23,11 +23,7 @@ import { StatsStrip } from '@/features/plans/StatsStrip'
 import { WorkSessions } from '@/features/plans/WorkSessions'
 import { usePlanByDate } from '@/features/plans/hooks'
 import { useRegeneratePrompt } from '@/features/plans/regeneratePrompt'
-import {
-  buildRail,
-  toMinutes,
-  type Density,
-} from '@/features/plans/railModel'
+import { buildRail, type Density } from '@/features/plans/railModel'
 import { todayStats } from '@/features/plans/todayStats'
 import { useReplanPlan } from '@/features/plans/useReplanPlan'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
@@ -42,6 +38,7 @@ import {
   isPastPlanningDate,
   nextPlanningDate,
   resolvePlanningDate,
+  toClockMinutes,
 } from '@/lib/planningDate'
 import { cn } from '@/lib/utils'
 import type { TaskResponse, WorkBlockResponse } from '@/types/api'
@@ -120,7 +117,7 @@ export function TodayPage() {
     [horizon],
   )
   const [nowMinutes, setNowMinutes] = useState(() =>
-    toMinutes(getLocalTimeString()),
+    toClockMinutes(getLocalTimeString()),
   )
   const stats = todayStats(plan, planDate, today, nowMinutes)
   const rail =
@@ -156,7 +153,7 @@ export function TodayPage() {
       return
     }
     const id = setInterval(() => {
-      setNowMinutes(toMinutes(getLocalTimeString()))
+      setNowMinutes(toClockMinutes(getLocalTimeString()))
     }, CLOCK_TICK_MS)
     return () => clearInterval(id)
   }, [planDate, today])
@@ -212,11 +209,15 @@ export function TodayPage() {
   const noPlanCard = (
     <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-input bg-card p-6 text-center">
       <CalendarDaysIcon className="size-5 text-muted-foreground" aria-hidden="true" />
-      <p className="font-display text-lg leading-7 font-medium">No Daily plan yet</p>
-      <p className="text-sm text-muted-foreground">
-        Generate a plan to place today&rsquo;s work on the rail.
+      <p className="font-display text-lg leading-7 font-medium">
+        {readOnly ? 'No plan for this day' : 'No Daily plan yet'}
       </p>
-      <GenerateButton planDate={planDate} />
+      <p className="text-sm text-muted-foreground">
+        {readOnly
+          ? 'This day has passed, so it is read-only.'
+          : 'Generate a plan to place today’s work on the rail.'}
+      </p>
+      {readOnly ? null : <GenerateButton planDate={planDate} />}
     </div>
   )
 

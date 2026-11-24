@@ -1,4 +1,5 @@
 import { labelledBlock, toBlockTime } from '@/features/plans/blockFactory'
+import { toClockMinutes } from '@/lib/planningDate'
 import type {
   CommitmentResponse,
   DailyPlanResponse,
@@ -15,10 +16,6 @@ export type PlanlessRailPlan = Pick<
   'composedRail' | 'windowStart' | 'windowEnd' | 'peakStart' | 'peakEnd'
 >
 
-function toMinutes(time: string): number {
-  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
-  return (hours ?? 0) * 60 + (minutes ?? 0)
-}
 
 /**
  * The rail a day shows before it has a plan: the work window, fixed breaks, the trailing
@@ -28,14 +25,14 @@ export function planlessRailPlan(
   preferences: PlanlessPreferences,
   commitments: CommitmentResponse[],
 ): PlanlessRailPlan {
-  const windowStart = toMinutes(preferences.workDayStart)
-  const windowEnd = toMinutes(preferences.workDayEnd)
+  const windowStart = toClockMinutes(preferences.workDayStart)
+  const windowEnd = toClockMinutes(preferences.workDayEnd)
 
   const blocks = preferences.fixedBreaks.map((fixedBreak, index) =>
     labelledBlock(
       'FIXED_BREAK',
-      toMinutes(fixedBreak.startTime),
-      toMinutes(fixedBreak.endTime),
+      toClockMinutes(fixedBreak.startTime),
+      toClockMinutes(fixedBreak.endTime),
       fixedBreak.label.trim() === '' ? 'Fixed break' : fixedBreak.label.trim(),
       index + 1,
     ),
@@ -45,8 +42,8 @@ export function planlessRailPlan(
       // Negative ids keep a commitment from ever sharing an id with a break or the buffer.
       labelledBlock(
         'COMMITMENT',
-        toMinutes(commitment.startTime),
-        toMinutes(commitment.endTime),
+        toClockMinutes(commitment.startTime),
+        toClockMinutes(commitment.endTime),
         commitment.title,
         -commitment.id,
       ),
@@ -63,14 +60,14 @@ export function planlessRailPlan(
       ),
     )
   }
-  blocks.sort((left, right) => toMinutes(left.startTime) - toMinutes(right.startTime))
+  blocks.sort((left, right) => toClockMinutes(left.startTime) - toClockMinutes(right.startTime))
 
   return {
     composedRail: blocks,
     windowStart: toBlockTime(windowStart),
     windowEnd: toBlockTime(windowEnd),
     peakStart:
-      preferences.peakStart == null ? null : toBlockTime(toMinutes(preferences.peakStart)),
-    peakEnd: preferences.peakEnd == null ? null : toBlockTime(toMinutes(preferences.peakEnd)),
+      preferences.peakStart == null ? null : toBlockTime(toClockMinutes(preferences.peakStart)),
+    peakEnd: preferences.peakEnd == null ? null : toBlockTime(toClockMinutes(preferences.peakEnd)),
   }
 }

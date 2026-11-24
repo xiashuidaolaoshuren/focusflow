@@ -1,5 +1,6 @@
 import { parseScheduledBlock } from '@/features/plans/blocks'
 import { formatClock } from '@/lib/format'
+import { toClockMinutes } from '@/lib/planningDate'
 import type {
   BlockKind,
   DailyPlanResponse,
@@ -67,11 +68,6 @@ export type Rail = {
   totalPx: number
 }
 
-export function toMinutes(time: string): number {
-  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
-  return (hours ?? 0) * 60 + (minutes ?? 0)
-}
-
 function outcomeView(
   block: ScheduledBlockResponse,
   startMinutes: number,
@@ -129,8 +125,8 @@ export function buildRail(
   density: Density,
 ): Rail {
   const ppm = PX_PER_MINUTE[density]
-  const windowStart = toMinutes(plan.windowStart)
-  const windowEnd = toMinutes(plan.windowEnd)
+  const windowStart = toClockMinutes(plan.windowStart)
+  const windowEnd = toClockMinutes(plan.windowEnd)
   const nowVisible =
     nowMinutes != null && nowMinutes >= windowStart && nowMinutes <= windowEnd
 
@@ -149,8 +145,8 @@ export function buildRail(
   const peak =
     plan.peakStart != null && plan.peakEnd != null
       ? {
-          topPx: (toMinutes(plan.peakStart) - windowStart) * ppm,
-          heightPx: (toMinutes(plan.peakEnd) - toMinutes(plan.peakStart)) * ppm,
+          topPx: (toClockMinutes(plan.peakStart) - windowStart) * ppm,
+          heightPx: (toClockMinutes(plan.peakEnd) - toClockMinutes(plan.peakStart)) * ppm,
         }
       : null
 
@@ -172,8 +168,8 @@ export function buildRail(
     nowLabel: nowVisible ? clockFromMinutes(nowMinutes) : null,
     blocks: plan.composedRail.map((raw) => {
       const block = parseScheduledBlock(raw)
-      const start = toMinutes(block.startTime)
-      const end = toMinutes(block.endTime)
+      const start = toClockMinutes(block.startTime)
+      const end = toClockMinutes(block.endTime)
       const range = `${formatClock(block.startTime)}\u2013${formatClock(block.endTime)}`
       const title =
         block.kind === 'WORK' ? block.taskSnapshot.title : block.label

@@ -4,6 +4,7 @@ import {
   getLocalMinuteString,
   isPastPlanningDate,
   nextPlanningDate,
+  toClockMinutes,
 } from '@/lib/planningDate'
 
 describe('planning date steps', () => {
@@ -16,6 +17,17 @@ describe('planning date steps', () => {
     expect(isPastPlanningDate('2026-11-14', '2026-11-15')).toBe(true)
     expect(isPastPlanningDate('2026-11-15', '2026-11-15')).toBe(false)
     expect(isPastPlanningDate('2026-11-16', '2026-11-15')).toBe(false)
+  })
+})
+
+describe('toClockMinutes', () => {
+  it('reads an API clock and drops its seconds', () => {
+    expect(toClockMinutes('09:05:30')).toBe(545)
+    expect(toClockMinutes('00:00')).toBe(0)
+  })
+
+  it('treats a missing component as zero', () => {
+    expect(toClockMinutes('9')).toBe(540)
   })
 })
 

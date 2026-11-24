@@ -1,4 +1,5 @@
 import { labelledBlock, toBlockTime } from '@/features/plans/blockFactory'
+import { toClockMinutes } from '@/lib/planningDate'
 import type {
   DailyPlanResponse,
   ScheduledBlockResponse,
@@ -47,10 +48,6 @@ export type TypicalDayResult = {
 
 type Draft = { kind: BlockKind; start: number; end: number; label: string | null }
 
-function toMinutes(time: string): number {
-  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
-  return (hours ?? 0) * 60 + (minutes ?? 0)
-}
 
 function toBlock(draft: Draft, id: number, session: { index: number; count: number } | null): ScheduledBlockResponse {
   if (draft.kind === 'WORK') {
@@ -75,8 +72,8 @@ function toBlock(draft: Draft, id: number, session: { index: number; count: numb
 }
 
 export function typicalDay(input: TypicalDayInput): TypicalDayResult | null {
-  const start = toMinutes(input.workDayStart)
-  const workEnd = toMinutes(input.workDayEnd)
+  const start = toClockMinutes(input.workDayStart)
+  const workEnd = toClockMinutes(input.workDayEnd)
   if (workEnd <= start) {
     return null
   }
@@ -84,8 +81,8 @@ export function typicalDay(input: TypicalDayInput): TypicalDayResult | null {
   const breaks = input.fixedBreaks
     .map((fixed) => ({
       kind: 'FIXED_BREAK' as const,
-      start: toMinutes(fixed.startTime),
-      end: toMinutes(fixed.endTime),
+      start: toClockMinutes(fixed.startTime),
+      end: toClockMinutes(fixed.endTime),
       label: fixed.label.trim() === '' ? 'Fixed break' : fixed.label.trim(),
     }))
     .sort((a, b) => a.start - b.start)
@@ -142,9 +139,9 @@ export function typicalDay(input: TypicalDayInput): TypicalDayResult | null {
     plan: {
       composedRail,
       windowStart: toBlockTime(start),
-      windowEnd: toBlockTime(toMinutes(input.workDayEnd)),
-      peakStart: input.peakStart ? toBlockTime(toMinutes(input.peakStart)) : null,
-      peakEnd: input.peakEnd ? toBlockTime(toMinutes(input.peakEnd)) : null,
+      windowEnd: toBlockTime(toClockMinutes(input.workDayEnd)),
+      peakStart: input.peakStart ? toBlockTime(toClockMinutes(input.peakStart)) : null,
+      peakEnd: input.peakEnd ? toBlockTime(toClockMinutes(input.peakEnd)) : null,
     },
     focusMinutes: workDrafts.reduce((total, draft) => total + (draft.end - draft.start), 0),
     sessions: workDrafts.length,

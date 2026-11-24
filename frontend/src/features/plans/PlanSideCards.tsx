@@ -35,14 +35,25 @@ function unplacedReasonText(entry: UnplacedWorkResponse, snapshotTitles: Map<num
   return UNPLACED_REASON_TEXT[entry.reason]
 }
 
+type PlanSideCardsProps = {
+  plan: DailyPlanResponse
+  /** The selected revision's unplaced rows; defaults to the plan's latest list. */
+  unplacedWork?: UnplacedWorkResponse[]
+  /** Titles for the selected view; defaults to the plan-wide index. */
+  snapshotTitles?: Map<number, SnapshotTitleInfo>
+}
+
 /** Unplanned work (recorded outside the plan) and unplaced work (did not fit), for a saved plan. */
-export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
+export function PlanSideCards({
+  plan,
+  unplacedWork = plan.unplacedWork,
+  snapshotTitles = indexSnapshotTitles(plan),
+}: PlanSideCardsProps) {
   const { tasks } = useTasks()
   const { mutate: deleteUnplannedWork, isPending: isDeleting } =
     useDeleteUnplannedWork()
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [logging, setLogging] = useState(false)
-  const snapshotTitles = indexSnapshotTitles(plan)
 
   function handleDelete(entryId: number) {
     const entry = plan.unplannedWork.find((item) => item.id === entryId)
@@ -111,9 +122,9 @@ export function PlanSideCards({ plan }: { plan: DailyPlanResponse }) {
         <h2 id="unplaced-work-title" className="px-4 py-3 text-base font-semibold">
           Unplaced work
         </h2>
-        {plan.unplacedWork.length > 0 ? (
+        {unplacedWork.length > 0 ? (
           <ul className="border-t border-border">
-            {plan.unplacedWork.map((entry) => (
+            {unplacedWork.map((entry) => (
               <li
                 key={`${entry.reason}-${entry.taskSnapshot.sourceTaskId}`}
                 className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-sm first:border-t-0"

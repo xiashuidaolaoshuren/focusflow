@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
-import { fireEvent, screen, waitFor } from '@testing-library/dom'
+import { fireEvent, screen, waitFor, within } from '@testing-library/dom'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { plansListQueryPrefix } from '@/lib/query'
-import { samplePlan } from '@/features/plans/planFixtures'
+import {
+  samplePlan,
+  sampleTaskSnapshot,
+  sampleWorkBlock,
+} from '@/features/plans/planFixtures'
 import { PlanDetailPage } from '@/routes/PlanDetailPage'
 import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
@@ -227,6 +231,115 @@ describe('PlanDetailPage', () => {
 
     expect(screen.getByRole('heading', { name: /work sessions/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /not recorded/i })).toBeInTheDocument()
+  })
+
+  it('shows the selected revision’s unplaced work, including an empty revision', () => {
+    const latestUnplaced = {
+      reason: 'OUT_OF_TIME' as const,
+      unplacedMinutes: 30,
+      blockerSourceTaskIds: [],
+      taskSnapshot: { ...sampleTaskSnapshot, sourceTaskId: 13, title: 'Latest overflow' },
+    }
+    mockedUsePlan.mockReturnValue({
+      plan: {
+        ...samplePlan,
+        unplacedWork: [latestUnplaced],
+        revisions: [
+          { ...samplePlan.revisions[0]!, id: 1, revisionNumber: 1, unplacedWork: [] },
+          {
+            ...samplePlan.revisions[0]!,
+            id: 2,
+            revisionNumber: 2,
+            unplacedWork: [latestUnplaced],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>)
+
+    renderPlanDetailPage()
+
+    expect(screen.getByText('Latest overflow')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
+
+    expect(screen.queryByText('Latest overflow')).toBeNull()
+    const unplacedCard = screen
+      .getByRole('heading', { name: 'Unplaced work' })
+      .closest('section') as HTMLElement
+    expect(within(unplacedCard).getByText('None')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /rev 2/i }))
+
+    expect(screen.getByText('Latest overflow')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /current/i }))
+
+    expect(screen.getByText('Latest overflow')).toBeInTheDocument()
+  })
+
+  it('names historical blockers from the selected revision’s own snapshots', () => {
+    const oldDependent = {
+      reason: 'BLOCKED' as const,
+      unplacedMinutes: 60,
+      blockerSourceTaskIds: [20],
+      taskSnapshot: { ...sampleTaskSnapshot, sourceTaskId: 15, title: 'Historical dependent' },
+    }
+    const oldBlocker = {
+      reason: 'BLOCKED' as const,
+      unplacedMinutes: 30,
+      blockerSourceTaskIds: [],
+      taskSnapshot: { ...sampleTaskSnapshot, sourceTaskId: 20, title: 'Old blocker name' },
+    }
+    const newDependent = {
+      ...oldDependent,
+      taskSnapshot: { ...oldDependent.taskSnapshot, title: 'Current dependent' },
+    }
+    const newBlockerBlock = {
+      ...sampleWorkBlock,
+      id: 701,
+      taskSnapshot: { ...sampleTaskSnapshot, sourceTaskId: 20, title: 'New blocker name' },
+    }
+    mockedUsePlan.mockReturnValue({
+      plan: {
+        ...samplePlan,
+        blocks: [newBlockerBlock],
+        composedRail: [newBlockerBlock],
+        unplacedWork: [newDependent],
+        revisions: [
+          {
+            ...samplePlan.revisions[0]!,
+            id: 1,
+            revisionNumber: 1,
+            blocks: [],
+            unplacedWork: [oldDependent, oldBlocker],
+          },
+          {
+            ...samplePlan.revisions[0]!,
+            id: 2,
+            revisionNumber: 2,
+            blocks: [newBlockerBlock],
+            unplacedWork: [newDependent],
+          },
+        ],
+      },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlan>)
+
+    renderPlanDetailPage()
+
+    expect(screen.getByText('Waiting on New blocker name')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('radio', { name: /rev 1/i }))
+
+    expect(screen.getByText('Waiting on Old blocker name')).toBeInTheDocument()
+    expect(screen.queryByText('Waiting on New blocker name')).toBeNull()
   })
 
   it('links to the cached planning date when a stale plan id returns 404', () => {

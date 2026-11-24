@@ -51,7 +51,7 @@ function RevisionOption({ value, label, checked, onSelect }: RevisionOptionProps
   return (
     <label
       className={`cursor-pointer rounded-md px-3 py-1 text-sm font-medium has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50 ${
-        checked ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+        checked ? 'bg-background text-foreground' : 'text-muted-foreground'
       }`}
     >
       <input

@@ -1,6 +1,6 @@
 import { planHealth } from '@/features/plans/planHealthModel'
 import { creditFor, plannedMinutes } from '@/features/plans/progressRules'
-import { toMinutes } from '@/features/plans/railModel'
+import { toClockMinutes } from '@/lib/planningDate'
 import type { DailyPlanResponse, WorkBlockResponse } from '@/types/api'
 
 export type TodayStats = {
@@ -31,7 +31,7 @@ function leftMinutes(
   }
   return Math.max(
     0,
-    toMinutes(block.endTime) - Math.max(toMinutes(block.startTime), nowMinutes),
+    toClockMinutes(block.endTime) - Math.max(toClockMinutes(block.startTime), nowMinutes),
   )
 }
 

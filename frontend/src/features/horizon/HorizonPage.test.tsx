@@ -237,6 +237,160 @@ describe('HorizonPage', () => {
     expect(screen.queryByRole('heading', { name: '1 Jun 2026' })).toBeNull()
   })
 
+  it('shows every deadline state as a glyph and a word in the mobile day list', () => {
+    setViewport(375)
+    const statuses = [
+      'ON_TRACK',
+      'AT_RISK',
+      'OVERDUE',
+      'CANNOT_FORECAST',
+      'BEYOND_HORIZON',
+    ] as const
+    mockHorizon({
+      ...horizon,
+      days: [horizonDay0],
+      tasks: statuses.map((deadlineStatus, index) => ({
+        ...horizonTask0,
+        taskId: 30 + index,
+        title: `Deadline task ${index}`,
+        deadlineStatus,
+        unresolvedEffort:
+          deadlineStatus === 'CANNOT_FORECAST'
+            ? [{ taskId: 99, title: 'Sharpening' }]
+            : [],
+        segments: [{ ...horizonTask0.segments[0]! }],
+      })),
+    })
+
+    renderHorizonPage()
+
+    for (const label of [
+      'On track',
+      'At risk',
+      'Overdue',
+      "Can't forecast: Sharpening",
+      'Beyond horizon',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('toggles and replaces direct-blocker highlighting on mobile', () => {
+    setViewport(375)
+    const dayOneSegment = {
+      ...horizonTask0.segments[0]!,
+      date: '2026-06-02',
+      assumedCreditMinutes: null,
+    }
+    mockHorizon({
+      ...horizon,
+      tasks: [
+        {
+          ...horizonTask0,
+          taskId: 10,
+          title: 'Write report',
+          waitingOn: [{ taskId: 2, title: 'Blocker' }],
+          upstreamBlockers: [{ taskId: 3, title: 'Upstream' }],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 2,
+          title: 'Blocker',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [dayOneSegment],
+        },
+        {
+          ...horizonTask0,
+          taskId: 3,
+          title: 'Upstream',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 4,
+          title: 'Other dependent',
+          waitingOn: [{ taskId: 3, title: 'Upstream' }],
+          upstreamBlockers: [],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+      ],
+    })
+
+    renderHorizonPage()
+
+    const toggle = screen.getByRole('button', {
+      name: 'Highlight blockers of Write report',
+    })
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+    expect(screen.getByTestId('horizon-day-task-3-2026-06-01')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Highlight blockers of Other dependent' }),
+    )
+
+    expect(screen.getByTestId('horizon-day-task-3-2026-06-01')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+  })
+
+  it('names a direct blocker that has no day in the mobile day list', () => {
+    setViewport(375)
+    mockHorizon({
+      ...horizon,
+      tasks: [
+        {
+          ...horizonTask0,
+          waitingOn: [{ taskId: 2, title: 'Blocker' }],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 2,
+          title: 'Blocker',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [],
+        },
+      ],
+    })
+
+    renderHorizonPage()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Highlight blockers of Write report' }),
+    )
+
+    expect(
+      screen.getByText('Not scheduled this week: Blocker'),
+    ).toBeInTheDocument()
+  })
+
   it('renders saved and forecast headers with task rows and accessible segments', () => {
     mockedUseHorizon.mockReturnValue({
       horizon,

@@ -29,6 +29,12 @@ export function getLocalTimeString(date = new Date()): string {
   return `${hours}:${minutes}:${seconds}`
 }
 
+/** Minutes since midnight for an API clock value (`HH:mm` or `HH:mm:ss`), seconds dropped. */
+export function toClockMinutes(time: string): number {
+  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
+  return (hours ?? 0) * 60 + (minutes ?? 0)
+}
+
 /** The minute-aligned form of a clock value: `HH:mm:00`, seconds dropped. */
 export function getLocalMinuteString(date: Date | string = new Date()): string {
   const time = typeof date === 'string' ? date : getLocalTimeString(date)

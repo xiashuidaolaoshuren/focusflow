@@ -56,7 +56,7 @@ vi.mock('@/features/plans/OutcomeDialog', () => ({
 }))
 
 import { useCommitments } from '@/features/commitments/hooks'
-import { usePlanByDate } from '@/features/plans/hooks'
+import { useGeneratePlan, usePlanByDate } from '@/features/plans/hooks'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import {
   clearRegeneratePrompt,
@@ -287,7 +287,7 @@ describe('TodayPage', () => {
   it('offers one Generate inside the Day rail when the day has no plan', () => {
     mockPlan({ plan: null })
 
-    renderToday('/today?date=2026-11-06')
+    renderToday(`/today?date=${getLocalDateString()}`)
 
     const railSection = screen.getByRole('heading', { name: 'Day rail' }).closest('section')
     expect(railSection).not.toBeNull()
@@ -301,7 +301,7 @@ describe('TodayPage', () => {
     mockPlan({ plan: null })
     mockPreferences()
 
-    renderToday('/today?date=2026-11-06')
+    renderToday(`/today?date=${getLocalDateString()}`)
 
     const track = document.querySelector('[data-rail]') as HTMLElement | null
     expect(track).not.toBeNull()
@@ -311,15 +311,56 @@ describe('TodayPage', () => {
   it('offers Generate, an empty rail, and no plan health without a plan', () => {
     mockPlan({ plan: null })
 
-    renderToday('/today?date=2026-11-06')
+    renderToday(`/today?date=${getLocalDateString()}`)
 
     expect(screen.getByRole('button', { name: /generate/i })).toBeInTheDocument()
-    expect(screen.getByText('No Daily plan yet')).toBeInTheDocument()
+    expect(screen.getAllByText('No Daily plan yet').length).toBeGreaterThan(0)
     expect(screen.queryByText(/plan health/i)).toBeNull()
 
     const strip = screen.getByRole('region', { name: /today at a glance/i })
     expect(strip).toHaveTextContent(/planned focus/i)
     expect(strip).toHaveTextContent(/—/)
+  })
+
+  it('offers no Generate for an upcoming day without a plan', () => {
+    const mutate = vi.fn()
+    vi.mocked(useGeneratePlan).mockReturnValueOnce({
+      mutate,
+      isPending: false,
+    } as unknown as ReturnType<typeof useGeneratePlan>)
+    mockPlan({ plan: null })
+
+    renderToday('/today?date=2099-11-06')
+
+    fireEvent.click(screen.getByRole('button', { name: /generate/i }))
+
+    expect(mutate).toHaveBeenCalledWith(
+      { planDate: '2099-11-06' },
+      expect.anything(),
+    )
+  })
+
+  it('keeps a past day without a plan read-only on desktop and mobile', () => {
+    mockPlan({ plan: null })
+    mockPreferences()
+
+    const desktop = renderToday('/today?date=2000-01-14')
+
+    expect(screen.getByText('No plan for this day')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /generate/i })).toBeNull()
+
+    desktop.unmount()
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 390,
+    })
+
+    renderToday('/today?date=2000-01-14')
+
+    expect(screen.getByText('No plan for this day')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /generate/i })).toBeNull()
   })
 
   it('shows the stats and the rail, and offers Regenerate and Re-plan until an outcome exists', () => {

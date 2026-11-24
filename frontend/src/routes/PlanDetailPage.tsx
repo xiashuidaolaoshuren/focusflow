@@ -20,9 +20,17 @@ import { PlanDetailNotices } from '@/features/plans/PlanDetailNotices'
 import { PlanRevisionSwitch } from '@/features/plans/PlanRevisionSwitch'
 import { PlanSideCards } from '@/features/plans/PlanSideCards'
 import { WorkSessions } from '@/features/plans/WorkSessions'
-import { buildRail, toMinutes } from '@/features/plans/railModel'
+import { buildRail } from '@/features/plans/railModel'
+import { toClockMinutes } from '@/lib/planningDate'
 import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
-import { revisionBlocks } from '@/features/plans/revisionView'
+import {
+  indexRevisionSnapshotTitles,
+  type SnapshotTitleInfo,
+} from '@/features/plans/planSnapshotCopy'
+import {
+  revisionBlocks,
+  revisionUnplacedWork,
+} from '@/features/plans/revisionView'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { useDeletePlan, usePlan } from '@/features/plans/hooks'
 import { plansListQueryPrefix } from '@/lib/query'
@@ -156,6 +164,12 @@ export function PlanDetailPage() {
 
   const selectedBlocks =
     plan == null ? [] : revisionBlocks(plan, selectedRevisionId)
+  const selectedUnplacedWork =
+    plan == null ? [] : revisionUnplacedWork(plan, selectedRevisionId)
+  const selectedSnapshotTitles =
+    plan == null
+      ? new Map<number, SnapshotTitleInfo>()
+      : indexRevisionSnapshotTitles(plan, selectedRevisionId)
   const rail =
     plan == null
       ? null
@@ -166,7 +180,7 @@ export function PlanDetailPage() {
         )
   const workBlocks = selectedBlocks.filter((block) => block.kind === 'WORK')
   const focusMinutes = workBlocks.reduce(
-    (sum, block) => sum + toMinutes(block.endTime) - toMinutes(block.startTime),
+    (sum, block) => sum + toClockMinutes(block.endTime) - toClockMinutes(block.startTime),
     0,
   )
   const selectedRevision = plan?.revisions.find(
@@ -235,7 +249,13 @@ export function PlanDetailPage() {
           </section>
           <div className="flex flex-col gap-4">
             <WorkSessions blocks={selectedBlocks} />
-            {plan != null ? <PlanSideCards plan={plan} /> : null}
+            {plan != null ? (
+              <PlanSideCards
+                plan={plan}
+                unplacedWork={selectedUnplacedWork}
+                snapshotTitles={selectedSnapshotTitles}
+              />
+            ) : null}
           </div>
         </div>
       ) : null}

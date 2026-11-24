@@ -1,4 +1,5 @@
 import { ApiError } from '@/lib/api'
+import { toClockMinutes } from '@/lib/planningDate'
 
 const OVERLAP_REJECTION = 'commitments must not overlap on the same date'
 
@@ -15,11 +16,6 @@ export function commitmentErrorMessage(error: unknown): string | undefined {
 
 type WorkWindow = { workDayStart: string; workDayEnd: string }
 
-function toMinutes(time: string): number {
-  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
-  return (hours ?? 0) * 60 + (minutes ?? 0)
-}
-
 function clock(time: string): string {
   return time.slice(0, 5)
 }
@@ -30,9 +26,9 @@ export function outsideWorkWindowMessage(
   endTime: string,
   window: WorkWindow,
 ): string | null {
-  const start = toMinutes(startTime)
-  const end = toMinutes(endTime)
-  if (start >= toMinutes(window.workDayStart) && end <= toMinutes(window.workDayEnd)) {
+  const start = toClockMinutes(startTime)
+  const end = toClockMinutes(endTime)
+  if (start >= toClockMinutes(window.workDayStart) && end <= toClockMinutes(window.workDayEnd)) {
     return null
   }
   return `Keep it inside the Work window (${clock(window.workDayStart)}–${clock(window.workDayEnd)}).`
