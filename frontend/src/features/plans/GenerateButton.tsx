@@ -33,9 +33,19 @@ type GenerateButtonProps = {
 export function GenerateButton({ planDate }: GenerateButtonProps) {
   const { mutate, isPending } = useGeneratePlan()
   const [conflict, setConflict] = useState(false)
+  const [noActiveTasksDate, setNoActiveTasksDate] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
   async function handlePlanConflict(error: unknown) {
+    if (
+      error instanceof ApiError &&
+      error.status === 400 &&
+      error.code == null &&
+      error.message === 'no plannable tasks available for planning'
+    ) {
+      setNoActiveTasksDate(planDate)
+      return
+    }
     if (!isStalePlanError(error)) {
       return
     }
@@ -50,11 +60,21 @@ export function GenerateButton({ planDate }: GenerateButtonProps) {
           <AlertDescription>{PLAN_CONFLICT_MESSAGE}</AlertDescription>
         </Alert>
       ) : null}
+      {noActiveTasksDate === planDate ? (
+        <Alert>
+          <AlertDescription>
+            No active tasks to plan. Add or reopen a task, then try generating again.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Button
         type="button"
         disabled={isPending}
         aria-busy={isPending}
-        onClick={() => mutate({ planDate }, { onError: handlePlanConflict })}
+        onClick={() => {
+          setNoActiveTasksDate(null)
+          mutate({ planDate }, { onError: handlePlanConflict })
+        }}
       >
         <RefreshCwIcon />
         {isPending ? 'Generating…' : 'Generate'}
