@@ -1,6 +1,8 @@
 package com.focusflow.plan;
 
 import com.focusflow.plan.dto.HorizonResponse;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,6 +21,7 @@ public class HorizonController {
 	@GetMapping("/api/horizon")
 	public HorizonResponse horizon(
 			@RequestParam(required = false) LocalDate currentDate,
+			@Parameter(schema = @Schema(type = "string", example = "09:00:00"))
 			@RequestParam(required = false) LocalTime currentTime) {
 		return horizonService.read(currentDate, currentTime);
 	}

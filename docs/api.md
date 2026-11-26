@@ -96,7 +96,7 @@ Most application errors return:
 | `message` | string | Human-readable message |
 | `code` | string \| null | Optional stable machine-readable code; omitted when null |
 | `path` | string | Request path |
-| `details` | object → string[] | Optional; field validation errors only |
+| `details` | object → string[] | Optional; field validation errors only. Messages are always English; `Accept-Language` does not localize them. |
 | `requestId` | string | Optional; correlation id when present in MDC |
 
 Omitted null fields are excluded from JSON (`@JsonInclude(NON_NULL)`).
@@ -297,11 +297,12 @@ History list rows only — no blocks or snapshots.
 | `id` | integer | yes | |
 | `planDate` | string (date) | yes | `YYYY-MM-DD` |
 | `createdAt` | string (instant) | yes | ISO-8601 |
-| `scheduledWorkMinutes` | integer | yes | |
-| `workSessionCount` | integer | yes | |
+| `scheduledWorkMinutes` | integer | yes | Work on the composed rail, the same Focus figure plan detail shows (all revisions, not only the latest) |
+| `workSessionCount` | integer | yes | Work sessions on the composed rail, the same Sessions figure plan detail shows |
 | `scheduledTaskCount` | integer | yes | |
 | `unplacedWorkCount` | integer | yes | |
 | `hasWarning` | boolean | yes | Derived must-include shortfall present |
+| `hasShortfall` | boolean | yes | Latest revision has any out-of-time task, optional or not. `hasWarning` stays must-include only |
 | `hasProgress` | boolean | yes | Any block on any revision carries a recorded outcome |
 | `needsRefresh` | boolean | yes | Same condition as the detail field |
 
@@ -554,7 +555,7 @@ Create task.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `title` | string | yes | Not blank |
+| `title` | string | yes | Not blank, max 255 |
 | `description` | string | no | |
 | `priority` | `TaskPriority` | no | Default `MEDIUM` |
 | `dueDate` | string (date) | no | `YYYY-MM-DD` |
@@ -605,7 +606,7 @@ Update task.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `title` | string | yes | Not blank |
+| `title` | string | yes | Not blank, max 255 |
 | `description` | string | no | |
 | `priority` | `TaskPriority` | no | Default `MEDIUM` if omitted |
 | `status` | `TaskStatus` | no | Default `OPEN` if omitted |
@@ -970,7 +971,10 @@ Paged list of saved plan **summaries** for the current user (newest first by `cr
       "workSessionCount": 3,
       "scheduledTaskCount": 2,
       "unplacedWorkCount": 0,
-      "hasWarning": false
+      "hasWarning": false,
+      "hasShortfall": false,
+      "hasProgress": false,
+      "needsRefresh": false
     }
   ],
   "page": 0,
@@ -1005,12 +1009,12 @@ Record an outcome for one work block. A first save credits provisionally: `DONE`
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `outcome` | `WorkOutcome` | yes | `PARTLY_DONE` without positive `actualMinutes` → **400** |
-| `actualMinutes` | integer | no | Time spent; null means not recorded, which is not zero |
+| `actualMinutes` | integer | no | Ordinary Done requires a positive value when provided; null means unknown. A crossing reconciliation allows zero; a Done finish on a genuinely crossing block also allows zero |
 | `currentDate` | string (date) | yes | Client-supplied current date |
 | `expectedProgressVersion` | integer | no | Block's `progressVersion`; stale → **409** `PROGRESS_CONFLICT` |
 | `finish` | boolean | no | Finishes the task; wins over `cutoff` when both are sent |
 | `checkpoint` | `Checkpoint` | no | Explicit reassessment that replaces the running remainder |
-| `cutoff` | string (time) | no | Current time, to reconcile a block that spans now |
+| `cutoff` | string (time) | no | Current time, to reconcile a block that spans now. Must be minute-aligned (`HH:mm:00`) when sent; a time with seconds → **400** `times must be minute-aligned` |
 
 **Reconciling a block that spans the current time.** For an actionable block whose interval contains `cutoff`, send `cutoff` with the known `actualMinutes` and the required `checkpoint` (or an explicit null remainder for unknown). That stores the elapsed portion and closes the block for re-planning; it grants no planned credit.
 
@@ -1019,7 +1023,7 @@ Record an outcome for one work block. A first save credits provisionally: `DONE`
 | Status | Body |
 |--------|------|
 | **200** | `BlockProgressResponse` |
-| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, `BLOCK_NOT_RECORDABLE`, or validation failed |
+| **400** | `code`: `REMAINDER_UNRESOLVED`, `FUTURE_ACTUAL`, `BLOCK_NOT_RECORDABLE`, `message`: `times must be minute-aligned` for a `cutoff` with seconds, or validation failed |
 | **401** | Not authenticated |
 | **404** | `message`: `daily plan not found` or block not found |
 | **409** | `code`: `PROGRESS_CONFLICT` |
@@ -1039,7 +1043,7 @@ Re-plan runs only for the client current date and only when the plan has a compl
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `currentDate` | string (date) | yes | Must equal the plan date, else **409** `REPLAN_NOT_TODAY` |
-| `cutoff` | string (time) | yes | Clamps up to the window start when earlier; at or after the window end → **409** `REPLAN_WINDOW_ENDED` |
+| `cutoff` | string (time) | yes | Must be minute-aligned (`HH:mm:00`); a time with seconds → **400** `times must be minute-aligned`. Clamps up to the window start when earlier; at or after the window end → **409** `REPLAN_WINDOW_ENDED` |
 | `expectedRevisionId` | integer | yes | Latest revision id the client saw |
 | `effortVersions` | `TaskEffortVersion[]` | yes | One entry per current plannable task, matching `remainingEffortMinutes` state |
 
@@ -1048,7 +1052,7 @@ Re-plan runs only for the client current date and only when the plan has a compl
 | Status | Body |
 |--------|------|
 | **200** | `DailyPlanResponse` with the appended revision |
-| **400** | `code`: `PLAN_CANDIDATE_LIMIT`, or validation failed |
+| **400** | `code`: `PLAN_CANDIDATE_LIMIT`, `message`: `times must be minute-aligned` for a `cutoff` with seconds, or validation failed |
 | **401** | Not authenticated |
 | **404** | `message`: `daily plan not found` |
 | **409** | `code`: `REPLAN_NOT_TODAY`, `REPLAN_LEGACY_SNAPSHOT`, `REPLAN_WINDOW_ENDED`, `ELAPSED_WORK_UNRESOLVED`, `PLAN_CHANGED`, or `TASK_MISSING_DURING_GENERATION` |
@@ -1123,7 +1127,7 @@ Dated work credited to a task that was not on the rail. Create and correct credi
 
 ### `POST /api/unplanned-work`
 
-Creating an entry credits `actualMinutes` against the task's remaining effort and moves an `OPEN` task to `IN_PROGRESS`. A `finish` or a `checkpoint` replaces the remainder instead of subtracting.
+Creating an entry credits `actualMinutes` against the task's remaining effort and moves an `OPEN` task to `IN_PROGRESS`. A `finish` or a `checkpoint` replaces the remainder instead of subtracting. Without `finish`, an explicit checkpoint must be positive or null (unknown); zero or negative values return **400**.
 
 **Request body — `UnplannedWorkRequest`**
 
@@ -1149,7 +1153,7 @@ Creating an entry credits `actualMinutes` against the task's remaining effort an
 
 ### `PUT /api/unplanned-work/{id}`
 
-Correct an entry: same body as create. Minutes are delta-adjusted, and `workDate` must repeat the stored date (changing it → **400**), so the entry keeps its recorded order and an earlier-dated correction does not move later credit.
+Correct an entry: same body as create. `taskId` and `workDate` must match the stored entry (a mismatch → **400**). Minutes are delta-adjusted, and the entry keeps its recorded order, so an earlier-dated correction does not move later credit.
 
 **Responses**
 

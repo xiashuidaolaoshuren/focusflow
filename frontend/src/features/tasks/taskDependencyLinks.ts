@@ -72,7 +72,11 @@ export function liveNeededForLabel(
   const chain: TaskResponse[] = [task]
   const seen = new Set<number>([task.id])
   for (let index = 0; index < chain.length; index++) {
-    for (const link of chain[index].blocks) {
+    const current = chain[index]
+    if (current === undefined) {
+      continue
+    }
+    for (const link of current.blocks) {
       if (!isActiveDependencyStatus(link.status) || seen.has(link.taskId)) {
         continue
       }
@@ -104,4 +108,12 @@ export function liveNeededForLabel(
   }
   const dueSuffix = named.dueDate != null ? ` (due ${named.dueDate})` : ''
   return `Needed for ${named.title}${dueSuffix}`
+}
+
+export function waitingOnLabel(task: TaskResponse): string | null {
+  if (!isActiveDependencyStatus(task.status)) {
+    return null
+  }
+  const titles = activeBlockedByLinks(task).map((link) => link.title)
+  return titles.length === 0 ? null : `Waiting on ${titles.join(', ')}`
 }

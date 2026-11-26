@@ -135,7 +135,8 @@ components:
           - "HIGH"
           type: "string"
         title:
-          minLength: 1
+          maxLength: 255
+          minLength: 0
           type: "string"
       type: "object"
     DailyPlanResponse:
@@ -217,6 +218,8 @@ components:
           format: "date-time"
           type: "string"
         hasProgress:
+          type: "boolean"
+        hasShortfall:
           type: "boolean"
         hasWarning:
           type: "boolean"
@@ -925,7 +928,8 @@ components:
           - "CANCELLED"
           type: "string"
         title:
-          minLength: 1
+          maxLength: 255
+          minLength: 0
           type: "string"
       type: "object"
     UserResponse:
@@ -1329,7 +1333,7 @@ paths:
         name: "currentTime"
         required: false
         schema:
-          format: "date-time"
+          example: "09:00:00"
           type: "string"
       responses:
         "200":

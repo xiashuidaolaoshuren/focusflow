@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '@/lib/api'
 import type { TaskResponse } from '@/types/api'
 
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import {
-  tasksQueryKey,
   useAddBlocker,
   useCreateTask,
   useDeleteTask,
@@ -17,6 +16,7 @@ import {
   useTasks,
   useUpdateTask,
 } from '@/features/tasks/hooks'
+import { horizonQueryPrefix, tasksQueryKey } from '@/lib/query'
 
 vi.mock('@/features/plans/regeneratePrompt', () => ({
   markRegeneratePromptNeeded: vi.fn(),

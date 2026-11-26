@@ -10,6 +10,7 @@ import com.focusflow.commitment.CommitmentQueryService;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.common.web.PageResponse;
 import com.focusflow.plan.dto.DailyPlanResponse;
 import com.focusflow.plan.dto.DailyPlanSummaryResponse;
@@ -93,6 +94,7 @@ public class DailyPlanService {
 	}
 
 	public DailyPlanResponse replan(Long planId, ReplanRequest request) {
+		MinutePrecision.requireMinuteAligned(request.cutoff());
 		DailyPlan plan = loadPlanForCurrentUser(planId);
 		if (!plan.getPlanDate().equals(request.currentDate())) {
 			throw new ConflictException("REPLAN_NOT_TODAY", "plan date is not the client current date");
@@ -254,8 +256,12 @@ public class DailyPlanService {
 		Long ownerId = currentUser.getCurrentUser().id();
 		Page<DailyPlanSummaryProjection> summaries =
 				dailyPlanRepository.findSummariesByOwner(ownerId, PageRequest.of(page, size));
+		Map<Long, DailyPlanResponseMapper.WorkTotals> totalsByPlanId =
+				workTotalsByPlanId(ownerId, summaries.getContent());
 		List<DailyPlanSummaryResponse> content =
-				summaries.getContent().stream().map(this::toSummaryResponse).toList();
+				summaries.getContent().stream()
+						.map(row -> toSummaryResponse(row, totalsByPlanId.get(row.getId())))
+						.toList();
 		return new PageResponse<>(
 				content,
 				summaries.getNumber(),
@@ -293,16 +299,34 @@ public class DailyPlanService {
 				.orElseThrow(() -> new NotFoundException("daily plan not found"));
 	}
 
-	private DailyPlanSummaryResponse toSummaryResponse(DailyPlanSummaryProjection projection) {
+	private Map<Long, DailyPlanResponseMapper.WorkTotals> workTotalsByPlanId(
+			Long ownerId, List<DailyPlanSummaryProjection> rows) {
+		if (rows.isEmpty()) {
+			return Map.of();
+		}
+		List<Long> ids = rows.stream().map(DailyPlanSummaryProjection::getId).toList();
+		Map<Long, DailyPlanResponseMapper.WorkTotals> totals = new HashMap<>();
+		for (DailyPlan plan : dailyPlanRepository.findByOwner_IdAndIdIn(ownerId, ids)) {
+			totals.put(plan.getId(), responseMapper.composedWorkTotals(plan));
+		}
+		return totals;
+	}
+
+	private DailyPlanSummaryResponse toSummaryResponse(
+			DailyPlanSummaryProjection projection, DailyPlanResponseMapper.WorkTotals workTotals) {
+		// A plan deleted between the two queries has no totals; report no work rather than fail.
+		DailyPlanResponseMapper.WorkTotals totals =
+				workTotals != null ? workTotals : new DailyPlanResponseMapper.WorkTotals(0, 0);
 		return new DailyPlanSummaryResponse(
 				projection.getId(),
 				projection.getPlanDate(),
 				projection.getCreatedAt(),
-				projection.getScheduledWorkMinutes() != null ? projection.getScheduledWorkMinutes() : 0,
-				projection.getWorkSessionCount() != null ? projection.getWorkSessionCount() : 0,
+				totals.minutes(),
+				totals.sessions(),
 				projection.getScheduledTaskCount() != null ? projection.getScheduledTaskCount() : 0,
 				projection.getUnplacedWorkCount() != null ? projection.getUnplacedWorkCount() : 0,
 				Boolean.TRUE.equals(projection.getHasWarning()),
+				Boolean.TRUE.equals(projection.getHasShortfall()),
 				Boolean.TRUE.equals(projection.getHasProgress()),
 				Boolean.TRUE.equals(projection.getNeedsRefresh()));
 	}

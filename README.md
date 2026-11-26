@@ -196,4 +196,5 @@ docs/                API reference, OpenAPI, architecture, design notes, and pla
   api.md             Human-readable API calling guide
   openapi.yaml       Generated OpenAPI contract (refresh via updateOpenApiSnapshot)
   architecture.md    System architecture, components, and learning map
+  design/            Approved frontend design contract (local prototype is gitignored)
 ```

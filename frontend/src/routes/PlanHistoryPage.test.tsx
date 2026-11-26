@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -33,6 +34,28 @@ describe('PlanHistoryPage', () => {
     vi.clearAllMocks()
   })
 
+  it('titles the page Plans under a History eyebrow, with no subtitle or card title', () => {
+    mockedUsePlans.mockReturnValue({
+      plans: [sampleSummary],
+      page: samplePage,
+      isPending: false,
+      isError: false,
+      isEmpty: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof usePlans>)
+
+    render(
+      <MemoryRouter>
+        <PlanHistoryPage />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Plans' })).toBeInTheDocument()
+    expect(screen.getByText('History')).toBeInTheDocument()
+    expect(screen.queryByText('Plan history')).toBeNull()
+    expect(screen.queryByText('Saved plans')).toBeNull()
+  })
+
   it('loads the first page with default size on mount', () => {
     mockedUsePlans.mockReturnValue({
       plans: [sampleSummary],
@@ -50,7 +73,7 @@ describe('PlanHistoryPage', () => {
     )
 
     expect(mockedUsePlans).toHaveBeenCalledWith(0, 20)
-    expect(screen.getByText('2026-06-14')).toBeInTheDocument()
+    expect(screen.getByText('14 Jun 2026')).toBeInTheDocument()
   })
 
   it('requests the next page when pagination changes', () => {

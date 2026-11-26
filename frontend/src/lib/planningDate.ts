@@ -1,3 +1,20 @@
+import type { DayOfWeek } from '@/types/api'
+
+const WEEKDAY_NAMES: DayOfWeek[] = [
+  'SUNDAY',
+  'MONDAY',
+  'TUESDAY',
+  'WEDNESDAY',
+  'THURSDAY',
+  'FRIDAY',
+  'SATURDAY',
+]
+
+/** Whether the day's weekday is one of the saved Working days. */
+export function isWorkingDay(date: Date, workingDays: DayOfWeek[]): boolean {
+  return workingDays.includes(WEEKDAY_NAMES[date.getDay()]!)
+}
+
 export function getLocalDateString(date = new Date()): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -12,6 +29,18 @@ export function getLocalTimeString(date = new Date()): string {
   return `${hours}:${minutes}:${seconds}`
 }
 
+/** Minutes since midnight for an API clock value (`HH:mm` or `HH:mm:ss`), seconds dropped. */
+export function toClockMinutes(time: string): number {
+  const [hours, minutes] = time.slice(0, 5).split(':').map(Number)
+  return (hours ?? 0) * 60 + (minutes ?? 0)
+}
+
+/** The minute-aligned form of a clock value: `HH:mm:00`, seconds dropped. */
+export function getLocalMinuteString(date: Date | string = new Date()): string {
+  const time = typeof date === 'string' ? date : getLocalTimeString(date)
+  return `${time.slice(0, 5)}:00`
+}
+
 export function isValidPlanningDate(value: string | null): value is string {
   if (value == null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false
@@ -19,6 +48,17 @@ export function isValidPlanningDate(value: string | null): value is string {
 
   const parsed = Date.parse(`${value}T00:00:00`)
   return !Number.isNaN(parsed)
+}
+
+/** The calendar day after a `YYYY-MM-DD` date, computed in UTC so no local offset can shift it. */
+export function nextPlanningDate(date: string): string {
+  const [year, month, day] = date.split('-').map(Number)
+  return new Date(Date.UTC(year!, month! - 1, day! + 1)).toISOString().slice(0, 10)
+}
+
+/** True when a planned `YYYY-MM-DD` day falls before today's; equal-length ISO dates compare as text. */
+export function isPastPlanningDate(date: string, today: string): boolean {
+  return date < today
 }
 
 export function resolvePlanningDate(

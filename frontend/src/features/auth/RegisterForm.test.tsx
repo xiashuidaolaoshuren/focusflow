@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -22,45 +23,54 @@ function renderRegisterForm() {
     },
   })
 
-  const view = render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
         <RegisterForm />
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
 
-  return {
-    ...view,
-    rerenderForm: () =>
-      view.rerender(
-        <QueryClientProvider client={queryClient}>
-          <MemoryRouter>
-            <RegisterForm />
-          </MemoryRouter>
-        </QueryClientProvider>,
-      ),
-  }
+function mockRegister(state: {
+  mutate?: ReturnType<typeof vi.fn>
+  isPending?: boolean
+  isError?: boolean
+  error?: Error | null
+}) {
+  mockedUseRegister.mockReturnValue({
+    mutate: state.mutate ?? vi.fn(),
+    isPending: state.isPending ?? false,
+    isError: state.isError ?? false,
+    error: state.error ?? null,
+  } as unknown as ReturnType<typeof useRegister>)
+}
+
+function submitForm() {
+  fireEvent.submit(
+    screen.getByRole('button', { name: /create account/i }).closest('form')!,
+  )
 }
 
 describe('RegisterForm', () => {
-  it('renders fields, submits credentials, and disables submit while pending', () => {
+  it('renders a real form that submits credentials', async () => {
     const mutate = vi.fn()
-    mockedUseRegister.mockReturnValue({
-      mutate,
-      isPending: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useRegister>)
+    mockRegister({ mutate })
 
-    const { rerenderForm } = renderRegisterForm()
+    renderRegisterForm()
 
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/username/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^password$/i)).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: /create account/i }),
-    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/email/i)).toHaveAttribute(
+      'autocomplete',
+      'email',
+    )
+    expect(screen.getByLabelText(/username/i)).toHaveAttribute(
+      'autocomplete',
+      'username',
+    )
+    expect(screen.getByLabelText(/^password/i)).toHaveAttribute(
+      'autocomplete',
+      'new-password',
+    )
 
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: 'new@example.com' },
@@ -68,68 +78,116 @@ describe('RegisterForm', () => {
     fireEvent.change(screen.getByLabelText(/username/i), {
       target: { value: 'newuser' },
     })
-    fireEvent.change(screen.getByLabelText(/^password$/i), {
+    fireEvent.change(screen.getByLabelText(/^password/i), {
       target: { value: 'password123' },
     })
-    fireEvent.click(screen.getByRole('button', { name: /create account/i }))
+    submitForm()
 
-    expect(mutate).toHaveBeenCalledWith({
-      email: 'new@example.com',
-      username: 'newuser',
-      password: 'password123',
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalledWith({
+        email: 'new@example.com',
+        username: 'newuser',
+        password: 'password123',
+      })
     })
+  })
 
-    mockedUseRegister.mockReturnValue({
-      mutate,
-      isPending: true,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useRegister>)
+  it('shows inline validation errors and does not submit when empty', async () => {
+    const mutate = vi.fn()
+    mockRegister({ mutate })
 
-    rerenderForm()
+    renderRegisterForm()
+    submitForm()
+
+    expect(await screen.findByText(/enter your email/i)).toBeInTheDocument()
+    expect(screen.getByText(/enter a username/i)).toBeInTheDocument()
+    expect(screen.getByText(/enter your password/i)).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid email address', async () => {
+    const mutate = vi.fn()
+    mockRegister({ mutate })
+
+    renderRegisterForm()
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'not-an-email' },
+    })
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: 'newuser' },
+    })
+    fireEvent.change(screen.getByLabelText(/^password/i), {
+      target: { value: 'password123' },
+    })
+    submitForm()
 
     expect(
-      screen.getByRole('button', { name: /create account/i }),
-    ).toBeDisabled()
+      await screen.findByText(/use an email like name@example\.com/i),
+    ).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a password shorter than 8 characters', async () => {
+    const mutate = vi.fn()
+    mockRegister({ mutate })
+
+    renderRegisterForm()
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: 'newuser' },
+    })
+    fireEvent.change(screen.getByLabelText(/^password/i), {
+      target: { value: '1234567' },
+    })
+    submitForm()
+
+    expect(
+      await screen.findByText(/use at least 8 characters/i),
+    ).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('rejects a username outside 3 to 30 characters', async () => {
+    const mutate = vi.fn()
+    mockRegister({ mutate })
+
+    renderRegisterForm()
+
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'new@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText(/username/i), {
+      target: { value: 'ab' },
+    })
+    fireEvent.change(screen.getByLabelText(/^password/i), {
+      target: { value: 'password123' },
+    })
+    submitForm()
+
+    expect(
+      await screen.findByText(/use at least 3 characters/i),
+    ).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('shows the required markers, password hint, and alternate link copy', () => {
+    mockRegister({})
+
+    renderRegisterForm()
+
+    expect(screen.getAllByText('*').length).toBeGreaterThanOrEqual(3)
+    expect(screen.getByText(/at least 8 characters/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/have an account\?/i).closest('p'),
+    ).toHaveTextContent(/sign in/i)
   })
 
   it('shows inline field errors from ApiError details', () => {
-    mockedUseRegister.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: true,
-      error: new ApiError({
-        status: 400,
-        message: 'Validation failed',
-        details: { username: ['Username already taken'] },
-      }),
-    } as unknown as ReturnType<typeof useRegister>)
-
-    renderRegisterForm()
-
-    expect(screen.getByText('Username already taken')).toBeInTheDocument()
-  })
-
-  it('shows a top-level alert for non-field errors', () => {
-    mockedUseRegister.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
-      isError: true,
-      error: new ApiError({
-        status: 500,
-        message: 'Unexpected error',
-      }),
-    } as unknown as ReturnType<typeof useRegister>)
-
-    renderRegisterForm()
-
-    expect(screen.getByRole('alert')).toHaveTextContent('Unexpected error')
-  })
-
-  it('links field errors via aria-describedby and shows an alert title', () => {
-    mockedUseRegister.mockReturnValue({
-      mutate: vi.fn(),
-      isPending: false,
+    mockRegister({
       isError: true,
       error: new ApiError({
         status: 400,
@@ -140,70 +198,67 @@ describe('RegisterForm', () => {
           password: ['Password is too short'],
         },
       }),
-    } as unknown as ReturnType<typeof useRegister>)
+    })
 
     renderRegisterForm()
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Registration failed')
-    expect(screen.getByLabelText(/email/i)).toHaveAttribute(
-      'aria-describedby',
-      'email-error',
-    )
-    expect(screen.getByText('Email is invalid')).toHaveAttribute(
-      'id',
-      'email-error',
-    )
+    expect(screen.getByText('Email is invalid')).toBeInTheDocument()
+    expect(screen.getByText('Username already taken')).toBeInTheDocument()
+    expect(screen.getByText('Password is too short')).toBeInTheDocument()
     expect(screen.getByLabelText(/username/i)).toHaveAttribute(
-      'aria-describedby',
-      'username-error',
-    )
-    expect(screen.getByText('Username already taken')).toHaveAttribute(
-      'id',
-      'username-error',
-    )
-    expect(screen.getByLabelText(/^password$/i)).toHaveAttribute(
-      'aria-describedby',
-      'password-error',
-    )
-    expect(screen.getByText('Password is too short')).toHaveAttribute(
-      'id',
-      'password-error',
+      'aria-invalid',
+      'true',
     )
   })
 
-  it('moves focus to the error alert when registration fails', () => {
-    const mutate = vi.fn()
-    mockedUseRegister.mockReturnValue({
-      mutate,
-      isPending: false,
-      isError: false,
-      error: null,
-    } as unknown as ReturnType<typeof useRegister>)
-
-    const { rerenderForm } = renderRegisterForm()
-
-    fireEvent.change(screen.getByLabelText(/email/i), {
-      target: { value: 'new@example.com' },
-    })
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'newuser' },
-    })
-    fireEvent.change(screen.getByLabelText(/^password$/i), {
-      target: { value: 'password123' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: /create account/i }))
-
-    mockedUseRegister.mockReturnValue({
-      mutate,
-      isPending: false,
+  it('shows a top-level alert for non-field errors', () => {
+    mockRegister({
       isError: true,
-      error: new ApiError({
-        status: 500,
-        message: 'Unexpected error',
-      }),
-    } as unknown as ReturnType<typeof useRegister>)
+      error: new ApiError({ status: 500, message: 'Unexpected error' }),
+    })
 
-    rerenderForm()
+    renderRegisterForm()
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Unexpected error')
+    expect(alert).not.toHaveTextContent(/registration failed/i)
+  })
+
+  it('disables submit while pending', () => {
+    mockRegister({ isPending: true })
+
+    renderRegisterForm()
+
+    expect(
+      screen.getByRole('button', { name: /create account/i }),
+    ).toBeDisabled()
+  })
+
+  it('moves focus to the error alert when registration fails', () => {
+    mockRegister({})
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RegisterForm />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+
+    mockRegister({
+      isError: true,
+      error: new ApiError({ status: 500, message: 'Unexpected error' }),
+    })
+    view.rerender(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <RegisterForm />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
 
     expect(screen.getByRole('alert')).toHaveFocus()
   })

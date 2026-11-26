@@ -223,7 +223,7 @@ No Spring or JPA dependencies (enforced by ArchUnit). Consumed by plan generatio
 | `DailyPlan` / `DailyPlanRevision` / `DailyPlanTask` / `DailyPlanBlock` | Aggregate: revisions, each holding its ranked task snapshots and ordered scheduled blocks |
 | `DailyPlanRepository` | Owner-scoped reads: projection queries for paged summaries; detail loads revisions with their tasks and blocks |
 
-**Summary vs detail:** History list endpoints return `DailyPlanSummaryResponse` via repository projections (`scheduledWorkMinutes`, `workSessionCount`, `scheduledTaskCount`, `unplacedWorkCount`, `hasWarning`, `hasProgress`, `needsRefresh`) without loading blocks. Detail, generate, by-date, and re-plan load the full graph for `DailyPlanResponse`, whose top-level metrics and `blocks` come from the latest revision.
+**Summary vs detail:** History list endpoints return `DailyPlanSummaryResponse`. The counts and flags (`scheduledTaskCount`, `unplacedWorkCount`, `hasWarning`, `hasShortfall`, `hasProgress`, `needsRefresh`) come from repository projections without loading blocks. `scheduledWorkMinutes` and `workSessionCount` are the composed-rail totals (`DailyPlanResponseMapper.composedWorkTotals`), so the page loads its own plans' revisions and blocks in one query to match plan detail's Focus and Sessions. Detail, generate, by-date, and re-plan load the full graph for `DailyPlanResponse`, whose top-level metrics and `blocks` come from the latest revision.
 
 **Generate flow** (the main orchestration):
 
@@ -471,6 +471,8 @@ erDiagram
 
 ## Frontend structure
 
+> **Redesign in progress.** The table below describes the pre-redesign React app. The frontend is being rebuilt from the approved design contract in [`docs/design/`](design/README.md) under [`2026-11-08-focusflow-frontend-redesign-design.md`](superpowers/specs/2026-11-08-focusflow-frontend-redesign-design.md). Treat the new spec and `docs/design/DESIGN.md` as the target; this table remains useful for understanding the current code until the rebuild lands.
+
 The React app mirrors backend feature boundaries:
 
 | Area | Location | Role |
@@ -519,4 +521,4 @@ Open these packages in roughly this order to trace a request from HTTP to persis
 - **DTOs and validation** — Request/response records under each feature's `dto` package separate the HTTP contract from JPA entities.
 - **Tests** — Mockito service tests isolate business behavior; `@WebMvcTest` controller tests exercise JSON, validation, and security boundaries; `PostgresIntegrationTest` uses Testcontainers for real PostgreSQL behavior; `LayeredArchitectureTest` uses ArchUnit to enforce dependency rules.
 
-The frontend is the practical counterpart: Vite proxies `/api`, `frontend/src/lib/api.ts` uses `credentials: 'include'`, and it reads the CSRF cookie to attach the matching header for mutating requests. `DayTimeline.tsx` renders the scheduled block rail; the dashboard loads plans via `/by-date` with a URL-backed planning date.
+The frontend is the practical counterpart: Vite proxies `/api`, `frontend/src/lib/api.ts` uses `credentials: 'include'`, and it reads the CSRF cookie to attach the matching header for mutating requests. `DayTimeline.tsx` renders the scheduled block rail; the dashboard loads plans via `/by-date` with a URL-backed planning date. The redesign keeps those API and session rules but moves the home to a dedicated Today screen, splits task inventory into `/tasks`, and replaces the timeline with the DayRail (desktop) and AgendaList (mobile) pair. See [`2026-11-08-focusflow-frontend-redesign-design.md`](superpowers/specs/2026-11-08-focusflow-frontend-redesign-design.md).

@@ -20,6 +20,10 @@ spring:
         # zone above is for instants; without direct binding it also shifts TIME columns.
         type:
           java_time_use_direct_jdbc: true
+  web:
+    locale: en
+    # FixedLocaleResolver pins LocaleContextHolder so bean-validation messages stay English.
+    locale-resolver: fixed
 
 focusflow:
   openai:

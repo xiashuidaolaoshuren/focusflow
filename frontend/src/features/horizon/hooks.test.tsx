@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -16,12 +17,8 @@ vi.mock('@/lib/planningDate', () => ({
 
 import { getHorizon } from '@/features/horizon/api'
 import { getLocalDateString, getLocalTimeString } from '@/lib/planningDate'
-import {
-  horizonQueryKey,
-  horizonQueryPrefix,
-  useHorizon,
-  useHorizonClock,
-} from '@/features/horizon/hooks'
+import { useHorizon, useHorizonClock } from '@/features/horizon/hooks'
+import { horizonQueryKey, horizonQueryPrefix } from '@/lib/query'
 
 const mockedGetHorizon = vi.mocked(getHorizon)
 const mockedGetLocalDateString = vi.mocked(getLocalDateString)

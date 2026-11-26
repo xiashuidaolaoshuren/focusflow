@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 
 import {
@@ -7,40 +6,24 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPlanById } from '@/features/plans/api'
-import { planDetailQueryKey } from '@/features/plans/hooks'
+import { planDetailQueryKey } from '@/lib/query'
 import { useSchedulingPreferences } from '@/features/preferences/hooks'
 import { useHorizon } from '@/features/horizon/hooks'
+import { HorizonDayList } from '@/features/horizon/HorizonDayList'
+import { HorizonGridView } from '@/features/horizon/HorizonGridView'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { InfoPopover } from '@/components/InfoPopover'
+import { DeadlineLegend } from '@/features/horizon/DeadlineBadge'
 import {
-  barPercent,
-  dashboardHref,
   forecastHeaderCopy,
-  formatDueDateTitle,
   HORIZON_PACE_COPY,
-  isDueDateColumn,
+  horizonRangeCopy,
   longestFullWorkWindow,
-  savedConflictCopy,
-  segmentAriaLabel,
-  segmentCellCopy,
   timeSpanMinutes,
-  upstreamCopy,
-  waitingOnCopy,
 } from '@/features/horizon/horizonGrid'
-import type {
-  HorizonDayResponse,
-  HorizonSegmentResponse,
-  HorizonTaskRowResponse,
-} from '@/types/api'
-
-function segmentForDate(
-  task: HorizonTaskRowResponse,
-  date: string,
-): HorizonSegmentResponse | undefined {
-  return task.segments.find((segment) => segment.date === date)
-}
 
 function HorizonPageSkeleton() {
   return (
@@ -54,7 +37,7 @@ function HorizonPageSkeleton() {
 export function HorizonPage() {
   const { horizon, isPending, isError, error, refetch } = useHorizon()
   const { preferences } = useSchedulingPreferences()
-  const [highlightedTaskIds, setHighlightedTaskIds] = useState<number[]>([])
+  const isMobile = useIsMobile()
 
   const savedPlanIds =
     horizon?.days
@@ -114,207 +97,44 @@ export function HorizonPage() {
     horizon.days,
   )
 
-  const columnDates = horizon.days.map((day) => day.date)
-
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Horizon</h1>
-        <p className="text-sm text-muted-foreground">
-          Seven working days from {horizon.currentDate} at {horizon.currentTime}.
-        </p>
-        <p className="text-sm text-muted-foreground">{HORIZON_PACE_COPY}</p>
-      </div>
-
-      <div className="overflow-x-auto">
-        <div
-          className="grid min-w-max gap-px rounded-lg border border-border bg-border"
-          style={{
-            gridTemplateColumns: `minmax(12rem, 16rem) repeat(${horizon.days.length}, minmax(8rem, 1fr))`,
-          }}
-        >
-          <div className="sticky left-0 z-20 bg-background p-2 text-sm font-medium">
-            Task
+      <header className="flex flex-wrap items-end justify-between gap-6">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-xs leading-4 font-medium tracking-[0.08em] text-muted-foreground uppercase">
+            7 Working days
+          </span>
+          <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">Horizon</h1>
+          <p className="text-sm text-muted-foreground">
+            {horizonRangeCopy(horizon.currentDate, horizon.currentTime)}
+          </p>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <span>Pace assumption</span>
+            <InfoPopover label="About pace assumption" title="Pace assumption">
+              <p>{HORIZON_PACE_COPY}</p>
+              <p className="pt-2">{forecastHeaderCopy()}</p>
+            </InfoPopover>
           </div>
-          {horizon.days.map((day) => (
-            <DayHeader key={day.date} day={day} />
-          ))}
-
-          {horizon.tasks.map((task) => (
-            <HorizonTaskRow
-              key={task.taskId}
-              task={task}
-              days={horizon.days}
-              columnDates={columnDates}
-              scaleMinutes={scaleMinutes}
-              highlighted={highlightedTaskIds.includes(task.taskId)}
-              onHighlightBlockers={() =>
-                setHighlightedTaskIds(task.waitingOn.map((ref) => ref.taskId))
-              }
-              onClearHighlight={() => setHighlightedTaskIds([])}
-            />
-          ))}
         </div>
-      </div>
-    </div>
-  )
-}
+        <div className="flex flex-wrap items-center gap-2">
+          <InfoPopover label="About deadline forecasts" title="Deadline forecast" align="end">
+            <DeadlineLegend />
+          </InfoPopover>
+        </div>
+      </header>
 
-function DayHeader({ day }: { day: HorizonDayResponse }) {
-  const conflictCopy = savedConflictCopy(day)
-  return (
-    <div
-      className={`bg-background p-2 text-center text-sm ${
-        day.kind === 'SAVED' ? 'bg-muted/40' : ''
-      }`}
-    >
-      <div className="font-medium">{day.date}</div>
-      <Badge variant={day.kind === 'SAVED' ? 'secondary' : 'outline'}>
-        {day.kind === 'SAVED' ? 'Saved' : 'Forecast'}
-      </Badge>
-      {day.kind === 'FORECAST' ? (
-        <div className="space-y-1 pt-1 text-left text-xs text-muted-foreground">
-          <p>{forecastHeaderCopy()}</p>
-          <a className="underline" href={dashboardHref(day.date)}>
-            Open {day.date} in the dashboard
+      {horizon.tasks.length === 0 ? (
+        <section className="flex flex-col items-center gap-3 rounded-lg border border-border bg-card p-8 text-center">
+          <p className="text-lg font-medium">Nothing on the Horizon</p>
+          <a className="text-sm underline" href="/tasks">
+            Go to Tasks
           </a>
-        </div>
-      ) : null}
-      {conflictCopy != null ? (
-        <p className="pt-1 text-left text-xs text-muted-foreground">
-          {conflictCopy}
-        </p>
-      ) : null}
-    </div>
-  )
-}
-
-type HorizonTaskRowProps = {
-  task: HorizonTaskRowResponse
-  days: HorizonDayResponse[]
-  columnDates: string[]
-  scaleMinutes: number
-  highlighted: boolean
-  onHighlightBlockers: () => void
-  onClearHighlight: () => void
-}
-
-function HorizonTaskRow({
-  task,
-  days,
-  columnDates,
-  scaleMinutes,
-  highlighted,
-  onHighlightBlockers,
-  onClearHighlight,
-}: HorizonTaskRowProps) {
-  const waitingOn = waitingOnCopy(task)
-  const upstream = upstreamCopy(task)
-
-  return (
-    <div
-      style={{ display: 'contents' }}
-      data-testid={`horizon-row-${task.taskId}`}
-      data-highlighted={highlighted ? 'true' : undefined}
-      onMouseEnter={onHighlightBlockers}
-      onMouseLeave={onClearHighlight}
-    >
-      <div
-        className={`sticky left-0 z-10 space-y-1 p-2 text-sm ${
-          highlighted ? 'bg-muted' : 'bg-background'
-        }`}
-      >
-        <div className="font-medium">{task.title}</div>
-        <div className="text-muted-foreground">
-          Due {formatDueDateTitle(task.dueDate)}
-        </div>
-        {waitingOn != null ? (
-          <div className="text-xs text-muted-foreground">{waitingOn}</div>
-        ) : null}
-        {upstream != null ? (
-          <div className="text-xs text-muted-foreground">{upstream}</div>
-        ) : null}
-      </div>
-      {days.map((day) => {
-        const segment = segmentForDate(task, day.date)
-        const showDueMarker = isDueDateColumn(task.dueDate, columnDates) &&
-          task.dueDate === day.date
-
-        return (
-          <HorizonSegmentCell
-            key={`${task.taskId}-${day.date}`}
-            task={task}
-            day={day}
-            segment={segment}
-            scaleMinutes={scaleMinutes}
-            showDueMarker={showDueMarker}
-            highlighted={highlighted}
-          />
-        )
-      })}
-    </div>
-  )
-}
-
-type HorizonSegmentCellProps = {
-  task: HorizonTaskRowResponse
-  day: HorizonDayResponse
-  segment: HorizonSegmentResponse | undefined
-  scaleMinutes: number
-  showDueMarker: boolean
-  highlighted: boolean
-}
-
-function HorizonSegmentCell({
-  task,
-  day,
-  segment,
-  scaleMinutes,
-  showDueMarker,
-  highlighted,
-}: HorizonSegmentCellProps) {
-  if (segment == null) {
-    return (
-      <div
-        className={`p-2 text-xs text-muted-foreground ${
-          highlighted ? 'bg-muted' : 'bg-background'
-        }`}
-      >
-        {showDueMarker ? <span className="font-medium">Due</span> : null}
-      </div>
-    )
-  }
-
-  const copyLines = segmentCellCopy(segment)
-  const ariaLabel = segmentAriaLabel(task, segment, day.kind)
-  const width = barPercent(segment.minutes, scaleMinutes)
-
-  return (
-    <div
-      className={`p-2 text-xs ${day.kind === 'SAVED' ? 'bg-muted/20' : 'bg-background'} ${
-        highlighted ? 'bg-muted' : ''
-      }`}
-    >
-      {showDueMarker ? (
-        <div className="mb-1 font-medium text-primary">Due</div>
-      ) : null}
-      <div
-        tabIndex={0}
-        aria-label={ariaLabel}
-        className="space-y-1 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {segment.minutes > 0 ? (
-          <div className="h-2 w-full rounded-full bg-muted">
-            <div
-              className="h-2 rounded-full bg-primary"
-              style={{ width: `${width}%` }}
-            />
-          </div>
-        ) : null}
-        {copyLines.map((line) => (
-          <div key={line}>{line}</div>
-        ))}
-      </div>
+        </section>
+      ) : isMobile ? (
+        <HorizonDayList horizon={horizon} scaleMinutes={scaleMinutes} />
+      ) : (
+        <HorizonGridView horizon={horizon} scaleMinutes={scaleMinutes} />
+      )}
     </div>
   )
 }

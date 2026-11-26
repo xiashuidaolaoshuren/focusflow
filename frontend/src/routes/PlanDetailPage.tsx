@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { ClockIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,12 +10,30 @@ import {
   AlertDescription,
   AlertTitle,
 } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DailyPlanView } from '@/features/plans/DailyPlanView'
+import { AgendaList } from '@/features/plans/AgendaList'
+import { DayRail } from '@/features/plans/DayRail'
 import { PlanDeleteButton } from '@/features/plans/PlanDeleteButton'
-import { RevisionSelect } from '@/features/plans/RevisionSelect'
-import { plansListQueryPrefix, useDeletePlan, usePlan } from '@/features/plans/hooks'
+import { PlanDetailNotices } from '@/features/plans/PlanDetailNotices'
+import { PlanRevisionSwitch } from '@/features/plans/PlanRevisionSwitch'
+import { PlanSideCards } from '@/features/plans/PlanSideCards'
+import { WorkSessions } from '@/features/plans/WorkSessions'
+import { buildRail } from '@/features/plans/railModel'
+import { toClockMinutes } from '@/lib/planningDate'
+import { formatClock, formatDateLabel, formatDuration } from '@/lib/format'
+import {
+  indexRevisionSnapshotTitles,
+  type SnapshotTitleInfo,
+} from '@/features/plans/planSnapshotCopy'
+import {
+  revisionBlocks,
+  revisionUnplacedWork,
+} from '@/features/plans/revisionView'
+import { useIsMobile } from '@/hooks/use-mobile'
+import { useDeletePlan, usePlan } from '@/features/plans/hooks'
+import { plansListQueryPrefix } from '@/lib/query'
 import { ApiError } from '@/lib/api'
 import type { DailyPlanSummaryResponse, PageResponse } from '@/types/api'
 
@@ -67,17 +86,19 @@ function PlanNotFoundState({ planId }: PlanNotFoundStateProps) {
   const cachedPlanDate = useCachedPlanDate(planId)
   const recoveryHref =
     cachedPlanDate != null
-      ? `/dashboard?date=${cachedPlanDate}`
+      ? `/today?date=${cachedPlanDate}`
       : '/plans'
   const recoveryLabel =
     cachedPlanDate != null
-      ? `Back to plan for ${cachedPlanDate}`
+      ? `Back to plan for ${formatDateLabel(cachedPlanDate)}`
       : 'Back to plan history'
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Plan not found</h1>
+        <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
+          Plan not found
+        </h1>
         <p className="text-sm text-muted-foreground">
           This saved plan does not exist or is no longer available.
         </p>
@@ -98,6 +119,7 @@ export function PlanDetailPage() {
   const [selectedRevisionId, setSelectedRevisionId] = useState<number | null>(
     null,
   )
+  const isMobile = useIsMobile()
 
   function handleDelete() {
     if (plan == null) {
@@ -140,14 +162,57 @@ export function PlanDetailPage() {
     )
   }
 
+  const selectedBlocks =
+    plan == null ? [] : revisionBlocks(plan, selectedRevisionId)
+  const selectedUnplacedWork =
+    plan == null ? [] : revisionUnplacedWork(plan, selectedRevisionId)
+  const selectedSnapshotTitles =
+    plan == null
+      ? new Map<number, SnapshotTitleInfo>()
+      : indexRevisionSnapshotTitles(plan, selectedRevisionId)
+  const rail =
+    plan == null
+      ? null
+      : buildRail(
+          { ...plan, composedRail: selectedBlocks },
+          null,
+          'comfortable',
+        )
+  const workBlocks = selectedBlocks.filter((block) => block.kind === 'WORK')
+  const focusMinutes = workBlocks.reduce(
+    (sum, block) => sum + toClockMinutes(block.endTime) - toClockMinutes(block.startTime),
+    0,
+  )
+  const selectedRevision = plan?.revisions.find(
+    (revision) => revision.id === selectedRevisionId,
+  )
+  const savedAt =
+    selectedRevision?.cutoff != null
+      ? formatClock(selectedRevision.cutoff)
+      : plan != null
+        ? new Date(plan.createdAt).toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : ''
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Plan detail</h1>
-          <p className="text-sm text-muted-foreground">
-            Saved plan for {plan?.planDate ?? 'unknown date'}.
-          </p>
+        <div className="space-y-1">
+          <span className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            Daily plan
+          </span>
+          <h1 className="font-display text-xl leading-9 font-medium tracking-[-0.01em]">
+            {plan != null ? formatDateLabel(plan.planDate) : 'Plan detail'}
+          </h1>
+          {plan != null ? (
+            <p className="text-sm text-muted-foreground">
+              Focus <span className="font-mono">{formatDuration(focusMinutes)}</span>
+              {' · '}Sessions <span className="font-mono">{workBlocks.length}</span>
+              {' · '}Saved <span className="font-mono">{savedAt}</span>
+            </p>
+          ) : null}
         </div>
         {plan != null && (
           <PlanDeleteButton
@@ -158,18 +223,42 @@ export function PlanDetailPage() {
           />
         )}
       </div>
-      {plan != null && plan.revisions.length > 0 ? (
-        <RevisionSelect
+      {plan != null ? (
+        <PlanRevisionSwitch
           revisions={plan.revisions}
           selectedRevisionId={selectedRevisionId}
           onSelect={setSelectedRevisionId}
         />
       ) : null}
-      <DailyPlanView
-        plan={plan}
-        title={`Plan for ${plan?.planDate ?? ''}`}
-        selectedRevisionId={selectedRevisionId}
-      />
+      {plan != null ? <PlanDetailNotices plan={plan} /> : null}
+      {plan != null && rail != null ? (
+        <div className="grid items-start gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_360px]">
+          <section
+            aria-label="Day rail"
+            className="rounded-lg border border-border bg-card"
+          >
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">Day rail</h2>
+              <span className="flex-1" />
+              <Badge variant="outline" className="h-5 gap-1 rounded-sm bg-card text-muted-foreground">
+                <ClockIcon className="size-3" aria-hidden />
+                Read-only
+              </Badge>
+            </div>
+            {isMobile ? <AgendaList rail={rail} /> : <DayRail rail={rail} />}
+          </section>
+          <div className="flex flex-col gap-4">
+            <WorkSessions blocks={selectedBlocks} />
+            {plan != null ? (
+              <PlanSideCards
+                plan={plan}
+                unplacedWork={selectedUnplacedWork}
+                snapshotTitles={selectedSnapshotTitles}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <Link to="/plans" className={backLinkClassName}>
         Back to plan history
       </Link>

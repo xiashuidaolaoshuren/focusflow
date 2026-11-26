@@ -6,15 +6,12 @@ import {
   listCommitments,
   updateCommitment,
 } from '@/features/commitments/api'
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
 import { markRegeneratePromptNeeded } from '@/features/plans/regeneratePrompt'
+import {
+  commitmentsQueryKey,
+  horizonQueryPrefix,
+} from '@/lib/query'
 import type { CommitmentRequest } from '@/types/api'
-
-export const commitmentsQueryPrefix = ['commitments'] as const
-
-export function commitmentsQueryKey(planDate: string) {
-  return [...commitmentsQueryPrefix, planDate] as const
-}
 
 export function useCommitments(planDate: string) {
   const query = useQuery({

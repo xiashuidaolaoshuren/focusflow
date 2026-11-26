@@ -1,7 +1,9 @@
-import { useMemo } from "react"
+import { useId, useMemo, type ReactNode } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
+import { CircleAlertIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { getFieldError } from "@/components/ui/field-error"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 
@@ -50,7 +52,8 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 const fieldVariants = cva(
-  "group/field flex w-full gap-2 data-[invalid=true]:text-destructive",
+  // DESIGN: an invalid field gets a destructive border and message; its label keeps its colour.
+  "group/field flex w-full gap-2",
   {
     variants: {
       orientation: {
@@ -67,19 +70,99 @@ const fieldVariants = cva(
   }
 )
 
+type FieldControlProps = {
+  id: string
+  'aria-invalid'?: boolean
+  'aria-describedby'?: string
+}
+
+type FieldProps = Omit<React.ComponentProps<"div">, "children"> &
+  VariantProps<typeof fieldVariants> & {
+    label?: ReactNode
+    name?: string
+    required?: boolean
+    error?: string | undefined
+    apiError?: unknown
+    description?: ReactNode
+    id?: string
+    children?: ReactNode | ((control: FieldControlProps) => ReactNode)
+  }
+
 function Field({
   className,
   orientation = "vertical",
+  label,
+  name,
+  required = false,
+  error,
+  apiError,
+  description,
+  id: idProp,
+  children,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: FieldProps) {
+  const generatedId = useId()
+  const controlId = idProp ?? `${generatedId}-control`
+  const apiMessage = name ? getFieldError(apiError, name) : undefined
+  const message = error ?? apiMessage
+  const errorId = message ? `${controlId}-error` : undefined
+  const useEnhancedChrome =
+    label != null ||
+    name != null ||
+    error != null ||
+    apiError != null ||
+    description != null ||
+    typeof children === "function"
+
+  if (!useEnhancedChrome) {
+    return (
+      <div
+        role="group"
+        data-slot="field"
+        data-orientation={orientation}
+        className={cn(fieldVariants({ orientation }), className)}
+        {...props}
+      >
+        {children as ReactNode}
+      </div>
+    )
+  }
+
+  const controlProps: FieldControlProps = {
+    id: controlId,
+    ...(message && errorId
+      ? { "aria-invalid": true as const, "aria-describedby": errorId }
+      : {}),
+  }
+
+  const control =
+    typeof children === "function" ? children(controlProps) : children
+
   return (
     <div
       role="group"
       data-slot="field"
       data-orientation={orientation}
+      data-invalid={message ? true : undefined}
       className={cn(fieldVariants({ orientation }), className)}
       {...props}
-    />
+    >
+      {label != null ? (
+        <FieldLabel htmlFor={controlId}>
+          {label}
+          {required ? (
+            <span className="ml-0.5 text-destructive" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </FieldLabel>
+      ) : null}
+      {control}
+      {description != null ? (
+        <FieldDescription>{description}</FieldDescription>
+      ) : null}
+      {message != null ? <FieldError id={errorId}>{message}</FieldError> : null}
+    </div>
   )
 }
 
@@ -214,10 +297,17 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn("text-sm font-normal text-destructive", className)}
+      className={cn(
+        "flex items-start gap-1 text-xs leading-4 font-normal text-destructive",
+        className
+      )}
       {...props}
     >
-      {content}
+      <CircleAlertIcon
+        className="mt-0.5 size-3 shrink-0"
+        aria-hidden="true"
+      />
+      <div>{content}</div>
     </div>
   )
 }

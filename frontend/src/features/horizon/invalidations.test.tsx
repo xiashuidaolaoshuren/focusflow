@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
 import type { ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { horizonQueryPrefix } from '@/features/horizon/hooks'
+import { horizonQueryPrefix } from '@/lib/query'
 import type { CommitmentResponse, SchedulingPreferencesResponse } from '@/types/api'
 
 vi.mock('@/features/preferences/api', () => ({

@@ -21,6 +21,7 @@ import com.focusflow.task.TaskQueryService;
 import com.focusflow.task.TaskStatus;
 import com.focusflow.task.UnplannedWork;
 import com.focusflow.task.dto.UnplannedWorkResponse;
+import java.time.Duration;
 import java.time.LocalTime;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -168,6 +169,25 @@ public class DailyPlanResponseMapper {
 				blocks,
 				unplacedWork);
 	}
+
+	/**
+	 * Work minutes and sessions on the composed rail, the same figures plan detail shows as Focus
+	 * and Sessions. History rows use these so they agree with the detail view.
+	 */
+	public WorkTotals composedWorkTotals(DailyPlan plan) {
+		ComposedDay composedDay = ComposedDay.compose(plan.getWindowStart(), toRevisionViews(plan));
+		int minutes = 0;
+		int sessions = 0;
+		for (RailSegment segment : composedDay.rail()) {
+			if (segment.kind() == BlockKind.WORK) {
+				minutes += (int) Duration.between(segment.start(), segment.end()).toMinutes();
+				sessions++;
+			}
+		}
+		return new WorkTotals(minutes, sessions);
+	}
+
+	public record WorkTotals(int minutes, int sessions) {}
 
 	private List<RevisionView> toRevisionViews(DailyPlan plan) {
 		return plan.getRevisions().stream()

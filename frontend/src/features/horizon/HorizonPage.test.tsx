@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { HorizonPage } from '@/features/horizon/HorizonPage'
 import {
@@ -109,20 +109,22 @@ function renderHorizonPage() {
   )
 }
 
+const horizonDay0 = horizon.days[0]!
+const horizonDay1 = horizon.days[1]!
+const horizonTask0 = horizon.tasks[0]!
+const conflictedDay0 = { ...horizonDay0, dependenciesIgnored: [10] }
+
 const conflictedHorizon: HorizonResponse = {
   ...horizon,
-  days: [
-    { ...horizon.days[0], dependenciesIgnored: [10] },
-    horizon.days[1],
-  ],
+  days: [conflictedDay0, horizonDay1],
   tasks: [
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       waitingOn: [{ taskId: 2, title: 'Blocker' }],
       upstreamBlockers: [{ taskId: 3, title: 'Upstream' }],
     },
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       taskId: 2,
       title: 'Blocker',
       deadlineStatus: null,
@@ -131,7 +133,7 @@ const conflictedHorizon: HorizonResponse = {
       segments: [],
     },
     {
-      ...horizon.tasks[0],
+      ...horizonTask0,
       taskId: 3,
       title: 'Upstream',
       deadlineStatus: null,
@@ -154,7 +156,241 @@ function mockHorizon(horizonResponse: HorizonResponse) {
   } as ReturnType<typeof useSchedulingPreferences>)
 }
 
+function setViewport(width: number) {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    writable: true,
+    value: width,
+  })
+  Object.defineProperty(window, 'matchMedia', {
+    configurable: true,
+    writable: true,
+    value: (query: string) => ({
+      matches: width < 768 && query.includes('max-width'),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}
+
 describe('HorizonPage', () => {
+  beforeEach(() => {
+    setViewport(1024)
+  })
+
+  it('renders the day list instead of the grid below 768px', () => {
+    setViewport(375)
+    mockHorizon(horizon)
+
+    renderHorizonPage()
+
+    expect(screen.queryByLabelText('Horizon grid')).toBeNull()
+    expect(screen.getByRole('heading', { name: '1 Jun 2026' })).toBeInTheDocument()
+    expect(screen.getByText('No work forecast')).toBeInTheDocument()
+  })
+
+  it('lists blocked and unestimated work on the mobile day instead of "No work forecast"', () => {
+    setViewport(375)
+    const dayOnly = { ...horizonDay0, kind: 'FORECAST' as const }
+    const segmentOn = (
+      unplacedReason: 'BLOCKED' | 'NO_ESTIMATE',
+      unplacedMinutes: number | null,
+    ) => ({
+      date: dayOnly.date,
+      minutes: 0,
+      assumedCreditMinutes: null,
+      creditExclusions: [],
+      unplacedReason,
+      unplacedMinutes,
+      unplacedScope: 'FORECAST' as const,
+    })
+    mockHorizon({
+      ...horizon,
+      days: [dayOnly],
+      tasks: [
+        { ...horizonTask0, taskId: 21, title: 'Waiting task', segments: [segmentOn('BLOCKED', 60)] },
+        { ...horizonTask0, taskId: 22, title: 'Unestimated task', segments: [segmentOn('NO_ESTIMATE', null)] },
+      ],
+    })
+
+    renderHorizonPage()
+
+    expect(screen.queryByText('No work forecast')).toBeNull()
+    expect(screen.getByText('Waiting task')).toBeInTheDocument()
+    expect(screen.getByText('Blocked')).toBeInTheDocument()
+    expect(screen.getByText('Unestimated task')).toBeInTheDocument()
+    expect(screen.getByText('No estimate')).toBeInTheDocument()
+  })
+
+  it('renders the grid and no day list at 768px and wider', () => {
+    setViewport(768)
+    mockHorizon(horizon)
+
+    renderHorizonPage()
+
+    expect(screen.getByLabelText('Horizon grid')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '1 Jun 2026' })).toBeNull()
+  })
+
+  it('shows every deadline state as a glyph and a word in the mobile day list', () => {
+    setViewport(375)
+    const statuses = [
+      'ON_TRACK',
+      'AT_RISK',
+      'OVERDUE',
+      'CANNOT_FORECAST',
+      'BEYOND_HORIZON',
+    ] as const
+    mockHorizon({
+      ...horizon,
+      days: [horizonDay0],
+      tasks: statuses.map((deadlineStatus, index) => ({
+        ...horizonTask0,
+        taskId: 30 + index,
+        title: `Deadline task ${index}`,
+        deadlineStatus,
+        unresolvedEffort:
+          deadlineStatus === 'CANNOT_FORECAST'
+            ? [{ taskId: 99, title: 'Sharpening' }]
+            : [],
+        segments: [{ ...horizonTask0.segments[0]! }],
+      })),
+    })
+
+    renderHorizonPage()
+
+    for (const label of [
+      'On track',
+      'At risk',
+      'Overdue',
+      "Can't forecast: Sharpening",
+      'Beyond horizon',
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('toggles and replaces direct-blocker highlighting on mobile', () => {
+    setViewport(375)
+    const dayOneSegment = {
+      ...horizonTask0.segments[0]!,
+      date: '2026-06-02',
+      assumedCreditMinutes: null,
+    }
+    mockHorizon({
+      ...horizon,
+      tasks: [
+        {
+          ...horizonTask0,
+          taskId: 10,
+          title: 'Write report',
+          waitingOn: [{ taskId: 2, title: 'Blocker' }],
+          upstreamBlockers: [{ taskId: 3, title: 'Upstream' }],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 2,
+          title: 'Blocker',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [dayOneSegment],
+        },
+        {
+          ...horizonTask0,
+          taskId: 3,
+          title: 'Upstream',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 4,
+          title: 'Other dependent',
+          waitingOn: [{ taskId: 3, title: 'Upstream' }],
+          upstreamBlockers: [],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+      ],
+    })
+
+    renderHorizonPage()
+
+    const toggle = screen.getByRole('button', {
+      name: 'Highlight blockers of Write report',
+    })
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+    expect(screen.getByTestId('horizon-day-task-3-2026-06-01')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Highlight blockers of Other dependent' }),
+    )
+
+    expect(screen.getByTestId('horizon-day-task-3-2026-06-01')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+    expect(screen.getByTestId('horizon-day-task-2-2026-06-02')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+  })
+
+  it('names a direct blocker that has no day in the mobile day list', () => {
+    setViewport(375)
+    mockHorizon({
+      ...horizon,
+      tasks: [
+        {
+          ...horizonTask0,
+          waitingOn: [{ taskId: 2, title: 'Blocker' }],
+          segments: [{ ...horizonTask0.segments[0]! }],
+        },
+        {
+          ...horizonTask0,
+          taskId: 2,
+          title: 'Blocker',
+          deadlineStatus: null,
+          waitingOn: [],
+          upstreamBlockers: [],
+          segments: [],
+        },
+      ],
+    })
+
+    renderHorizonPage()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Highlight blockers of Write report' }),
+    )
+
+    expect(
+      screen.getByText('Not scheduled this week: Blocker'),
+    ).toBeInTheDocument()
+  })
+
   it('renders saved and forecast headers with task rows and accessible segments', () => {
     mockedUseHorizon.mockReturnValue({
       horizon,
@@ -171,9 +407,140 @@ describe('HorizonPage', () => {
     expect(screen.getByText('Saved')).toBeInTheDocument()
     expect(screen.getByText('Forecast')).toBeInTheDocument()
     expect(screen.getByText('Write report')).toBeInTheDocument()
-    expect(screen.getByText(/Due 2026-06-02/)).toBeInTheDocument()
+    expect(screen.getByText('Due 2 Jun 2026')).toBeInTheDocument()
+    expect(screen.getByText('Seven working days from 1 Jun 2026 at 09:00')).toBeInTheDocument()
     expect(screen.getByLabelText(/Write report, 2026-06-01, 60 minutes displayed, saved day/i)).toBeInTheDocument()
     expect(screen.getByText('Due')).toBeInTheDocument()
+  })
+
+  it('labels each header with a formatted date, its total, and a saved shortfall', () => {
+    const shortfallHorizon: HorizonResponse = {
+      ...horizon,
+      tasks: [
+        {
+          ...horizonTask0,
+          segments: [
+            {
+              date: '2026-06-01',
+              minutes: 60,
+              assumedCreditMinutes: null,
+              creditExclusions: [],
+              unplacedReason: 'OUT_OF_TIME',
+              unplacedMinutes: 30,
+              unplacedScope: 'SAVED_SHORTFALL',
+            },
+          ],
+        },
+      ],
+    }
+    mockHorizon(shortfallHorizon)
+
+    renderHorizonPage()
+
+    expect(screen.getByText('1 Jun 2026')).toBeInTheDocument()
+    expect(screen.getByText('2 Jun 2026')).toBeInTheDocument()
+    expect(screen.getByText('1h')).toBeInTheDocument()
+    expect(screen.getByText('Shortfall 30m')).toBeInTheDocument()
+  })
+
+  it('highlights blocker rows on keyboard focus and clears them on blur', () => {
+    mockHorizon(conflictedHorizon)
+
+    renderHorizonPage()
+
+    const titleCell = screen.getByText('Write report')
+    fireEvent.focus(titleCell)
+
+    expect(screen.getByTestId('horizon-row-2')).toHaveAttribute(
+      'data-highlighted',
+      'true',
+    )
+
+    fireEvent.blur(titleCell)
+
+    expect(screen.getByTestId('horizon-row-2')).not.toHaveAttribute(
+      'data-highlighted',
+    )
+  })
+
+  it('puts a due date that falls between two columns at the edge of the day before', () => {
+    const edgeHorizon: HorizonResponse = {
+      ...horizon,
+      days: [horizonDay0, { ...horizonDay1, date: '2026-06-03' }],
+      tasks: [{ ...horizonTask0, dueDate: '2026-06-02', deadlineStatus: null, segments: [] }],
+    }
+    mockHorizon(edgeHorizon)
+
+    renderHorizonPage()
+
+    const marker = screen.getByText('Tue')
+    expect(marker.closest('[data-due-marker]')).toHaveAttribute('data-due-marker', 'edge')
+    expect(marker.closest('[data-due-marker]')?.querySelector('svg')).not.toBeNull()
+  })
+
+  it('shows every deadline state as a glyph and a word', () => {
+    const states = ['ON_TRACK', 'AT_RISK', 'OVERDUE', 'CANNOT_FORECAST', 'BEYOND_HORIZON'] as const
+    const deadlineHorizon: HorizonResponse = {
+      ...horizon,
+      tasks: states.map((status, index) => ({
+        ...horizonTask0,
+        taskId: 100 + index,
+        title: `Task ${status}`,
+        deadlineStatus: status,
+        unresolvedEffort: status === 'CANNOT_FORECAST' ? [{ taskId: 2, title: 'Blocker' }] : [],
+        segments: [],
+      })),
+    }
+    mockHorizon(deadlineHorizon)
+
+    renderHorizonPage()
+
+    const labels: Array<[string, string]> = [
+      ['ON_TRACK', 'On track'],
+      ['AT_RISK', 'At risk'],
+      ['OVERDUE', 'Overdue'],
+      ['CANNOT_FORECAST', "Can't forecast: Blocker"],
+      ['BEYOND_HORIZON', 'Beyond horizon'],
+    ]
+    for (const [status, text] of labels) {
+      const badge = screen.getByText(text).closest('[data-deadline]')
+      expect(badge).toHaveAttribute('data-deadline', status)
+      expect(badge?.querySelector('svg')).not.toBeNull()
+    }
+  })
+
+  it('explains every deadline state behind an ⓘ on the deadline forecast legend', () => {
+    mockHorizon(horizon)
+
+    renderHorizonPage()
+
+    expect(screen.queryByText("Can't forecast")).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about deadline forecasts/i }))
+    for (const text of ['On track', 'Overdue', "Can't forecast", 'Beyond horizon']) {
+      expect(screen.getByText(text)).toBeInTheDocument()
+    }
+    expect(screen.getAllByText('At risk').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('shows an empty state with a way to Tasks when nothing is scheduled', () => {
+    mockHorizon({ ...horizon, days: [], tasks: [] })
+
+    renderHorizonPage()
+
+    expect(screen.getByText('Nothing on the Horizon')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /go to tasks/i })).toHaveAttribute(
+      'href',
+      '/tasks',
+    )
+  })
+
+  it('has no start-date picker: the window is read from the server', () => {
+    mockHorizon(horizon)
+
+    const { container } = renderHorizonPage()
+
+    expect(container.querySelector('input[type="date"]')).toBeNull()
+    expect(screen.queryByLabelText(/start date/i)).toBeNull()
   })
 
   it('shows a loading skeleton while pending', () => {
@@ -217,21 +584,25 @@ describe('HorizonPage', () => {
 
     renderHorizonPage()
 
+    expect(screen.queryByText(HORIZON_PACE_COPY)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about pace assumption/i }))
     expect(screen.getByText(HORIZON_PACE_COPY)).toBeInTheDocument()
     expect(
-      screen.getByText(savedConflictCopy(conflictedHorizon.days[0]) as string),
+      screen.getByText(savedConflictCopy(conflictedDay0) as string),
     ).toBeInTheDocument()
   })
 
-  it('marks a forecast header with the fixed order and a dashboard link', () => {
+  it('marks a forecast header with a dashboard link and puts the fixed order behind the pace ⓘ', () => {
     mockHorizon(horizon)
 
     renderHorizonPage()
 
+    expect(screen.queryByText(forecastHeaderCopy())).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /about pace assumption/i }))
     expect(screen.getByText(forecastHeaderCopy())).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: /open 2026-06-02 in the dashboard/i }),
-    ).toHaveAttribute('href', '/dashboard?date=2026-06-02')
+      screen.getByRole('link', { name: /open in today/i }),
+    ).toHaveAttribute('href', '/today?date=2026-06-02')
   })
 
   it('names the upstream cause and highlights the blocker rows on hover', () => {

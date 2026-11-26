@@ -3,6 +3,7 @@ package com.focusflow.plan;
 import com.focusflow.common.error.BadRequestException;
 import com.focusflow.common.error.ConflictException;
 import com.focusflow.common.error.NotFoundException;
+import com.focusflow.common.time.MinutePrecision;
 import com.focusflow.effort.EffortEvent;
 import com.focusflow.effort.RemainingEffortCalculator;
 import com.focusflow.effort.WorkOutcome;
@@ -57,6 +58,7 @@ public class BlockProgressService {
 						.findByOwner_IdAndId(ownerId, planId)
 						.orElseThrow(() -> new NotFoundException("daily plan not found"));
 		requireNotFuture(plan, request);
+		requireMinuteAlignedCutoff(request);
 		DailyPlanBlock block = findBlock(plan, blockId);
 		requireRecordable(plan, block);
 		Task task = block.getDailyPlanTask().getTaskReference();
@@ -65,7 +67,7 @@ public class BlockProgressService {
 		if (crossing) {
 			requireReconciliationInputs(request);
 		} else {
-			requireValidActualMinutes(request);
+			requireValidActualMinutes(request, request.finish() && isCrossing(plan, block, request.cutoff()));
 		}
 		requireMatchingProgressVersion(block, request.expectedProgressVersion());
 		boolean correction = block.getOutcome() != null;
@@ -241,6 +243,12 @@ public class BlockProgressService {
 		}
 	}
 
+	private static void requireMinuteAlignedCutoff(BlockProgressRequest request) {
+		if (request.cutoff() != null) {
+			MinutePrecision.requireMinuteAligned(request.cutoff());
+		}
+	}
+
 	private static void requireRecordable(DailyPlan plan, DailyPlanBlock block) {
 		if (block.getKind() != BlockKind.WORK) {
 			throw notRecordable();
@@ -265,7 +273,11 @@ public class BlockProgressService {
 		return outcome == WorkOutcome.DONE || outcome == WorkOutcome.PARTLY_DONE;
 	}
 
-	private static void requireValidActualMinutes(BlockProgressRequest request) {
+	private static void requireValidActualMinutes(BlockProgressRequest request, boolean crossingFinish) {
+		if (request.outcome() == WorkOutcome.DONE && request.actualMinutes() != null
+				&& (request.actualMinutes() < 0 || (request.actualMinutes() == 0 && !crossingFinish))) {
+			throw new BadRequestException("done requires positive actual minutes when provided");
+		}
 		if (request.outcome() == WorkOutcome.PARTLY_DONE
 				&& (request.actualMinutes() == null || request.actualMinutes() <= 0)) {
 			throw new BadRequestException("partly done requires positive actual minutes");

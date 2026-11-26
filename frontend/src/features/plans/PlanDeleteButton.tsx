@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { formatDateLabel } from '@/lib/format'
 import type { DailyPlanResponse } from '@/types/api'
 
 type PlanDeleteButtonProps = {
@@ -40,7 +41,7 @@ export function PlanDeleteButton({
         type="button"
         variant="ghost"
         size="icon-sm"
-        aria-label={`Delete plan for ${plan.planDate}`}
+        aria-label={`Delete plan for ${formatDateLabel(plan.planDate)}`}
         disabled={isDeleting}
         onClick={() => setIsDeleteDialogOpen(true)}
       >
@@ -49,7 +50,8 @@ export function PlanDeleteButton({
     ) : (
       <Button
         type="button"
-        variant="destructive"
+        variant="outline"
+        className="text-destructive"
         disabled={isDeleting}
         onClick={() => setIsDeleteDialogOpen(true)}
       >
@@ -65,7 +67,7 @@ export function PlanDeleteButton({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete plan</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the plan for {plan.planDate}. This action
+              This will permanently delete the plan for {formatDateLabel(plan.planDate)}. This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

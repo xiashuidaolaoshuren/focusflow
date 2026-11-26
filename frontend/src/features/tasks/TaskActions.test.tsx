@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/dom'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 import type { TaskResponse } from '@/types/api'

@@ -166,6 +166,37 @@ class SchedulingPreferencesControllerTest {
 
 	@Test
 	@WithMockUser
+	void put_whenAcceptLanguageZhTw_returnsEnglishValidationDetail() throws Exception {
+		mockMvc.perform(
+					put("/api/scheduling-preferences")
+							.with(csrf())
+							.header("Accept-Language", "zh-TW")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(
+									"""
+									{
+									  "workDayStart": "09:00:00",
+									  "workDayEnd": "18:00:00",
+									  "cadenceEnabled": true,
+									  "targetFocusMinutes": 50,
+									  "breakMinutes": 10,
+									  "minSessionMinutes": 15,
+									  "bufferMinutes": 0,
+									  "fixedBreaks": [
+									    {"label": "", "startTime": "12:00:00", "endTime": "13:00:00"}
+									  ],
+									  "workingDays": ["MONDAY","TUESDAY","WEDNESDAY","THURSDAY","FRIDAY"]
+									}
+									"""))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Validation failed"))
+				.andExpect(jsonPath("$.details['fixedBreaks[0].label'][0]").value("must not be blank"));
+
+		verify(schedulingPreferencesService, never()).put(any(SchedulingPreferencesRequest.class));
+	}
+
+	@Test
+	@WithMockUser
 	void put_whenAuthenticated_returns200AndBody() throws Exception {
 		when(schedulingPreferencesService.put(any(SchedulingPreferencesRequest.class)))
 				.thenReturn(
