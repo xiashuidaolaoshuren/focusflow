@@ -9,8 +9,6 @@ backend/.project
 backend/.settings/
 
 .cursor/rules/
-scripts/*cookies*.txt
-scripts/b18-register.json
 
 # frontend
 # Logs

@@ -1,6 +1,45 @@
 # FocusFlow AI
 
-FocusFlow AI is a Java-first full-stack learning project. The Spring Boot backend manages tasks and AI-assisted daily plans; the React/Vite frontend provides the browser experience.
+> Turn your task list into a realistic, clock-based plan for the day — ranked by AI, scheduled by deterministic Java.
+
+![Java 21](https://img.shields.io/badge/Java-21-orange)
+![Spring Boot 3.4](https://img.shields.io/badge/Spring%20Boot-3.4-6DB33F)
+![React 19](https://img.shields.io/badge/React-19-61DAFB)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Flyway-336791)
+
+FocusFlow AI is a Java-first full-stack app. A Spring Boot backend manages tasks and AI-assisted daily plans; a React/Vite frontend provides the browser experience. The AI only **ranks** your tasks. A pure-Java scheduler then places them on a real clock, respecting your work window, breaks, commitments, and dependencies.
+
+## Screenshots
+
+| Today's scheduled day | Task inventory |
+|---|---|
+| ![Today](docs/screenshots/1-today-daily-plan.png) | ![Tasks](docs/screenshots/2-tasks-inventory.png) |
+
+| Multi-day horizon forecast | Architecture |
+|---|---|
+| ![Horizon](docs/screenshots/3-horizon-forecast.png) | ![Architecture](docs/screenshots/4-architecture.png) |
+
+## Features
+
+- **AI-ranked, Java-scheduled days** — the model returns one ordered list of task ids; deterministic code places work into minute-aligned blocks and validates the result.
+- **Rest-aware scheduling** — focus cadence, fixed breaks, commitments, and a trailing buffer.
+- **Progress and carry-over** — record done / partly done / skipped outcomes, reassess remaining effort, and re-plan while preserving schedule revisions.
+- **Task dependencies** — finish-to-start links with inherited urgency and automatic order repair.
+- **Seven-working-day horizon** — a read-only forecast marking work on track, at risk, overdue, or beyond the horizon.
+- **Session auth with CSRF** — HttpOnly session cookie, per-user data isolation, request-id correlation.
+- **Provider-agnostic AI** — any OpenAI-compatible endpoint (OpenAI, DeepSeek, ...).
+- **Documented API** — hand-written [API guide](docs/api.md) plus a generated OpenAPI contract.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Java 21, Spring Boot 3.4, Spring Security, Spring Data JPA, Flyway |
+| Database | PostgreSQL 16 via Docker Compose |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, TanStack Query, React Hook Form, Zod |
+| AI | OpenAI-compatible chat API |
+| Testing | JUnit 5, Testcontainers, Vitest, Testing Library |
+| CI | GitHub Actions (backend and frontend workflows) |
 
 ## Prerequisites
 
@@ -10,6 +49,7 @@ FocusFlow AI is a Java-first full-stack learning project. The Spring Boot backen
 - Git
 
 The Gradle wrapper is included, so a global Gradle installation is not required. The backend targets Java 21. On Gradle 9, the included Foojay toolchain resolver can provision Java 21 when it is not installed locally.
+
 
 ## Quick start
 
@@ -43,47 +83,9 @@ The Gradle wrapper is included, so a global Gradle installation is not required.
 
    `.\gradlew.bat bootRun` loads the repo-root `.env` into the Spring process automatically. You do not need `echo $env:OPENAI_*` to show values in your shell; restart `bootRun` after editing `.env`. Shell or CI environment variables still take precedence when set.
 
-4. In one terminal, run the backend. On a fresh PostgreSQL database, Flyway applies migrations automatically at startup through `V7__dependencies_and_horizon.sql` (see migration notes below). Do not set `SPRING_JPA_HIBERNATE_DDL_AUTO=update` — schema changes belong in Flyway migrations under `backend/src/main/resources/db/migration/`.
-
-   **V2 note:** `V2__scheduling_foundations.sql` adds scheduling preferences, fixed breaks, and commitments tables. It also converts any legacy `tasks.estimated_minutes` values of zero or below to `NULL`, then enforces that estimates must be null or positive.
-
-   **V3 warning (backup first):** `V3__scheduled_day.sql` is destructive for Daily plans. It deletes every row in `daily_plans` and `daily_plan_items`, drops the legacy item/warning columns, and replaces them with scheduled-day tasks and clock blocks. Tasks, users, preferences, and commitments are kept. **Back up the database before upgrading any database that contains Daily plans you care about.**
-
-   **V5 note:** `V5__progress_and_revisions.sql` is non-destructive. It keeps Daily plans, tasks, preferences, and commitments. Each existing plan receives one schedule revision with its current metrics moved onto that revision. Tasks gain live remaining effort backfilled from their whole-task estimate. Nullable scheduling-snapshot columns are added but left empty for migrated plans; V5 does not invent cadence or fixed-break history from current preferences.
-
-   **V7 note:** `V7__dependencies_and_horizon.sql` is forward-only and non-destructive. It deletes no rows. It adds `task_dependencies` and `daily_plan_revision_dependencies`, a nullable `captured_checkpoint_id` on `daily_plan_tasks` (no foreign key), and seven weekday columns on `scheduling_preferences` defaulting to Monday through Friday. Existing preference rows backfill to Monday through Friday. Migrated Daily plan revisions have no dependency snapshot rows and a null captured checkpoint id until a later release maps and uses those fields.
-
-   **Existing pre-Flyway database (keep your data):**
-
-   1. Back up the database before adoption:
-
-      ```powershell
-      docker exec focusflow-postgres pg_dump -U focusflow -d focusflow -Fc -f /tmp/focusflow-pre-adopt.dump
-      docker cp focusflow-postgres:/tmp/focusflow-pre-adopt.dump ./focusflow-pre-adopt.dump
-      ```
-
-   2. Run the one-shot adoption command (preflight, then Flyway baseline at version 1):
-
-      ```powershell
-      cd backend
-      .\gradlew.bat adoptLegacySchema
-      ```
-
-   3. Start the backend normally:
-
-      ```powershell
-      .\gradlew.bat bootRun
-      ```
-
-      Do not enable `spring.flyway.baseline-on-migrate` or pass adoption flags to `bootRun`.
-
-   4. If adoption fails, restore from the backup and fix the schema mismatch before retrying. Do not run `adoptLegacySchema` again on a database that already has `flyway_schema_history`.
-
-   **Disposable local volume (no data to keep):**
+4. Run the backend in one terminal. Flyway applies the database migrations automatically at startup.
 
    ```powershell
-   docker compose down -v
-   docker compose up -d
    cd backend
    .\gradlew.bat bootRun
    ```
@@ -98,6 +100,7 @@ The Gradle wrapper is included, so a global Gradle installation is not required.
    ```
 
    Then open `http://localhost:8080/swagger-ui/index.html`. OpenAPI JSON is at `/v3/api-docs`. Without the `dev` profile, those paths are not exposed.
+
 
 5. In a second terminal, install frontend dependencies once and start Vite:
 
@@ -125,6 +128,7 @@ The Gradle wrapper is included, so a global Gradle installation is not required.
 | `OPENAI_BASE_URL` | OpenAI-compatible API base URL | `https://api.openai.com/v1` |
 
 Do not commit `.env`. Use `.env.example` as the template. Docker Compose and `bootRun` both read the repo-root `.env`; database settings also have matching defaults in `application.yml` when those variables are unset.
+
 
 ## Test and build commands
 
@@ -156,34 +160,6 @@ cd backend
 - [Schema adoption decision](docs/adr/0001-explicit-legacy-schema-adoption.md) — why legacy Flyway adoption is explicit rather than automatic
 - [Roadmap](docs/superpowers/roadmap.md) — in-progress and upcoming milestones, settled cross-milestone decisions, deferred backlog
 
-## Manual verification checklist
-
-With Docker, the backend, and Vite running, verify these through the browser at `http://localhost:5173` or an HTTP client that keeps cookies:
-
-- An unauthenticated `GET /api/auth/me` or `GET /api/tasks` returns **401**.
-- Register or log in. The browser holds an HttpOnly `JSESSIONID`; refresh still succeeds at `GET /api/auth/me`; do not store an auth token in local storage.
-- Create, list, update, change status, and delete a task. Changes survive refresh. Mutating requests send the `X-XSRF-TOKEN` header.
-- With at least one plannable task (`OPEN` or `IN_PROGRESS`) and a configured provider key, generate a plan. It returns **201** and is available from `/plans` and `/plans/:id`. `IN_PROGRESS`-only is valid. The request body must include explicit `planDate` (`YYYY-MM-DD`); omitting it returns **400**.
-- On the dashboard, when no plan exists for today, `GET /api/daily-plans/latest?planDate=...` returns **204** and the UI shows the empty state (not an error).
-- Plan history at `/plans` shows summary rows with pagination; open a row for full detail.
-- For a user with no plannable tasks, generation returns **400** with `no plannable tasks available for planning`; it does not call the provider or save an empty plan.
-- A failed provider call returns **502** and saves no partial plan. Use an empty or invalid key only when intentionally checking this path; do not spend an extra provider credit just to repeat it.
-- Delete a plan from `/plans` or `/plans/:id` after the confirm dialog. Success is **204**; the plan and its items are gone, tasks remain. Detail delete navigates to `/plans`. The dashboard has no delete control.
-- Register two users. A foreign task or daily-plan id returns **404**, and neither user sees the other user's records in list endpoints.
-
-See [API reference](docs/api.md) for CSRF setup, example payloads, and full endpoint schemas.
-
-### Helper scripts
-
-From repo root (backend must be running):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/b18-manual-verify.ps1
-powershell -ExecutionPolicy Bypass -File scripts/b18-provider-failure.ps1
-```
-
-Set `OPENAI_API_KEY` to an invalid value before running the failure script to verify `502 Bad Gateway` and no partial plan persistence.
-
 ## Project layout
 
 ```
@@ -191,10 +167,23 @@ backend/             Spring Boot application and JUnit tests
 frontend/            React, TypeScript, Vite application and Vitest tests
 docker-compose.yml   Local PostgreSQL service
 .env.example         Local database and OpenAI-compatible provider template
-scripts/             Optional manual HTTP verification helpers
 docs/                API reference, OpenAPI, architecture, design notes, and plans
   api.md             Human-readable API calling guide
   openapi.yaml       Generated OpenAPI contract (refresh via updateOpenApiSnapshot)
   architecture.md    System architecture, components, and learning map
   design/            Approved frontend design contract (local prototype is gitignored)
 ```
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+1. Fork the repo and create a feature branch.
+2. Keep behavior changes covered by tests (`.\gradlew.bat test`, `npm run test:run`).
+3. Make sure `npm run lint`, `npm run typecheck`, and the backend tests pass — CI runs the same checks.
+4. Use [Conventional Commits](https://www.conventionalcommits.org/) for commit messages (e.g. `fix(frontend): ...`).
+5. Open a pull request describing the change and how you verified it.
+
+## Acknowledgements
+
+Built as a Java-first learning project. Domain language lives in the [glossary](CONTEXT.md); design decisions are recorded as ADRs under [`docs/adr/`](docs/adr/).
