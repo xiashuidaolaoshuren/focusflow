@@ -42,7 +42,12 @@ Navigation updates the URL when the preview allows it, but views are driven by i
 | Next request → Outcome save conflicts (409) | Next Record outcome save shows the "Plan changed elsewhere" alert; the latest plan counts as loaded, so saving again succeeds |
 | Next request → Request fails | Next Re-plan, task save, Settings save or sign-in fails with an error |
 | App error | App-wide error screen with Reload |
-| Reset data | Restores all sample data |
+| AI assist → AI assist available | On by default. Off hides "Suggest with AI", its disclosure and every suggestion detail; manual Estimate, Reassess and both Plan health actions keep working |
+| AI assist → Next suggestion: Succeeds | Reply after ~1.2s fills Estimate and shows reason + "Similar to" |
+| AI assist → Next suggestion: Slow (~6s) | Time to type in Estimate, Title or Description (or close the sheet) while it runs; the reply is discarded |
+| AI assist → Next suggestion: Fails | Inline error under Estimate: "Couldn't get a suggestion. Enter an estimate yourself or try again." |
+| AI assist → Next suggestion: Rate limited | Inline error "Suggestion limit reached for this hour. Enter an estimate yourself."; the button hides until the sheet is reopened |
+| Reset data | Restores all sample data, AI assist on, Next suggestion = Succeeds |
 
 **Through the UI**
 
@@ -62,6 +67,11 @@ Navigation updates the URL when the preview allows it, but views are driven by i
 - **Settings**: change any value to update the mini-rail preview; invalid values show inline errors on blur. "Defaults apply until saved" disappears after the first Save. **Enable focus cadence** (in Focus cadence, on by default): when off, Focus session and Cadence break are hidden, the preview and the planner place no cadence breaks and no session cap, and Save stores `cadenceEnabled: false` with no session or cadence-break length.
 - **Plan detail and past day** list **Work sessions** grouped as Recorded, Not recorded and No longer needed.
 - **404**: open `#/nowhere`.
+- **Add estimate → Suggest with AI**: Today → Plan health → Unplaced work → *Plan team offsite* → **Add estimate**. The sheet opens focused on Estimate; nothing is requested yet. Click **Suggest with AI**: after ~1.2s Estimate shows 90 with "Similar planning and writing tasks took 80–100 minutes." and "Similar to" *Draft November newsletter · est 80m · took 80m* and *Send October invoices · est 30m · took 30m*. Edit the number if you like, then **Save**: the row loses its action and **Needs refresh** appears; Re-plan places the task.
+- **Set remaining effort**: Unplaced work → *Research analytics vendors* (In progress, no estimate) → **Set remaining effort**. The sheet opens with Reassess expanded and focused. Saving only an Estimate here does not set Remaining effort, so the row keeps its action until Remaining effort is set.
+- **AI assist off**: Demo → uncheck "AI assist available". The sheet shows no AI button or text; Add estimate and Set remaining effort still work.
+- **Blank title**: Tasks → **New task**. "Suggest with AI" is visible but disabled, with "Add a title to get a suggestion." in place of the disclosure. Type a title: it enables at once and focus stays in Title. A blank title is never sent (the endpoint requires a non-blank title of at most 255 characters).
+- **Discarded reply**: Demo → Next suggestion: Slow. Click **Suggest with AI**, then type in Estimate (or edit Title/Description) before it returns: one muted line "Suggestion discarded because the task changed." and your value stays. Closing the sheet while it runs discards the reply silently.
 
 ## Mock behaviour
 
@@ -76,6 +86,7 @@ Navigation updates the URL when the preview allows it, but views are driven by i
 
 ## Sample data added beyond the brief
 
+- Tasks: *Research analytics vendors* (Medium, In progress, no estimate, no remaining effort — not placed, so the approved rail is unchanged; it is the "Set remaining effort" case). Finished tasks now carry actual minutes (*Send October invoices* 30m, *Draft November newsletter* 80m) for "Similar to".
 - Tasks: *Write team onboarding handbook* (Low, 2400m, due 30 Nov — shows **Beyond horizon**), *Send October invoices* and *Draft November newsletter* (Done), *Migrate CI to new runner* (Cancelled).
 - Plans: Thu 5 Nov (complete, one unplanned item, one "No longer needed" outcome), Wed 4 Nov (Shortfall, two revisions), Tue 3 Nov (Needs refresh, unrecorded blocks).
 - Commitment added on Thu 5 Nov: *Quarterly review*. Wed 4 Nov: *Interview: backend candidate*, *Support rota*.
@@ -94,6 +105,10 @@ Navigation updates the URL when the preview allows it, but views are driven by i
 | Time and date inputs | Custom English 24-hour time fields and an English date field with calendar replace native time/date inputs | Native pickers follow the browser locale (e.g. 上午/下午 on zh-CN) |
 | Focus cadence | Settings gain `cadenceEnabled` (default on) with a switch styled from the approved tokens | Matches the existing Settings API |
 | Fonts | Loaded from Google Fonts | As specified; self-host in production |
+| Unplaced work | Now one sub-row per task from the saved plan ("No estimate"), with at most one outline action chosen from the live task | 1.5.0 spec |
+| Estimate vs Remaining effort on Save | A new or untouched Open task still starts Remaining effort at the saved Estimate (existing rule). For a task that is In progress or has recorded outcomes, saving an Estimate leaves Remaining effort unknown until Reassess | Keeps "whole-task estimate ≠ remaining effort"; a suggestion only ever fills Estimate |
+| Open question: suggestion when Estimate is cleared | After a filled suggestion, clearing Estimate shows the button again and keeps the last suggestion visible | Needs a product call: keep, dim or remove the previous suggestion |
+| Open question: rate limit | The button hides for the rest of the sheet session after a rate-limit reply | Needs a product call on when to offer it again (reopen vs. time-based) |
 
 ## Outcome dialog: the app is authoritative
 

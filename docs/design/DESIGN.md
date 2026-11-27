@@ -184,6 +184,8 @@ Every state has a non-colour cue (shape, pattern, glyph or text). Colour only re
 - **Tooltip**: 12px, `--popover`, 1px border, 4px radius, 2px × 8px padding, appears on hover **and** keyboard focus after 0ms (rail) / 300ms (elsewhere). Content is a label, not a sentence.
 - **Popover (info ⓘ)**: 300px, 12/16px padding, title 13/600 + at most two short sentences or a legend list. Opens on click; Esc and outside click close; Esc returns focus to the ⓘ button.
 - **Sidebar**: 224px, paper background, hairline right border. Wordmark in Newsreader 20. Items 36px, 16px icons, 14/500 muted; current item = `--accent` fill + 600 weight + 2px ink bar on the left (non-colour cue). Footer shows the Working day and Work window.
+- **Corrective row action** (Plan health sub-rows): a sub-row indented under its summary row (dotted hairline), title + muted reason from the saved plan, and at most one outline-small action on the right ("Add estimate", "Set remaining effort"). Never solid. No action when the live task no longer needs one.
+- **Assisted suggestion (AI estimate)**: requested only by an explicit outline-small "Suggest with AI" button below the field it fills, with a one-line muted disclosure of what is sent. Loading = spinner + "Suggesting…" with `aria-busy`; the field stays editable. Result = hairline box on card fill: caps label "Suggested estimate", mono figure, "Not saved until you Save", one-sentence reason, "Similar to" list (title · est · took, mono). Errors use the field error style and are tied to the field. A reply that arrives after the user has edited the task is dropped with one muted line. No sparkle icons, gradients, glows or coloured badges: AI content is marked with words only.
 
 ## 7. Motion & Interaction
 
